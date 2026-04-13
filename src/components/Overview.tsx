@@ -2,31 +2,35 @@ import { useEffect, useState } from 'react';
 import { 
   Users, GraduationCap, Phone, Bus, TrendingUp, 
   Calendar, Award, Target, Zap, BarChart, 
-  Activity, Heart, Star, Sparkles
+  Activity, Heart, Star, Sparkles, Truck, DollarSign, Clock
 } from 'lucide-react';
-import { getStudents, getFaculty, getLeads, getVehicles } from '../services/api';
+import { getStudents, getStaff, getVehicles, getVendors, getFinancialOverview } from '../services/api';
 
 interface Stats {
   totalStudents: number;
   activeStudents: number;
-  totalFaculty: number;
-  activeFaculty: number;
-  totalLeads: number;
-  newLeads: number;
+  totalStaff: number;
+  activeStaff: number;
+  totalVendors: number;
+  activeVendors: number;
   totalVehicles: number;
   activeVehicles: number;
+  totalRevenue: number;
+  pendingFees: number;
 }
 
 export default function Overview() {
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
     activeStudents: 0,
-    totalFaculty: 0,
-    activeFaculty: 0,
-    totalLeads: 0,
-    newLeads: 0,
+    totalStaff: 0,
+    activeStaff: 0,
+    totalVendors: 0,
+    activeVendors: 0,
     totalVehicles: 0,
     activeVehicles: 0,
+    totalRevenue: 0,
+    pendingFees: 0,
   });
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -39,32 +43,36 @@ export default function Overview() {
 
   const loadStats = async () => {
     try {
-      const [studentsRes, facultyRes, leadsRes, vehiclesRes] = await Promise.all([
+      const [studentsRes, staffRes, vehiclesRes, vendorsRes, financeRes] = await Promise.all([
         getStudents(),
-        getFaculty(),
-        getLeads(),
+        getStaff(),
         getVehicles(),
+        getVendors(),
+        getFinancialOverview().catch(() => ({ data: { fees: { collected: 0, pending: 0 } } })),
       ]);
 
       const students = studentsRes.data || [];
-      const faculty = facultyRes.data || [];
-      const leads = leadsRes.data || [];
+      const staff = staffRes.data || [];
       const vehicles = vehiclesRes.data || [];
+      const vendors = vendorsRes.data || [];
+      const finance = financeRes.data || { fees: { collected: 0, pending: 0 } };
 
       const activeStudents = students.filter((s: any) => s.status === 'Active').length;
-      const activeFaculty = faculty.filter((f: any) => f.status === 'Active').length;
-      const newLeads = leads.filter((l: any) => l.status === 'New').length;
+      const activeStaff = staff.filter((s: any) => s.status === 'Active').length;
+      const activeVendors = vendors.filter((v: any) => v.status === 'Active').length;
       const activeVehicles = vehicles.filter((v: any) => v.status === 'Active').length;
 
       setStats({
         totalStudents: students.length,
         activeStudents,
-        totalFaculty: faculty.length,
-        activeFaculty,
-        totalLeads: leads.length,
-        newLeads,
+        totalStaff: staff.length,
+        activeStaff,
+        totalVendors: vendors.length,
+        activeVendors,
         totalVehicles: vehicles.length,
         activeVehicles,
+        totalRevenue: finance.fees?.collected || 0,
+        pendingFees: finance.fees?.pending || 0,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -103,27 +111,27 @@ export default function Overview() {
       trendUp: true,
     },
     {
-      title: 'Faculty Members',
-      value: stats.totalFaculty,
-      active: stats.activeFaculty,
-      subtext: `${stats.activeFaculty} active staff`,
+      title: 'Staff Members',
+      value: stats.totalStaff,
+      active: stats.activeStaff,
+      subtext: `${stats.activeStaff} active staff`,
       icon: GraduationCap,
       gradient: 'from-green-500 to-emerald-500',
       bgGradient: 'from-green-50 to-emerald-50',
       borderColor: 'border-green-200',
-      trend: stats.totalFaculty > 0 ? '+5%' : '0%',
+      trend: stats.totalStaff > 0 ? '+5%' : '0%',
       trendUp: true,
     },
     {
-      title: 'Active Leads',
-      value: stats.totalLeads,
-      active: stats.newLeads,
-      subtext: `${stats.newLeads} new inquiries`,
-      icon: Phone,
+      title: 'Total Vendors',
+      value: stats.totalVendors,
+      active: stats.activeVendors,
+      subtext: `${stats.activeVendors} active vendors`,
+      icon: Truck,
       gradient: 'from-orange-500 to-red-500',
       bgGradient: 'from-orange-50 to-red-50',
       borderColor: 'border-orange-200',
-      trend: stats.newLeads > 0 ? '+28%' : '0%',
+      trend: stats.activeVendors > 0 ? '+8%' : '0%',
       trendUp: true,
     },
     {
@@ -137,6 +145,27 @@ export default function Overview() {
       borderColor: 'border-purple-200',
       trend: stats.activeVehicles > 0 ? '92%' : '0%',
       trendUp: true,
+    },
+  ];
+
+  const financeCards = [
+    {
+      title: 'Total Revenue',
+      value: `₹${(stats.totalRevenue / 1000).toFixed(1)}k`,
+      subtext: 'Total fees collected',
+      icon: DollarSign,
+      gradient: 'from-emerald-500 to-teal-500',
+      bgGradient: 'from-emerald-50 to-teal-50',
+      borderColor: 'border-emerald-200',
+    },
+    {
+      title: 'Pending Fees',
+      value: `₹${(stats.pendingFees / 1000).toFixed(1)}k`,
+      subtext: 'Awaiting collection',
+      icon: Clock,
+      gradient: 'from-yellow-500 to-orange-500',
+      bgGradient: 'from-yellow-50 to-orange-50',
+      borderColor: 'border-yellow-200',
     },
   ];
 
@@ -181,19 +210,17 @@ export default function Overview() {
           </div>
         </div>
 
-        {/* Stats Cards Grid */}
+        {/* Main Stats Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {cards.map((card, index) => {
+          {cards.map((card) => {
             const Icon = card.icon;
             return (
               <div
                 key={card.title}
                 className={`group relative bg-gradient-to-br ${card.bgGradient} rounded-2xl border ${card.borderColor} p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer overflow-hidden`}
               >
-                {/* Animated Background */}
                 <div className={`absolute inset-0 bg-gradient-to-r ${card.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
                 
-                {/* Icon with Pulse Effect */}
                 <div className="relative mb-4">
                   <div className={`absolute inset-0 bg-gradient-to-r ${card.gradient} rounded-xl blur-md opacity-0 group-hover:opacity-50 transition-opacity duration-300`}></div>
                   <div className={`relative w-12 h-12 bg-gradient-to-r ${card.gradient} rounded-xl flex items-center justify-center shadow-lg`}>
@@ -201,7 +228,6 @@ export default function Overview() {
                   </div>
                 </div>
 
-                {/* Stats */}
                 <div className="relative">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-gray-600 text-sm font-medium uppercase tracking-wide">{card.title}</h3>
@@ -225,7 +251,6 @@ export default function Overview() {
                   </div>
                 </div>
 
-                {/* Decorative Element */}
                 <div className="absolute bottom-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Zap size={48} />
                 </div>
@@ -234,7 +259,41 @@ export default function Overview() {
           })}
         </div>
 
-        {/* Quick Actions & Recent Activity */}
+        {/* Finance Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {financeCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div
+                key={card.title}
+                className={`group relative bg-gradient-to-br ${card.bgGradient} rounded-2xl border ${card.borderColor} p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer overflow-hidden`}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-r ${card.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
+                
+                <div className="relative mb-4">
+                  <div className={`absolute inset-0 bg-gradient-to-r ${card.gradient} rounded-xl blur-md opacity-0 group-hover:opacity-50 transition-opacity duration-300`}></div>
+                  <div className={`relative w-12 h-12 bg-gradient-to-r ${card.gradient} rounded-xl flex items-center justify-center shadow-lg`}>
+                    <Icon className="text-white" size={24} />
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <h3 className="text-gray-600 text-sm font-medium uppercase tracking-wide mb-2">{card.title}</h3>
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <p className="text-4xl font-bold text-gray-900">{card.value}</p>
+                  </div>
+                  <p className="text-sm text-gray-500">{card.subtext}</p>
+                </div>
+
+                <div className="absolute bottom-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <DollarSign size={48} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Quick Actions & Performance Metrics */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Quick Actions */}
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300">
@@ -252,18 +311,18 @@ export default function Overview() {
               </button>
               <button className="group p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
                 <GraduationCap className="text-green-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
-                <div className="font-semibold text-gray-800">Add Faculty</div>
+                <div className="font-semibold text-gray-800">Add Staff</div>
                 <div className="text-xs text-gray-500">Hire new staff</div>
               </button>
               <button className="group p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
-                <Phone className="text-orange-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
-                <div className="font-semibold text-gray-800">Add Lead</div>
-                <div className="text-xs text-gray-500">Track inquiry</div>
+                <Truck className="text-orange-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
+                <div className="font-semibold text-gray-800">Add Vendor</div>
+                <div className="text-xs text-gray-500">Register vendor</div>
               </button>
               <button className="group p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
-                <Bus className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
-                <div className="font-semibold text-gray-800">Manage Transport</div>
-                <div className="text-xs text-gray-500">Update routes</div>
+                <DollarSign className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
+                <div className="font-semibold text-gray-800">Add Fee</div>
+                <div className="text-xs text-gray-500">Record payment</div>
               </button>
             </div>
           </div>
@@ -288,7 +347,7 @@ export default function Overview() {
               </div>
               <div>
                 <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Faculty Engagement</span>
+                  <span className="text-sm text-gray-600">Staff Engagement</span>
                   <span className="text-sm font-semibold text-gray-800">88%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
@@ -297,11 +356,19 @@ export default function Overview() {
               </div>
               <div>
                 <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-600">Lead Conversion</span>
-                  <span className="text-sm font-semibold text-gray-800">67%</span>
+                  <span className="text-sm text-gray-600">Fee Collection Rate</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {stats.totalRevenue + stats.pendingFees > 0 
+                      ? Math.round((stats.totalRevenue / (stats.totalRevenue + stats.pendingFees)) * 100) 
+                      : 0}%
+                  </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-gradient-to-r from-orange-500 to-red-500 h-2 rounded-full" style={{ width: '67%' }}></div>
+                  <div className="bg-gradient-to-r from-orange-500 to-red-500 h-2 rounded-full" 
+                    style={{ width: `${stats.totalRevenue + stats.pendingFees > 0 
+                      ? (stats.totalRevenue / (stats.totalRevenue + stats.pendingFees)) * 100 
+                      : 0}%` }}>
+                  </div>
                 </div>
               </div>
               <div>
@@ -350,20 +417,20 @@ export default function Overview() {
             </div>
             <div className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-xl transition-all duration-300">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <Phone size={14} className="text-blue-600" />
+                <DollarSign size={14} className="text-blue-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800">New lead from website</p>
+                <p className="text-sm font-medium text-gray-800">Fee payment received</p>
                 <p className="text-xs text-gray-500">5 hours ago</p>
               </div>
-              <span className="text-xs text-blue-600 font-semibold">New</span>
+              <span className="text-xs text-blue-600 font-semibold">Completed</span>
             </div>
             <div className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-xl transition-all duration-300">
               <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
                 <GraduationCap size={14} className="text-purple-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800">Faculty training session scheduled</p>
+                <p className="text-sm font-medium text-gray-800">Staff training session scheduled</p>
                 <p className="text-xs text-gray-500">Yesterday</p>
               </div>
               <span className="text-xs text-purple-600 font-semibold">Upcoming</span>

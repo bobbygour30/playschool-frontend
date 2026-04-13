@@ -2,15 +2,17 @@ import { useState, useEffect } from 'react';
 import { 
   Users, GraduationCap, Phone, Bus, LayoutDashboard, Menu, X, 
   Sparkles, ChevronRight, LogOut, Settings, Bell, User,
-  TrendingUp, Award, Calendar, Clock
+  TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
+  Truck, Briefcase, DollarSign
 } from 'lucide-react';
 import Overview from './Overview';
-import Students from './Students';
-import Faculty from './Faculty';
-import Leads from './Leads';
-import Vehicles from './Vehicles';
+import StudentDetails from './Students';
+import Academics from './Academics';
+import VendorManagement from './VendorManagement';
+import StaffManagement from './StaffManagement';
+import Finance from './Finance';
 
-type Page = 'overview' | 'students' | 'faculty' | 'leads' | 'vehicles';
+type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance';
 
 export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState<Page>('overview');
@@ -43,25 +45,28 @@ export default function Dashboard() {
   }, []);
 
   const navigation = [
-    { id: 'overview' as Page, name: 'Overview', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-    { id: 'students' as Page, name: 'Students', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
-    { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
-    { id: 'leads' as Page, name: 'Leads', icon: Phone, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
-    { id: 'vehicles' as Page, name: 'Vehicles', icon: Bus, color: 'from-cyan-500 to-blue-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
+    { id: 'overview' as Page, name: 'Dashboard', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+    { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
+    { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
+    { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
+    { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
+    { id: 'finance' as Page, name: 'Finance', icon: DollarSign, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
   ];
 
   const renderPage = () => {
     switch (currentPage) {
       case 'overview':
         return <Overview />;
-      case 'students':
-        return <Students />;
-      case 'faculty':
-        return <Faculty />;
-      case 'leads':
-        return <Leads />;
-      case 'vehicles':
-        return <Vehicles />;
+      case 'studentDetails':
+        return <StudentDetails />;
+      case 'academics':
+        return <Academics />;
+      case 'vendor':
+        return <VendorManagement />;
+      case 'staff':
+        return <StaffManagement />;
+      case 'finance':
+        return <Finance />;
       default:
         return <Overview />;
     }
@@ -162,7 +167,7 @@ export default function Dashboard() {
                 }}
                 className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
                   isActive
-                    ? `bg-gradient-to-r ${item.color} text-white shadow-lg shadow-${item.textColor.replace('text-', '')}/20`
+                    ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
                     : 'text-gray-700 hover:bg-gray-50 hover:scale-105'
                 }`}
               >
