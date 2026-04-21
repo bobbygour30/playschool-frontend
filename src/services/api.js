@@ -33,13 +33,13 @@ export const updateStaffStatus = (id, status) => api.patch(`/staff/${id}/status`
 export const deleteStaff = (id) => api.delete(`/staff/${id}`);
 export const uploadStaffDocument = (data) => api.post('/staff/upload-document', data);
 
-// ==================== DOCUMENTS ====================
+// ==================== ACADEMIC DOCUMENTS ====================
 export const getDocumentsByClassAndMonth = (classId, month) => api.get(`/academics/documents/${classId}/${month}`);
 export const getDocumentsByClass = (classId) => api.get(`/academics/documents/${classId}`);
 export const getDocument = (id) => api.get(`/academics/document/${id}`);
-export const uploadDocument = (data) => api.post('/academics/documents', data);
-export const updateDocument = (id, data) => api.put(`/academics/document/${id}`, data);
-export const deleteDocument = (id) => api.delete(`/academics/document/${id}`);
+export const uploadAcademicDocument = (data) => api.post('/academics/documents', data);
+export const updateAcademicDocument = (id, data) => api.put(`/academics/document/${id}`, data);
+export const deleteAcademicDocument = (id) => api.delete(`/academics/document/${id}`);
 export const getDocumentStats = (classId) => api.get(`/academics/documents/stats/${classId}`);
 
 // ==================== VENDORS ====================
@@ -131,8 +131,8 @@ export const createClass = (data) => api.post('/classes', data);
 export const updateClass = (id, data) => api.put(`/classes/${id}`, data);
 export const deleteClass = (id) => api.delete(`/classes/${id}`);
 
-// ==================== DOCUMENT UPLOAD HELPERS ====================
-export const uploadDocument = async (file, type = 'general') => {
+// ==================== GENERAL DOCUMENT UPLOAD HELPER ====================
+export const uploadGeneralDocument = async (file, type = 'general') => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', type);

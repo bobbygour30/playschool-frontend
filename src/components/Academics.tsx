@@ -6,7 +6,15 @@ import {
   Trophy, Gift, Music, PenTool, Book, GraduationCap, Heart,
   Folder, FolderOpen, Image, File, Pdf, DownloadCloud
 } from 'lucide-react';
-import { getClasses, getStudents, getFaculty } from '../services/api';
+import { 
+  getAcademicClasses, 
+  getAssessmentsByClass, getEventsByClass, getCulminationsByClass,
+  createAssessment, updateAssessment, deleteAssessment,
+  createEvent, updateEvent, deleteEvent,
+  createCulmination, updateCulmination, deleteCulmination,
+  uploadAcademicDocument, deleteAcademicDocument, getDocumentsByClassAndMonth,
+  getAcademicStats
+} from '../services/api';
 
 // Class definitions
 const CLASSES = [
@@ -37,32 +45,21 @@ export default function Academics() {
   const [modalType, setModalType] = useState('');
   const [editingItem, setEditingItem] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
-  const [classData, setClassData] = useState({
-    toddler: {
-      assessments: [],
-      events: [],
-      culmination: [],
-      documents: {}
-    },
-    'pre-nursery': {
-      assessments: [],
-      events: [],
-      culmination: [],
-      documents: {}
-    },
-    nursery: {
-      assessments: [],
-      events: [],
-      culmination: [],
-      documents: {}
-    },
-    'kg-1': {
-      assessments: [],
-      events: [],
-      culmination: [],
-      documents: {}
-    }
+  
+  // Data states
+  const [assessments, setAssessments] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [culminations, setCulminations] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [stats, setStats] = useState({
+    totalAssessments: 0,
+    completedAssessments: 0,
+    totalEvents: 0,
+    upcomingEvents: 0,
+    totalDocuments: 0,
+    averageScore: 0
   });
+  
   const [formData, setFormData] = useState({
     title: '',
     date: '',
@@ -71,8 +68,10 @@ export default function Academics() {
     marks: '',
     type: '',
     status: 'upcoming',
+    report: '',
     attachments: null
   });
+  
   const [documentFormData, setDocumentFormData] = useState({
     title: '',
     description: '',
@@ -82,91 +81,38 @@ export default function Academics() {
   });
 
   useEffect(() => {
-    loadAcademicData();
-  }, []);
+    loadData();
+  }, [selectedClass, selectedMonth]);
 
-  const loadAcademicData = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      // In a real app, fetch from API
-      // For now, using mock data with documents
-      const mockData = {
-        toddler: {
-          assessments: [
-            { id: '1', title: 'Monthly Assessment - January', date: '2024-01-15', subject: 'General Knowledge', marks: '25/30', status: 'completed', description: 'Basic shapes, colors, and animals recognition' },
-            { id: '2', title: 'Monthly Assessment - February', date: '2024-02-15', subject: 'Language Skills', marks: '28/30', status: 'completed', description: 'Alphabet recognition and basic words' },
-            { id: '3', title: 'Monthly Assessment - March', date: '2024-03-15', subject: 'Motor Skills', marks: 'Pending', status: 'upcoming', description: 'Fine motor skills assessment' }
-          ],
-          events: [
-            { id: '1', title: 'Color Day Celebration', date: '2024-01-20', type: 'celebration', status: 'completed', description: 'Students dressed in favorite colors' },
-            { id: '2', title: 'Annual Day', date: '2024-02-10', type: 'event', status: 'completed', description: 'Annual cultural program' },
-            { id: '3', title: 'Spring Festival', date: '2024-03-25', type: 'celebration', status: 'upcoming', description: 'Welcome spring with flowers' }
-          ],
-          culmination: [
-            { id: '1', title: 'First Term Culmination', date: '2024-02-28', status: 'completed', description: 'Term 1 final activities and reports', report: 'Excellent progress in all areas' },
-            { id: '2', title: 'Second Term Culmination', date: '2024-04-15', status: 'upcoming', description: 'Term 2 final assessment and parent meeting', report: 'Pending' }
-          ],
-          documents: {
-            0: [ // January
-              { id: '1', title: 'January Activity Sheet', description: 'Monthly activity worksheet', fileName: 'jan_activity.pdf', fileType: 'pdf', uploadedAt: '2024-01-10', size: '2.5 MB' },
-              { id: '2', title: 'Monthly Report', description: 'Student progress report', fileName: 'jan_report.pdf', fileType: 'pdf', uploadedAt: '2024-01-25', size: '1.8 MB' }
-            ],
-            1: [ // February
-              { id: '3', title: 'February Lesson Plan', description: 'Detailed lesson plan', fileName: 'feb_lesson.pdf', fileType: 'pdf', uploadedAt: '2024-02-05', size: '3.2 MB' },
-              { id: '4', title: 'Event Photos', description: 'Annual day celebration photos', fileName: 'annual_day.zip', fileType: 'zip', uploadedAt: '2024-02-12', size: '15 MB' }
-            ],
-            2: [ // March
-              { id: '5', title: 'March Assessment Guide', description: 'Assessment guidelines', fileName: 'march_guide.pdf', fileType: 'pdf', uploadedAt: '2024-03-01', size: '1.2 MB' }
-            ]
-          }
-        },
-        'pre-nursery': {
-          assessments: [
-            { id: '1', title: 'Monthly Assessment - January', date: '2024-01-15', subject: 'Cognitive Skills', marks: '32/40', status: 'completed', description: 'Pattern recognition and matching' },
-            { id: '2', title: 'Monthly Assessment - February', date: '2024-02-15', subject: 'Language & Literacy', marks: '35/40', status: 'completed', description: 'Letter sounds and simple words' }
-          ],
-          events: [
-            { id: '1', title: 'Fancy Dress Competition', date: '2024-01-25', type: 'event', status: 'completed', description: 'Community helpers theme' },
-            { id: '2', title: 'Parent-Teacher Meet', date: '2024-03-05', type: 'meeting', status: 'upcoming', description: 'Progress discussion' }
-          ],
-          culmination: [
-            { id: '1', title: 'Mid-Year Culmination', date: '2024-02-20', status: 'completed', description: 'Half-yearly progress review', report: 'Students showing good progress' }
-          ],
-          documents: {
-            0: [
-              { id: '1', title: 'January Worksheets', description: 'Practice worksheets', fileName: 'jan_worksheets.pdf', fileType: 'pdf', uploadedAt: '2024-01-15', size: '4.1 MB' }
-            ]
-          }
-        },
-        nursery: {
-          assessments: [
-            { id: '1', title: 'Monthly Assessment - January', date: '2024-01-15', subject: 'Mathematics', marks: '42/50', status: 'completed', description: 'Numbers 1-20 and basic addition' },
-            { id: '2', title: 'Monthly Assessment - February', date: '2024-02-15', subject: 'English', marks: '45/50', status: 'completed', description: 'Reading simple sentences' }
-          ],
-          events: [
-            { id: '1', title: 'Science Exhibition', date: '2024-02-05', type: 'event', status: 'completed', description: 'Simple science projects' },
-            { id: '2', title: 'Sports Day', date: '2024-03-10', type: 'event', status: 'upcoming', description: 'Annual sports meet' }
-          ],
-          culmination: [
-            { id: '1', title: 'Term 1 Culmination', date: '2024-02-25', status: 'completed', description: 'Term ending activities', report: 'Achieved learning milestones' }
-          ],
-          documents: {}
-        },
-        'kg-1': {
-          assessments: [
-            { id: '1', title: 'Monthly Assessment - January', date: '2024-01-15', subject: 'All Subjects', marks: '85/100', status: 'completed', description: 'Comprehensive monthly test' }
-          ],
-          events: [
-            { id: '1', title: 'Art & Craft Exhibition', date: '2024-02-15', type: 'event', status: 'completed', description: 'Student artwork display' },
-            { id: '2', title: 'Graduation Ceremony', date: '2024-03-30', type: 'ceremony', status: 'upcoming', description: 'Moving to Grade 1' }
-          ],
-          culmination: [
-            { id: '1', title: 'Final Culmination', date: '2024-03-28', status: 'upcoming', description: 'End of year culmination', report: 'Ready for Grade 1' }
-          ],
-          documents: {}
-        }
-      };
-      setClassData(mockData);
+      
+      // Load assessments, events, culminations for the selected class
+      const [assessmentsRes, eventsRes, culminationsRes, documentsRes, statsRes] = await Promise.all([
+        getAssessmentsByClass(selectedClass),
+        getEventsByClass(selectedClass),
+        getCulminationsByClass(selectedClass),
+        getDocumentsByClassAndMonth(selectedClass, selectedMonth),
+        getAcademicStats()
+      ]);
+      
+      setAssessments(assessmentsRes.data || []);
+      setEvents(eventsRes.data || []);
+      setCulminations(culminationsRes.data || []);
+      setDocuments(documentsRes.data || []);
+      
+      // Update stats
+      const classStats = statsRes.data?.[selectedClass] || {};
+      setStats({
+        totalAssessments: classStats.totalAssessments || 0,
+        completedAssessments: classStats.completedAssessments || 0,
+        totalEvents: classStats.totalEvents || 0,
+        upcomingEvents: classStats.upcomingEvents || 0,
+        totalDocuments: classStats.totalDocuments || 0,
+        averageScore: 0 // Calculate from assessments
+      });
+      
     } catch (error) {
       console.error('Error loading academic data:', error);
       alert('Failed to load academic data');
@@ -180,7 +126,6 @@ export default function Academics() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const fileType = file.type.split('/')[1];
         setDocumentFormData({
           ...documentFormData,
           file: reader.result,
@@ -195,31 +140,17 @@ export default function Academics() {
   const handleDocumentSubmit = async (e) => {
     e.preventDefault();
     try {
-      const newDocument = {
-        id: Date.now().toString(),
+      const documentData = {
+        class_id: selectedClass,
+        month: selectedMonth,
         title: documentFormData.title,
         description: documentFormData.description,
-        fileName: documentFormData.fileName,
-        fileType: documentFormData.fileType,
-        fileUrl: documentFormData.file,
-        uploadedAt: new Date().toISOString().split('T')[0],
-        size: 'Uploaded'
+        file: documentFormData.file,
+        file_name: documentFormData.fileName,
+        file_type: documentFormData.fileType,
       };
-
-      setClassData(prev => ({
-        ...prev,
-        [selectedClass]: {
-          ...prev[selectedClass],
-          documents: {
-            ...prev[selectedClass].documents,
-            [selectedMonth]: [
-              ...(prev[selectedClass].documents[selectedMonth] || []),
-              newDocument
-            ]
-          }
-        }
-      }));
       
+      await uploadAcademicDocument(documentData);
       alert('Document uploaded successfully!');
       setShowDocumentModal(false);
       setDocumentFormData({
@@ -229,45 +160,42 @@ export default function Academics() {
         fileType: '',
         fileName: ''
       });
+      loadData(); // Reload documents
     } catch (error) {
       console.error('Error uploading document:', error);
       alert('Failed to upload document. Please try again.');
     }
   };
 
-  const handleDeleteDocument = (docId) => {
+  const handleDeleteDocument = async (docId) => {
     if (confirm('Are you sure you want to delete this document?')) {
-      setClassData(prev => ({
-        ...prev,
-        [selectedClass]: {
-          ...prev[selectedClass],
-          documents: {
-            ...prev[selectedClass].documents,
-            [selectedMonth]: prev[selectedClass].documents[selectedMonth].filter(doc => doc.id !== docId)
-          }
-        }
-      }));
-      alert('Document deleted successfully!');
+      try {
+        await deleteAcademicDocument(docId);
+        alert('Document deleted successfully!');
+        loadData(); // Reload documents
+      } catch (error) {
+        console.error('Error deleting document:', error);
+        alert('Failed to delete document. Please try again.');
+      }
     }
   };
 
   const handleViewDocument = (doc) => {
-    setSelectedDocument(doc);
-    window.open(doc.fileUrl, '_blank');
+    window.open(doc.file_url, '_blank');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const newItem = {
-        id: editingItem?.id || Date.now().toString(),
+      const itemData = {
+        class_id: selectedClass,
         title: formData.title,
         date: formData.date,
         description: formData.description,
         status: formData.status,
         ...(modalType === 'assessment' && {
           subject: formData.subject,
-          marks: formData.marks
+          marks: formData.marks || 'Pending'
         }),
         ...(modalType === 'event' && {
           type: formData.type
@@ -278,30 +206,26 @@ export default function Academics() {
       };
 
       if (editingItem) {
-        setClassData(prev => ({
-          ...prev,
-          [selectedClass]: {
-            ...prev[selectedClass],
-            [modalType === 'assessment' ? 'assessments' : modalType === 'event' ? 'events' : 'culmination']: 
-              prev[selectedClass][modalType === 'assessment' ? 'assessments' : modalType === 'event' ? 'events' : 'culmination'].map(item =>
-                item.id === editingItem.id ? newItem : item
-              )
-          }
-        }));
+        if (modalType === 'assessment') {
+          await updateAssessment(editingItem._id, itemData);
+        } else if (modalType === 'event') {
+          await updateEvent(editingItem._id, itemData);
+        } else if (modalType === 'culmination') {
+          await updateCulmination(editingItem._id, itemData);
+        }
         alert(`${modalType} updated successfully!`);
       } else {
-        setClassData(prev => ({
-          ...prev,
-          [selectedClass]: {
-            ...prev[selectedClass],
-            [modalType === 'assessment' ? 'assessments' : modalType === 'event' ? 'events' : 'culmination']: [
-              ...prev[selectedClass][modalType === 'assessment' ? 'assessments' : modalType === 'event' ? 'events' : 'culmination'],
-              newItem
-            ]
-          }
-        }));
+        if (modalType === 'assessment') {
+          await createAssessment(itemData);
+        } else if (modalType === 'event') {
+          await createEvent(itemData);
+        } else if (modalType === 'culmination') {
+          await createCulmination(itemData);
+        }
         alert(`${modalType} added successfully!`);
       }
+      
+      loadData(); // Reload data
       resetForm();
     } catch (error) {
       console.error('Error saving:', error);
@@ -309,16 +233,22 @@ export default function Academics() {
     }
   };
 
-  const handleDelete = (itemId, section) => {
+  const handleDelete = async (itemId, section) => {
     if (confirm(`Are you sure you want to delete this ${section.slice(0, -1)}?`)) {
-      setClassData(prev => ({
-        ...prev,
-        [selectedClass]: {
-          ...prev[selectedClass],
-          [section]: prev[selectedClass][section].filter(item => item.id !== itemId)
+      try {
+        if (section === 'assessments') {
+          await deleteAssessment(itemId);
+        } else if (section === 'events') {
+          await deleteEvent(itemId);
+        } else if (section === 'culmination') {
+          await deleteCulmination(itemId);
         }
-      }));
-      alert(`${section.slice(0, -1)} deleted successfully!`);
+        alert(`${section.slice(0, -1)} deleted successfully!`);
+        loadData(); // Reload data
+      } catch (error) {
+        console.error('Error deleting:', error);
+        alert('Failed to delete. Please try again.');
+      }
     }
   };
 
@@ -327,7 +257,7 @@ export default function Academics() {
     setModalType(section === 'assessments' ? 'assessment' : section === 'events' ? 'event' : 'culmination');
     setFormData({
       title: item.title || '',
-      date: item.date || '',
+      date: item.date ? item.date.split('T')[0] : '',
       description: item.description || '',
       subject: item.subject || '',
       marks: item.marks || '',
@@ -348,6 +278,7 @@ export default function Academics() {
       marks: '',
       type: '',
       status: 'upcoming',
+      report: '',
       attachments: null
     });
     setEditingItem(null);
@@ -372,29 +303,10 @@ export default function Academics() {
   };
 
   const getFileIcon = (fileType) => {
-    if (fileType.includes('pdf')) return <FileText size={16} className="text-red-500" />;
-    if (fileType.includes('image')) return <Image size={16} className="text-blue-500" />;
-    if (fileType.includes('zip')) return <Folder size={16} className="text-yellow-500" />;
+    if (fileType?.includes('pdf')) return <FileText size={16} className="text-red-500" />;
+    if (fileType?.includes('image')) return <Image size={16} className="text-blue-500" />;
+    if (fileType?.includes('zip')) return <Folder size={16} className="text-yellow-500" />;
     return <File size={16} className="text-gray-500" />;
-  };
-
-  const currentClass = CLASSES.find(c => c.id === selectedClass);
-  const currentClassData = classData[selectedClass];
-  const currentMonthDocuments = currentClassData?.documents?.[selectedMonth] || [];
-
-  // Calculate statistics
-  const stats = {
-    totalAssessments: currentClassData?.assessments.length || 0,
-    completedAssessments: currentClassData?.assessments.filter(a => a.status === 'completed').length || 0,
-    totalEvents: currentClassData?.events.length || 0,
-    upcomingEvents: currentClassData?.events.filter(e => e.status === 'upcoming').length || 0,
-    totalDocuments: Object.values(currentClassData?.documents || {}).reduce((sum, docs) => sum + docs.length, 0),
-    averageScore: currentClassData?.assessments
-      .filter(a => a.marks && !a.marks.includes('Pending'))
-      .reduce((sum, a) => {
-        const score = parseInt(a.marks.split('/')[0]);
-        return sum + score;
-      }, 0) / (currentClassData?.assessments.filter(a => a.marks && !a.marks.includes('Pending')).length || 1) || 0
   };
 
   if (loading) {
@@ -499,7 +411,7 @@ export default function Academics() {
               <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                 <Activity className="text-orange-600" size={20} />
               </div>
-              <span className="text-2xl font-bold text-orange-600">{currentClassData?.culmination.length || 0}</span>
+              <span className="text-2xl font-bold text-orange-600">{culminations.length}</span>
             </div>
             <p className="text-2xl font-bold text-gray-800">Culminations</p>
             <p className="text-sm text-gray-600">Term completions</p>
@@ -570,7 +482,7 @@ export default function Academics() {
 
           {expandedSections.documents && (
             <div className="p-6">
-              {currentMonthDocuments.length === 0 ? (
+              {documents.length === 0 ? (
                 <div className="text-center py-8">
                   <FolderOpen className="mx-auto text-gray-400 mb-3" size={48} />
                   <p className="text-gray-500">No documents uploaded for {MONTHS[selectedMonth]}</p>
@@ -584,19 +496,19 @@ export default function Academics() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {currentMonthDocuments.map((doc) => (
-                    <div key={doc.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all group">
+                  {documents.map((doc) => (
+                    <div key={doc._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all group">
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                          {getFileIcon(doc.fileType)}
+                          {getFileIcon(doc.file_type)}
                         </div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-800">{doc.title}</h3>
                           <p className="text-sm text-gray-500 mt-1">{doc.description}</p>
                           <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                            <span>{doc.fileName}</span>
+                            <span>{doc.file_name}</span>
                             <span>•</span>
-                            <span>{doc.uploadedAt}</span>
+                            <span>{new Date(doc.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -608,7 +520,7 @@ export default function Academics() {
                             <Eye size={14} />
                           </button>
                           <button
-                            onClick={() => handleDeleteDocument(doc.id)}
+                            onClick={() => handleDeleteDocument(doc._id)}
                             className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
                             title="Delete Document"
                           >
@@ -658,7 +570,7 @@ export default function Academics() {
 
           {expandedSections.assessments && (
             <div className="p-6">
-              {currentClassData?.assessments.length === 0 ? (
+              {assessments.length === 0 ? (
                 <div className="text-center py-8">
                   <FileText className="mx-auto text-gray-400 mb-3" size={48} />
                   <p className="text-gray-500">No assessments added yet</p>
@@ -674,10 +586,10 @@ export default function Academics() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {currentClassData.assessments.map((assessment) => {
+                  {assessments.map((assessment) => {
                     const statusBadge = getStatusBadge(assessment.status);
                     return (
-                      <div key={assessment.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
+                      <div key={assessment._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
@@ -711,7 +623,7 @@ export default function Academics() {
                               <Edit size={16} />
                             </button>
                             <button
-                              onClick={() => handleDelete(assessment.id, 'assessments')}
+                              onClick={() => handleDelete(assessment._id, 'assessments')}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
                             >
                               <Trash2 size={16} />
@@ -761,7 +673,7 @@ export default function Academics() {
 
           {expandedSections.events && (
             <div className="p-6">
-              {currentClassData?.events.length === 0 ? (
+              {events.length === 0 ? (
                 <div className="text-center py-8">
                   <Calendar className="mx-auto text-gray-400 mb-3" size={48} />
                   <p className="text-gray-500">No events scheduled yet</p>
@@ -777,7 +689,7 @@ export default function Academics() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {currentClassData.events.map((event) => {
+                  {events.map((event) => {
                     const statusBadge = getStatusBadge(event.status);
                     const eventIcons = {
                       celebration: <Gift size={14} />,
@@ -786,7 +698,7 @@ export default function Academics() {
                       ceremony: <Trophy size={14} />
                     };
                     return (
-                      <div key={event.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
+                      <div key={event._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -802,7 +714,7 @@ export default function Academics() {
                               <Edit size={14} />
                             </button>
                             <button
-                              onClick={() => handleDelete(event.id, 'events')}
+                              onClick={() => handleDelete(event._id, 'events')}
                               className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
                             >
                               <Trash2 size={14} />
@@ -863,7 +775,7 @@ export default function Academics() {
 
           {expandedSections.culmination && (
             <div className="p-6">
-              {currentClassData?.culmination.length === 0 ? (
+              {culminations.length === 0 ? (
                 <div className="text-center py-8">
                   <Trophy className="mx-auto text-gray-400 mb-3" size={48} />
                   <p className="text-gray-500">No culmination activities added</p>
@@ -879,10 +791,10 @@ export default function Academics() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {currentClassData.culmination.map((culmination) => {
+                  {culminations.map((culmination) => {
                     const statusBadge = getStatusBadge(culmination.status);
                     return (
-                      <div key={culmination.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
+                      <div key={culmination._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
@@ -914,7 +826,7 @@ export default function Academics() {
                               <Edit size={16} />
                             </button>
                             <button
-                              onClick={() => handleDelete(culmination.id, 'culmination')}
+                              onClick={() => handleDelete(culmination._id, 'culmination')}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
                             >
                               <Trash2 size={16} />
