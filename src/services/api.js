@@ -33,6 +33,15 @@ export const updateStaffStatus = (id, status) => api.patch(`/staff/${id}/status`
 export const deleteStaff = (id) => api.delete(`/staff/${id}`);
 export const uploadStaffDocument = (data) => api.post('/staff/upload-document', data);
 
+// ==================== DOCUMENTS ====================
+export const getDocumentsByClassAndMonth = (classId, month) => api.get(`/academics/documents/${classId}/${month}`);
+export const getDocumentsByClass = (classId) => api.get(`/academics/documents/${classId}`);
+export const getDocument = (id) => api.get(`/academics/document/${id}`);
+export const uploadDocument = (data) => api.post('/academics/documents', data);
+export const updateDocument = (id, data) => api.put(`/academics/document/${id}`, data);
+export const deleteDocument = (id) => api.delete(`/academics/document/${id}`);
+export const getDocumentStats = (classId) => api.get(`/academics/documents/stats/${classId}`);
+
 // ==================== VENDORS ====================
 export const getVendors = () => api.get('/vendors');
 export const getVendor = (id) => api.get(`/vendors/${id}`);

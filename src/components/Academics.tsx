@@ -3,7 +3,8 @@ import {
   BookOpen, Calendar, Award, Star, Users, Plus, Search, Edit, 
   Trash2, X, Filter, Download, TrendingUp, Clock, CheckCircle,
   FileText, Upload, Eye, ChevronDown, ChevronRight, Activity,
-  Trophy, Gift, Music, PenTool, Book, GraduationCap, Heart
+  Trophy, Gift, Music, PenTool, Book, GraduationCap, Heart,
+  Folder, FolderOpen, Image, File, Pdf, DownloadCloud
 } from 'lucide-react';
 import { getClasses, getStudents, getFaculty } from '../services/api';
 
@@ -15,37 +16,51 @@ const CLASSES = [
   { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: GraduationCap, color: 'from-purple-500 to-pink-500' },
 ];
 
-export default function     () {
+// Months definition
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+export default function Academics() {
   const [selectedClass, setSelectedClass] = useState('toddler');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [expandedSections, setExpandedSections] = useState({
     assessments: true,
     events: true,
-    culmination: true
+    culmination: true,
+    documents: true
   });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState(''); // 'assessment', 'event', 'culmination'
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [modalType, setModalType] = useState('');
   const [editingItem, setEditingItem] = useState(null);
+  const [selectedDocument, setSelectedDocument] = useState(null);
   const [classData, setClassData] = useState({
     toddler: {
       assessments: [],
       events: [],
-      culmination: []
+      culmination: [],
+      documents: {}
     },
     'pre-nursery': {
       assessments: [],
       events: [],
-      culmination: []
+      culmination: [],
+      documents: {}
     },
     nursery: {
       assessments: [],
       events: [],
-      culmination: []
+      culmination: [],
+      documents: {}
     },
     'kg-1': {
       assessments: [],
       events: [],
-      culmination: []
+      culmination: [],
+      documents: {}
     }
   });
   const [formData, setFormData] = useState({
@@ -58,6 +73,13 @@ export default function     () {
     status: 'upcoming',
     attachments: null
   });
+  const [documentFormData, setDocumentFormData] = useState({
+    title: '',
+    description: '',
+    file: null,
+    fileType: '',
+    fileName: ''
+  });
 
   useEffect(() => {
     loadAcademicData();
@@ -67,7 +89,7 @@ export default function     () {
     try {
       setLoading(true);
       // In a real app, fetch from API
-      // For now, using mock data
+      // For now, using mock data with documents
       const mockData = {
         toddler: {
           assessments: [
@@ -83,7 +105,20 @@ export default function     () {
           culmination: [
             { id: '1', title: 'First Term Culmination', date: '2024-02-28', status: 'completed', description: 'Term 1 final activities and reports', report: 'Excellent progress in all areas' },
             { id: '2', title: 'Second Term Culmination', date: '2024-04-15', status: 'upcoming', description: 'Term 2 final assessment and parent meeting', report: 'Pending' }
-          ]
+          ],
+          documents: {
+            0: [ // January
+              { id: '1', title: 'January Activity Sheet', description: 'Monthly activity worksheet', fileName: 'jan_activity.pdf', fileType: 'pdf', uploadedAt: '2024-01-10', size: '2.5 MB' },
+              { id: '2', title: 'Monthly Report', description: 'Student progress report', fileName: 'jan_report.pdf', fileType: 'pdf', uploadedAt: '2024-01-25', size: '1.8 MB' }
+            ],
+            1: [ // February
+              { id: '3', title: 'February Lesson Plan', description: 'Detailed lesson plan', fileName: 'feb_lesson.pdf', fileType: 'pdf', uploadedAt: '2024-02-05', size: '3.2 MB' },
+              { id: '4', title: 'Event Photos', description: 'Annual day celebration photos', fileName: 'annual_day.zip', fileType: 'zip', uploadedAt: '2024-02-12', size: '15 MB' }
+            ],
+            2: [ // March
+              { id: '5', title: 'March Assessment Guide', description: 'Assessment guidelines', fileName: 'march_guide.pdf', fileType: 'pdf', uploadedAt: '2024-03-01', size: '1.2 MB' }
+            ]
+          }
         },
         'pre-nursery': {
           assessments: [
@@ -96,7 +131,12 @@ export default function     () {
           ],
           culmination: [
             { id: '1', title: 'Mid-Year Culmination', date: '2024-02-20', status: 'completed', description: 'Half-yearly progress review', report: 'Students showing good progress' }
-          ]
+          ],
+          documents: {
+            0: [
+              { id: '1', title: 'January Worksheets', description: 'Practice worksheets', fileName: 'jan_worksheets.pdf', fileType: 'pdf', uploadedAt: '2024-01-15', size: '4.1 MB' }
+            ]
+          }
         },
         nursery: {
           assessments: [
@@ -109,7 +149,8 @@ export default function     () {
           ],
           culmination: [
             { id: '1', title: 'Term 1 Culmination', date: '2024-02-25', status: 'completed', description: 'Term ending activities', report: 'Achieved learning milestones' }
-          ]
+          ],
+          documents: {}
         },
         'kg-1': {
           assessments: [
@@ -121,7 +162,8 @@ export default function     () {
           ],
           culmination: [
             { id: '1', title: 'Final Culmination', date: '2024-03-28', status: 'upcoming', description: 'End of year culmination', report: 'Ready for Grade 1' }
-          ]
+          ],
+          documents: {}
         }
       };
       setClassData(mockData);
@@ -131,6 +173,87 @@ export default function     () {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const fileType = file.type.split('/')[1];
+        setDocumentFormData({
+          ...documentFormData,
+          file: reader.result,
+          fileName: file.name,
+          fileType: file.type
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDocumentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const newDocument = {
+        id: Date.now().toString(),
+        title: documentFormData.title,
+        description: documentFormData.description,
+        fileName: documentFormData.fileName,
+        fileType: documentFormData.fileType,
+        fileUrl: documentFormData.file,
+        uploadedAt: new Date().toISOString().split('T')[0],
+        size: 'Uploaded'
+      };
+
+      setClassData(prev => ({
+        ...prev,
+        [selectedClass]: {
+          ...prev[selectedClass],
+          documents: {
+            ...prev[selectedClass].documents,
+            [selectedMonth]: [
+              ...(prev[selectedClass].documents[selectedMonth] || []),
+              newDocument
+            ]
+          }
+        }
+      }));
+      
+      alert('Document uploaded successfully!');
+      setShowDocumentModal(false);
+      setDocumentFormData({
+        title: '',
+        description: '',
+        file: null,
+        fileType: '',
+        fileName: ''
+      });
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      alert('Failed to upload document. Please try again.');
+    }
+  };
+
+  const handleDeleteDocument = (docId) => {
+    if (confirm('Are you sure you want to delete this document?')) {
+      setClassData(prev => ({
+        ...prev,
+        [selectedClass]: {
+          ...prev[selectedClass],
+          documents: {
+            ...prev[selectedClass].documents,
+            [selectedMonth]: prev[selectedClass].documents[selectedMonth].filter(doc => doc.id !== docId)
+          }
+        }
+      }));
+      alert('Document deleted successfully!');
+    }
+  };
+
+  const handleViewDocument = (doc) => {
+    setSelectedDocument(doc);
+    window.open(doc.fileUrl, '_blank');
   };
 
   const handleSubmit = async (e) => {
@@ -155,7 +278,6 @@ export default function     () {
       };
 
       if (editingItem) {
-        // Update existing item
         setClassData(prev => ({
           ...prev,
           [selectedClass]: {
@@ -168,7 +290,6 @@ export default function     () {
         }));
         alert(`${modalType} updated successfully!`);
       } else {
-        // Add new item
         setClassData(prev => ({
           ...prev,
           [selectedClass]: {
@@ -250,8 +371,16 @@ export default function     () {
     }
   };
 
+  const getFileIcon = (fileType) => {
+    if (fileType.includes('pdf')) return <FileText size={16} className="text-red-500" />;
+    if (fileType.includes('image')) return <Image size={16} className="text-blue-500" />;
+    if (fileType.includes('zip')) return <Folder size={16} className="text-yellow-500" />;
+    return <File size={16} className="text-gray-500" />;
+  };
+
   const currentClass = CLASSES.find(c => c.id === selectedClass);
   const currentClassData = classData[selectedClass];
+  const currentMonthDocuments = currentClassData?.documents?.[selectedMonth] || [];
 
   // Calculate statistics
   const stats = {
@@ -259,6 +388,7 @@ export default function     () {
     completedAssessments: currentClassData?.assessments.filter(a => a.status === 'completed').length || 0,
     totalEvents: currentClassData?.events.length || 0,
     upcomingEvents: currentClassData?.events.filter(e => e.status === 'upcoming').length || 0,
+    totalDocuments: Object.values(currentClassData?.documents || {}).reduce((sum, docs) => sum + docs.length, 0),
     averageScore: currentClassData?.assessments
       .filter(a => a.marks && !a.marks.includes('Pending'))
       .reduce((sum, a) => {
@@ -290,7 +420,7 @@ export default function     () {
               </h1>
               <p className="text-gray-600 mt-2 flex items-center gap-2">
                 <BookOpen size={18} className="text-green-500" />
-                Manage class-wise assessments, events, and culmination activities
+                Manage class-wise assessments, events, documents, and culmination activities
               </p>
             </div>
           </div>
@@ -329,7 +459,7 @@ export default function     () {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-2xl p-5 shadow-lg border border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -374,6 +504,124 @@ export default function     () {
             <p className="text-2xl font-bold text-gray-800">Culminations</p>
             <p className="text-sm text-gray-600">Term completions</p>
           </div>
+
+          <div className="bg-white rounded-2xl p-5 shadow-lg border border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-cyan-100 rounded-xl flex items-center justify-center">
+                <Folder className="text-cyan-600" size={20} />
+              </div>
+              <span className="text-2xl font-bold text-cyan-600">{stats.totalDocuments}</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-800">Documents</p>
+            <p className="text-sm text-gray-600">Uploaded files</p>
+          </div>
+        </div>
+
+        {/* Month Selection */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-8 shadow-lg border border-gray-200/50">
+          <div className="flex flex-wrap gap-2">
+            {MONTHS.map((month, index) => (
+              <button
+                key={month}
+                onClick={() => setSelectedMonth(index)}
+                className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                  selectedMonth === index
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {month}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Documents Section */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 mb-6 overflow-hidden">
+          <button
+            onClick={() => toggleSection('documents')}
+            className="w-full px-6 py-4 bg-gradient-to-r from-cyan-50 to-blue-50 flex items-center justify-between hover:bg-gradient-to-r hover:from-cyan-100 hover:to-blue-100 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
+                <Folder className="text-white" size={20} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">
+                  Documents - {MONTHS[selectedMonth]}
+                </h2>
+                <p className="text-sm text-gray-600">Upload and manage class documents</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDocumentModal(true);
+                }}
+                className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all flex items-center gap-1"
+              >
+                <Upload size={14} />
+                Upload Document
+              </button>
+              {expandedSections.documents ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            </div>
+          </button>
+
+          {expandedSections.documents && (
+            <div className="p-6">
+              {currentMonthDocuments.length === 0 ? (
+                <div className="text-center py-8">
+                  <FolderOpen className="mx-auto text-gray-400 mb-3" size={48} />
+                  <p className="text-gray-500">No documents uploaded for {MONTHS[selectedMonth]}</p>
+                  <button
+                    onClick={() => setShowDocumentModal(true)}
+                    className="mt-3 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-all flex items-center gap-2 mx-auto"
+                  >
+                    <Upload size={16} />
+                    Upload First Document
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {currentMonthDocuments.map((doc) => (
+                    <div key={doc.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all group">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                          {getFileIcon(doc.fileType)}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-800">{doc.title}</h3>
+                          <p className="text-sm text-gray-500 mt-1">{doc.description}</p>
+                          <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                            <span>{doc.fileName}</span>
+                            <span>•</span>
+                            <span>{doc.uploadedAt}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleViewDocument(doc)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                            title="View Document"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete Document"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Monthly Assessments Section */}
@@ -682,7 +930,85 @@ export default function     () {
           )}
         </div>
 
-        {/* Modal for Add/Edit */}
+        {/* Document Upload Modal */}
+        {showDocumentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">
+                  Upload Document - {MONTHS[selectedMonth]}
+                </h2>
+                <button onClick={() => setShowDocumentModal(false)} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleDocumentSubmit} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Document Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={documentFormData.title}
+                    onChange={(e) => setDocumentFormData({ ...documentFormData, title: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    placeholder="Enter document title"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={documentFormData.description}
+                    onChange={(e) => setDocumentFormData({ ...documentFormData, description: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    placeholder="Enter document description"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select File *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      required
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.zip"
+                      onChange={handleFileUpload}
+                      className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Accepted formats: PDF, JPG, PNG, DOC, ZIP (Max 10MB)</p>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowDocumentModal(false)}
+                    className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <Upload size={16} />
+                    Upload Document
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal for Add/Edit Assessments/Events/Culminations */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
