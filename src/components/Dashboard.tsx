@@ -3,7 +3,7 @@ import {
   Users, GraduationCap, Phone, Bus, LayoutDashboard, Menu, X, 
   Sparkles, ChevronRight, LogOut, Settings, Bell, User,
   TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
-  Truck, Briefcase, DollarSign
+  Truck, Briefcase, DollarSign, Heart
 } from 'lucide-react';
 import Overview from './Overview';
 import StudentDetails from './Students';
@@ -11,6 +11,8 @@ import Academics from './Academics';
 import VendorManagement from './VendorManagement';
 import StaffManagement from './StaffManagement';
 import Finance from './Finance';
+import ParentRegistration from './ParentRegistration';
+import FacultyRegistration from './FacultyRegistration';
 
 type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance';
 
@@ -44,14 +46,17 @@ export default function Dashboard() {
     };
   }, []);
 
-  const navigation = [
-    { id: 'overview' as Page, name: 'Dashboard', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-    { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
-    { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
-    { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
-    { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
-    { id: 'finance' as Page, name: 'Finance', icon: DollarSign, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
-  ];
+// Add to navigation array
+const navigation = [
+  { id: 'overview' as Page, name: 'Dashboard', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+  { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
+  { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
+  { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+  { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-teal-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
+  { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
+  { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
+  { id: 'finance' as Page, name: 'Finance', icon: DollarSign, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
+];
 
   const renderPage = () => {
     switch (currentPage) {
@@ -67,6 +72,10 @@ export default function Dashboard() {
         return <StaffManagement />;
       case 'finance':
         return <Finance />;
+      case 'parents':
+        return <ParentRegistration />;
+      case 'faculty':
+        return <FacultyRegistration />;
       default:
         return <Overview />;
     }

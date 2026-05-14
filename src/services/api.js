@@ -173,4 +173,22 @@ export const getDashboardStats = async () => {
   }
 };
 
+// ==================== PARENTS ====================
+export const getParents = () => api.get('/parents');
+export const getParent = (id) => api.get(`/parents/${id}`);
+export const createParent = (data) => api.post('/parents', data);
+export const updateParent = (id, data) => api.put(`/parents/${id}`, data);
+export const deleteParent = (id) => api.delete(`/parents/${id}`);
+export const updateParentStatus = (id, status) => api.patch(`/parents/${id}/status`, { status });
+export const getParentStats = () => api.get('/parents/stats/overview');
+
+// ==================== FACULTY AUTH ====================
+export const getFacultyAuth = () => api.get('/faculty-auth');
+export const getFacultyAuthMember = (id) => api.get(`/faculty-auth/${id}`);
+export const createFacultyAuth = (data) => api.post('/faculty-auth', data);
+export const updateFacultyAuth = (id, data) => api.put(`/faculty-auth/${id}`, data);
+export const deleteFacultyAuth = (id) => api.delete(`/faculty-auth/${id}`);
+export const updateFacultyAuthStatus = (id, status) => api.patch(`/faculty-auth/${id}/status`, { status });
+export const getFacultyAuthStats = () => api.get('/faculty-auth/stats/overview');
+
 export default api;
