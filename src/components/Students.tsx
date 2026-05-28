@@ -3,16 +3,16 @@ import {
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
-  UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen
+  UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
 
-// Class definitions
+// Class definitions with sections
 const CLASSES = [
-  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby },
-  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School },
-  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap },
-  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star },
+  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby, sections: ['A'] },
+  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School, sections: ['A', 'B', 'C', 'D'] },
+  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap, sections: ['A', 'B'] },
+  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star, sections: ['A', 'B', 'C', 'D'] },
 ];
 
 export default function StudentDetails() {
@@ -24,6 +24,7 @@ export default function StudentDetails() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedSection, setSelectedSection] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [selectedViewClass, setSelectedViewClass] = useState(null);
@@ -33,6 +34,7 @@ export default function StudentDetails() {
     date_of_birth: '',
     gender: 'Male',
     class_id: '',
+    section: 'A', // NEW: Added section field
     assigned_teacher_id: '',
     assigned_staff_id: '',
     parent_name: '',
@@ -43,7 +45,7 @@ export default function StudentDetails() {
     emergency_contact: '',
     medical_info: '',
     enrollment_date: new Date().toISOString().split('T')[0],
-    transport_type: 'Walker', // Cab or Walker
+    transport_type: 'Walker',
     vehicle_id: '',
     status: 'Active',
     // Documents
@@ -52,6 +54,12 @@ export default function StudentDetails() {
     parent_aadhar_front: null,
     parent_aadhar_back: null,
   });
+
+  // Get available sections based on selected class
+  const getAvailableSections = () => {
+    const selectedClassObj = CLASSES.find(c => c.id === formData.class_id);
+    return selectedClassObj ? selectedClassObj.sections : ['A'];
+  };
 
   useEffect(() => {
     loadData();
@@ -103,6 +111,7 @@ export default function StudentDetails() {
         date_of_birth: formData.date_of_birth,
         gender: formData.gender,
         class_id: formData.class_id,
+        section: formData.section, // NEW: Include section
         assigned_teacher_id: formData.assigned_teacher_id || null,
         assigned_staff_id: formData.assigned_staff_id || null,
         parent_name: formData.parent_name,
@@ -161,6 +170,7 @@ export default function StudentDetails() {
       date_of_birth: student.date_of_birth ? student.date_of_birth.split('T')[0] : '',
       gender: student.gender || 'Male',
       class_id: student.class_id || '',
+      section: student.section || 'A', // NEW: Include section
       assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
       assigned_staff_id: student.assigned_staff_id?._id || student.assigned_staff_id || '',
       parent_name: student.parent_name || '',
@@ -188,6 +198,7 @@ export default function StudentDetails() {
       date_of_birth: '',
       gender: 'Male',
       class_id: '',
+      section: 'A',
       assigned_teacher_id: '',
       assigned_staff_id: '',
       parent_name: '',
@@ -223,6 +234,10 @@ export default function StudentDetails() {
     
     if (selectedClass !== 'all') {
       filtered = filtered.filter((student) => student.class_id === selectedClass);
+    }
+    
+    if (selectedSection !== 'all') {
+      filtered = filtered.filter((student) => student.section === selectedSection);
     }
     
     return filtered;
@@ -378,6 +393,20 @@ export default function StudentDetails() {
                   ))}
                 </select>
               </div>
+              <div className="relative">
+                <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <select
+                  value={selectedSection}
+                  onChange={(e) => setSelectedSection(e.target.value)}
+                  className="pl-10 pr-8 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white"
+                >
+                  <option value="all">All Sections</option>
+                  <option value="A">Section A</option>
+                  <option value="B">Section B</option>
+                  <option value="C">Section C</option>
+                  <option value="D">Section D</option>
+                </select>
+              </div>
               <button className="px-4 py-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl hover:shadow-md transition-all">
                 <Download size={20} className="text-gray-600" />
               </button>
@@ -389,9 +418,10 @@ export default function StudentDetails() {
         {studentsByClass.map((classSection) => {
           const Icon = classSection.icon;
           const filteredClassStudents = classSection.students.filter(student =>
-            !searchTerm || 
-            student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            student.parent_name?.toLowerCase().includes(searchTerm.toLowerCase())
+            (!searchTerm || 
+              student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              student.parent_name?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+            (selectedSection === 'all' || student.section === selectedSection)
           );
 
           if (selectedClass !== 'all' && selectedClass !== classSection.id) return null;
@@ -430,7 +460,12 @@ export default function StudentDetails() {
                           </div>
                           <div>
                             <h3 className="font-bold text-lg">{student.name}</h3>
-                            <p className="text-xs text-white/80">{student.gender} • {new Date(student.date_of_birth).toLocaleDateString()}</p>
+                            <p className="text-xs text-white/80 flex items-center gap-2">
+                              {student.gender} • {new Date(student.date_of_birth).toLocaleDateString()}
+                              <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                                Section {student.section || 'A'}
+                              </span>
+                            </p>
                           </div>
                         </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -593,7 +628,7 @@ export default function StudentDetails() {
                       <select
                         required
                         value={formData.class_id}
-                        onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, class_id: e.target.value, section: 'A' })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       >
                         <option value="">Select Class</option>
@@ -601,6 +636,21 @@ export default function StudentDetails() {
                           <option key={cls.id} value={cls.id}>
                             {cls.name} ({cls.ageGroup})
                           </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Section *
+                      </label>
+                      <select
+                        required
+                        value={formData.section}
+                        onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        {getAvailableSections().map(section => (
+                          <option key={section} value={section}>Section {section}</option>
                         ))}
                       </select>
                     </div>
