@@ -3,25 +3,31 @@ import {
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
   MapPin, Calendar, User, Lock, Eye, EyeOff, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, CheckCircle,
-  Clock, Award, Star, BookOpen, Briefcase, Building
+  Clock, Award, Star, BookOpen, Briefcase, Building, UserCheck,
+  School, Baby, GraduationHat, BookMarked, ChevronRight
 } from 'lucide-react';
-import { getFacultyAuth, createFacultyAuth, updateFacultyAuth, deleteFacultyAuth, updateFacultyAuthStatus, getFacultyAuthStats } from '../services/api';
+import { getFacultyAuth, createFacultyAuth, updateFacultyAuth, deleteFacultyAuth, updateFacultyAuthStatus, getFacultyAuthStats, getStudents } from '../services/api';
 
 const CLASSES = [
-  'Toddler', 'Pre-Nursery', 'Nursery', 'KG-1', '1st Standard', 
-  '2nd Standard', '3rd Standard', '4th Standard', '5th Standard'
+  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby },
+  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School },
+  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap },
+  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star },
 ];
 
 const SECTIONS = ['A', 'B', 'C', 'D'];
 
 export default function FacultyRegistration() {
   const [faculty, setFaculty] = useState([]);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [editingFaculty, setEditingFaculty] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedFaculty, setSelectedFaculty] = useState(null);
+  const [showStudentsModal, setShowStudentsModal] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -54,12 +60,14 @@ export default function FacultyRegistration() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [facultyRes, statsRes] = await Promise.all([
+      const [facultyRes, statsRes, studentsRes] = await Promise.all([
         getFacultyAuth(),
         getFacultyAuthStats(),
+        getStudents(),
       ]);
       setFaculty(facultyRes.data || []);
       setStats(statsRes.data || { total: 0, active: 0, inactive: 0, onLeave: 0 });
+      setStudents(studentsRes.data || []);
     } catch (error) {
       console.error('Error loading faculty:', error);
       alert('Failed to load faculty data');
@@ -133,6 +141,19 @@ export default function FacultyRegistration() {
     setShowModal(true);
   };
 
+  const handleViewStudents = (facultyMember) => {
+    setSelectedFaculty(facultyMember);
+    setShowStudentsModal(true);
+  };
+
+  const getStudentsByFaculty = () => {
+    if (!selectedFaculty) return [];
+    return students.filter(student => 
+      student.assigned_teacher_id === selectedFaculty._id ||
+      student.assigned_teacher_id?._id === selectedFaculty._id
+    );
+  };
+
   const resetForm = () => {
     setFormData({
       faculty_name: '',
@@ -181,6 +202,17 @@ export default function FacultyRegistration() {
     }
   };
 
+  const getClassIcon = (classId) => {
+    const classObj = CLASSES.find(c => c.id === classId);
+    if (classObj) return classObj.icon;
+    return GraduationCap;
+  };
+
+  const getClassName = (classId) => {
+    const classObj = CLASSES.find(c => c.id === classId);
+    return classObj ? classObj.name : classId || 'Not Assigned';
+  };
+
   const filteredFaculty = getFilteredFaculty();
 
   if (loading) {
@@ -206,7 +238,7 @@ export default function FacultyRegistration() {
               </h1>
               <p className="text-gray-600 mt-2 flex items-center gap-2">
                 <GraduationCap size={18} className="text-green-500" />
-                Manage faculty accounts and professional information
+                Manage faculty accounts, class assignments, and student roster
               </p>
             </div>
             <button
@@ -298,89 +330,124 @@ export default function FacultyRegistration() {
           </div>
         </div>
 
-        {/* Faculty Table */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-green-50 to-emerald-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Faculty</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Qualification</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Assigned Class</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Employee ID</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Username</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredFaculty.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
-                      <GraduationCap className="mx-auto mb-3 text-gray-400" size={48} />
-                      <p className="text-lg">No faculty members found</p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredFaculty.map((facultyMember) => (
-                    <tr key={facultyMember._id} className="hover:bg-gradient-to-r hover:from-green-50 hover:to-transparent transition-all">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
-                            <User className="text-white" size={16} />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-gray-900">{facultyMember.faculty_name}</div>
-                            <div className="text-xs text-gray-500">ID: {facultyMember.employee_id}</div>
-                          </div>
+        {/* Faculty Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredFaculty.length === 0 ? (
+            <div className="col-span-full bg-white/80 rounded-2xl p-12 text-center">
+              <GraduationCap className="mx-auto text-gray-400 mb-3" size={48} />
+              <p className="text-gray-500">No faculty members found</p>
+            </div>
+          ) : (
+            filteredFaculty.map((facultyMember) => {
+              const ClassIcon = getClassIcon(facultyMember.assigned_class);
+              const studentCount = students.filter(s => 
+                s.assigned_teacher_id === facultyMember._id || 
+                s.assigned_teacher_id?._id === facultyMember._id
+              ).length;
+              
+              return (
+                <div key={facultyMember._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
+                  {/* Faculty Header */}
+                  <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                          <User className="text-white" size={24} />
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{facultyMember.mobile_number}</div>
-                        <div className="text-xs text-gray-500">{facultyMember.email}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{facultyMember.qualification}</div>
-                        {facultyMember.specialization && <div className="text-xs text-gray-500">{facultyMember.specialization}</div>}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                          {facultyMember.assigned_class} - {facultyMember.assigned_section}
-                        </span>
-                        {facultyMember.subject && <div className="text-xs text-gray-500 mt-1">{facultyMember.subject}</div>}
-                      </td>
-                      <td className="px-6 py-4">
-                        <code className="text-sm text-gray-600">{facultyMember.employee_id}</code>
-                      </td>
-                      <td className="px-6 py-4">
-                        <code className="text-sm text-gray-600">{facultyMember.username}</code>
-                      </td>
-                      <td className="px-6 py-4">
-                        <select
-                          value={facultyMember.status}
-                          onChange={(e) => handleStatusChange(facultyMember._id, e.target.value)}
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border-0 ${getStatusColor(facultyMember.status)}`}
+                        <div>
+                          <h3 className="font-bold text-lg">{facultyMember.faculty_name}</h3>
+                          <p className="text-xs text-white/80 flex items-center gap-2">
+                            <Briefcase size={10} /> {facultyMember.employee_id}
+                            <span className={`px-1.5 py-0.5 rounded text-xs ${
+                              facultyMember.status === 'Active' ? 'bg-green-600' : 
+                              facultyMember.status === 'On Leave' ? 'bg-yellow-600' : 'bg-gray-600'
+                            }`}>
+                              {facultyMember.status}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Faculty Details */}
+                  <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-2">
+                        <p className="text-xs text-gray-500">Assigned Class</p>
+                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                          <ClassIcon size={12} />
+                          {getClassName(facultyMember.assigned_class)} - {facultyMember.assigned_section}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-2">
+                        <p className="text-xs text-gray-500">Subject</p>
+                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                          <BookMarked size={12} />
+                          {facultyMember.subject || 'General'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Contact Information</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <Mail size={10} /> {facultyMember.email}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                        <Phone size={10} /> {facultyMember.mobile_number}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-purple-100 px-2 py-1 rounded-lg">
+                          <Users size={12} className="text-purple-600" />
+                          <span className="text-xs font-semibold text-purple-600">{studentCount} Students</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleViewStudents(facultyMember)}
+                          className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                          title="View Students"
                         >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                          <option value="On Leave">On Leave</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button onClick={() => handleEdit(facultyMember)} className="text-blue-600 hover:text-blue-800 mr-3">
-                          <Edit size={18} />
+                          <Users size={16} />
                         </button>
-                        <button onClick={() => handleDelete(facultyMember._id)} className="text-red-600 hover:text-red-800">
-                          <Trash2 size={18} />
+                        <button
+                          onClick={() => handleEdit(facultyMember)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Edit Faculty"
+                        >
+                          <Edit size={16} />
                         </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                        <button
+                          onClick={() => handleDelete(facultyMember._id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title="Delete Faculty"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Status Change Dropdown */}
+                    <div className="pt-2 border-t border-gray-200">
+                      <select
+                        value={facultyMember.status}
+                        onChange={(e) => handleStatusChange(facultyMember._id, e.target.value)}
+                        className={`w-full px-3 py-1 rounded-lg text-xs font-semibold border-0 ${getStatusColor(facultyMember.status)}`}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="On Leave">On Leave</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Faculty Registration Modal */}
@@ -422,7 +489,9 @@ export default function FacultyRegistration() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Class *</label>
                     <select required value={formData.assigned_class} onChange={(e) => setFormData({ ...formData, assigned_class: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl">
                       <option value="">Select Class</option>
-                      {CLASSES.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+                      {CLASSES.map(cls => (
+                        <option key={cls.id} value={cls.id}>{cls.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -432,7 +501,7 @@ export default function FacultyRegistration() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Subject (if applicable)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                     <input type="text" value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
                   </div>
                   <div>
@@ -485,6 +554,59 @@ export default function FacultyRegistration() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* View Students Modal */}
+        {showStudentsModal && selectedFaculty && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Students of {selectedFaculty.faculty_name}</h2>
+                  <p className="text-white/80 text-sm mt-1">
+                    {getClassName(selectedFaculty.assigned_class)} - Section {selectedFaculty.assigned_section}
+                  </p>
+                </div>
+                <button onClick={() => setShowStudentsModal(false)} className="text-white hover:bg-white/20 rounded-lg p-1">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-6">
+                {getStudentsByFaculty().length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="mx-auto text-gray-400 mb-3" size={48} />
+                    <p className="text-gray-500">No students assigned to this faculty</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {getStudentsByFaculty().map((student) => (
+                      <div key={student._id} className="bg-gray-50 rounded-xl p-4 flex items-center justify-between hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                            <Users className="text-white" size={16} />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-800">{student.name}</p>
+                            <p className="text-xs text-gray-500">
+                              Roll No: {student.rollNumber} | Section {student.section || 'A'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            student.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {student.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
