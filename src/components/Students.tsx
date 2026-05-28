@@ -36,7 +36,7 @@ export default function StudentDetails() {
     class_id: '',
     section: 'A',
     assigned_teacher_id: '',
-    assigned_staff_id: '',
+    // REMOVED assigned_staff_id
     parent_name: '',
     parent_email: '',
     parent_phone: '',
@@ -104,7 +104,7 @@ export default function StudentDetails() {
         class_id: formData.class_id,
         section: formData.section,
         assigned_teacher_id: formData.assigned_teacher_id || null,
-        assigned_staff_id: formData.assigned_staff_id || null,
+        // REMOVED assigned_staff_id
         parent_name: formData.parent_name,
         parent_email: formData.parent_email,
         parent_phone: formData.parent_phone,
@@ -163,7 +163,7 @@ export default function StudentDetails() {
       class_id: student.class_id || '',
       section: student.section || 'A',
       assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
-      assigned_staff_id: student.assigned_staff_id?._id || student.assigned_staff_id || '',
+      // REMOVED assigned_staff_id
       parent_name: student.parent_name || '',
       parent_email: student.parent_email || '',
       parent_phone: student.parent_phone || '',
@@ -191,7 +191,7 @@ export default function StudentDetails() {
       class_id: '',
       section: 'A',
       assigned_teacher_id: '',
-      assigned_staff_id: '',
+      // REMOVED assigned_staff_id
       parent_name: '',
       parent_email: '',
       parent_phone: '',
@@ -250,8 +250,6 @@ export default function StudentDetails() {
     const teacher = teachers.find(t => t._id === teacherId);
     return teacher ? teacher.name : 'Not Assigned';
   };
-
- 
 
   const getVehicleNumber = (vehicleId) => {
     if (!vehicleId) return 'N/A';
@@ -461,14 +459,12 @@ export default function StudentDetails() {
                     </div>
 
                     <div className="p-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <p className="text-xs text-gray-500">Assigned Teacher</p>
-                          <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                            <UserCheck size={12} />
-                            {getTeacherName(student.assigned_teacher_id)}
-                          </p>
-                        </div>
+                      <div className="bg-gray-50 rounded-lg p-2">
+                        <p className="text-xs text-gray-500">Assigned Teacher</p>
+                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                          <UserCheck size={12} />
+                          {getTeacherName(student.assigned_teacher_id)}
+                        </p>
                       </div>
 
                       <div className="bg-gray-50 rounded-lg p-3">
@@ -632,30 +628,28 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Staff Assignment */}
+                {/* Staff Assignment - Only Teacher now */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <UserCheck size={18} className="text-purple-600" />
                     Staff Assignment
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Assigned Teacher
-                      </label>
-                      <select
-                        value={formData.assigned_teacher_id}
-                        onChange={(e) => setFormData({ ...formData, assigned_teacher_id: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      >
-                        <option value="">Select Teacher</option>
-                        {teachers.map((teacher) => (
-                          <option key={teacher._id} value={teacher._id}>
-                            {teacher.name} - {teacher.designation}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Assigned Teacher
+                    </label>
+                    <select
+                      value={formData.assigned_teacher_id}
+                      onChange={(e) => setFormData({ ...formData, assigned_teacher_id: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="">Select Teacher</option>
+                      {teachers.map((teacher) => (
+                        <option key={teacher._id} value={teacher._id}>
+                          {teacher.name} - {teacher.designation}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
