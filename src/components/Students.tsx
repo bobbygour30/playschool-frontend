@@ -246,10 +246,19 @@ export default function StudentDetails() {
     return classObj ? classObj.name : 'Not Assigned';
   };
 
-  const getTeacherName = (teacherId) => {
-    const teacher = teachers.find(t => t._id === teacherId);
-    return teacher ? teacher.name : 'Not Assigned';
-  };
+ const getTeacherName = (teacherId) => {
+  // teacherId could be an object (populated) or a string (ID)
+  if (!teacherId) return 'Not Assigned';
+  
+  // If it's already populated with name
+  if (typeof teacherId === 'object' && teacherId.name) {
+    return teacherId.name;
+  }
+  
+  // If it's just an ID, find in teachers array
+  const teacher = teachers.find(t => t._id === teacherId || t._id === teacherId?._id);
+  return teacher ? teacher.name : 'Not Assigned';
+};
 
   const getVehicleNumber = (vehicleId) => {
     if (!vehicleId) return 'N/A';
