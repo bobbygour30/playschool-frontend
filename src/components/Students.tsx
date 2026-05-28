@@ -7,13 +7,16 @@ import {
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
 
-// Class definitions with sections
+// Class definitions - ALL CLASSES HAVE ALL SECTIONS A, B, C, D
 const CLASSES = [
-  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby, sections: ['A'] },
-  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School, sections: ['A', 'B', 'C', 'D'] },
-  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap, sections: ['A', 'B'] },
-  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star, sections: ['A', 'B', 'C', 'D'] },
+  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby },
+  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School },
+  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap },
+  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star },
 ];
+
+// All available sections
+const SECTIONS = ['A', 'B', 'C', 'D'];
 
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
@@ -27,14 +30,12 @@ export default function StudentDetails() {
   const [selectedSection, setSelectedSection] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
-  const [selectedViewClass, setSelectedViewClass] = useState(null);
-  const [documents, setDocuments] = useState({});
   const [formData, setFormData] = useState({
     name: '',
     date_of_birth: '',
     gender: 'Male',
     class_id: '',
-    section: 'A', // NEW: Added section field
+    section: 'A',
     assigned_teacher_id: '',
     assigned_staff_id: '',
     parent_name: '',
@@ -48,18 +49,11 @@ export default function StudentDetails() {
     transport_type: 'Walker',
     vehicle_id: '',
     status: 'Active',
-    // Documents
     birth_certificate: null,
     aadhar_card: null,
     parent_aadhar_front: null,
     parent_aadhar_back: null,
   });
-
-  // Get available sections based on selected class
-  const getAvailableSections = () => {
-    const selectedClassObj = CLASSES.find(c => c.id === formData.class_id);
-    return selectedClassObj ? selectedClassObj.sections : ['A'];
-  };
 
   useEffect(() => {
     loadData();
@@ -78,7 +72,6 @@ export default function StudentDetails() {
       setStudents(studentsRes.data || []);
       setClasses(classesRes.data || CLASSES);
       
-      // Filter teachers and support staff from staff data
       const allStaff = staffRes.data || [];
       setTeachers(allStaff.filter(s => s.role === 'Teacher' && s.status === 'Active'));
       setSupportStaff(allStaff.filter(s => s.role === 'Support Staff' && s.status === 'Active'));
@@ -111,7 +104,7 @@ export default function StudentDetails() {
         date_of_birth: formData.date_of_birth,
         gender: formData.gender,
         class_id: formData.class_id,
-        section: formData.section, // NEW: Include section
+        section: formData.section,
         assigned_teacher_id: formData.assigned_teacher_id || null,
         assigned_staff_id: formData.assigned_staff_id || null,
         parent_name: formData.parent_name,
@@ -170,7 +163,7 @@ export default function StudentDetails() {
       date_of_birth: student.date_of_birth ? student.date_of_birth.split('T')[0] : '',
       gender: student.gender || 'Male',
       class_id: student.class_id || '',
-      section: student.section || 'A', // NEW: Include section
+      section: student.section || 'A',
       assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
       assigned_staff_id: student.assigned_staff_id?._id || student.assigned_staff_id || '',
       parent_name: student.parent_name || '',
@@ -318,7 +311,7 @@ export default function StudentDetails() {
           </div>
         </div>
 
-        {/* Stats Cards - Class-wise Summary */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100 shadow-lg hover:shadow-xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
@@ -401,10 +394,9 @@ export default function StudentDetails() {
                   className="pl-10 pr-8 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white"
                 >
                   <option value="all">All Sections</option>
-                  <option value="A">Section A</option>
-                  <option value="B">Section B</option>
-                  <option value="C">Section C</option>
-                  <option value="D">Section D</option>
+                  {SECTIONS.map(section => (
+                    <option key={section} value={section}>Section {section}</option>
+                  ))}
                 </select>
               </div>
               <button className="px-4 py-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl hover:shadow-md transition-all">
@@ -429,7 +421,6 @@ export default function StudentDetails() {
 
           return (
             <div key={classSection.id} className="mb-8">
-              {/* Class Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className={`w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center`}>
@@ -447,11 +438,9 @@ export default function StudentDetails() {
                 </div>
               </div>
 
-              {/* Students Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredClassStudents.map((student) => (
                   <div key={student._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
-                    {/* Student Header */}
                     <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -476,7 +465,6 @@ export default function StudentDetails() {
                       </div>
                     </div>
 
-                    {/* Student Details */}
                     <div className="p-4 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-gray-50 rounded-lg p-2">
@@ -536,7 +524,6 @@ export default function StudentDetails() {
                         </div>
                       </div>
 
-                      {/* Document Indicators */}
                       {(student.documents?.birth_certificate || student.documents?.aadhar_card) && (
                         <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
                           <FolderOpen size={12} className="text-gray-400" />
@@ -585,7 +572,7 @@ export default function StudentDetails() {
                     <Users size={18} className="text-purple-600" />
                     Basic Information
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Student Name *
@@ -628,7 +615,7 @@ export default function StudentDetails() {
                       <select
                         required
                         value={formData.class_id}
-                        onChange={(e) => setFormData({ ...formData, class_id: e.target.value, section: 'A' })}
+                        onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       >
                         <option value="">Select Class</option>
@@ -649,7 +636,7 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, section: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       >
-                        {getAvailableSections().map(section => (
+                        {SECTIONS.map(section => (
                           <option key={section} value={section}>Section {section}</option>
                         ))}
                       </select>
