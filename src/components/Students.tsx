@@ -23,7 +23,6 @@ export default function StudentDetails() {
   const [classes, setClasses] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [supportStaff, setSupportStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
@@ -74,7 +73,6 @@ export default function StudentDetails() {
       
       const allStaff = staffRes.data || [];
       setTeachers(allStaff.filter(s => s.role === 'Teacher' && s.status === 'Active'));
-      setSupportStaff(allStaff.filter(s => s.role === 'Support Staff' && s.status === 'Active'));
       setVehicles((vehiclesRes.data || []).filter(v => v.status === 'Active'));
     } catch (error) {
       console.error('Error loading data:', error);
@@ -253,10 +251,7 @@ export default function StudentDetails() {
     return teacher ? teacher.name : 'Not Assigned';
   };
 
-  const getStaffName = (staffId) => {
-    const staff = supportStaff.find(s => s._id === staffId);
-    return staff ? staff.name : 'Not Assigned';
-  };
+ 
 
   const getVehicleNumber = (vehicleId) => {
     if (!vehicleId) return 'N/A';
@@ -474,13 +469,6 @@ export default function StudentDetails() {
                             {getTeacherName(student.assigned_teacher_id)}
                           </p>
                         </div>
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <p className="text-xs text-gray-500">Support Staff</p>
-                          <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                            <Briefcase size={12} />
-                            {getStaffName(student.assigned_staff_id)}
-                          </p>
-                        </div>
                       </div>
 
                       <div className="bg-gray-50 rounded-lg p-3">
@@ -664,23 +652,6 @@ export default function StudentDetails() {
                         {teachers.map((teacher) => (
                           <option key={teacher._id} value={teacher._id}>
                             {teacher.name} - {teacher.designation}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Assigned Support Staff
-                      </label>
-                      <select
-                        value={formData.assigned_staff_id}
-                        onChange={(e) => setFormData({ ...formData, assigned_staff_id: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      >
-                        <option value="">Select Support Staff</option>
-                        {supportStaff.map((staff) => (
-                          <option key={staff._id} value={staff._id}>
-                            {staff.name} - {staff.designation}
                           </option>
                         ))}
                       </select>
