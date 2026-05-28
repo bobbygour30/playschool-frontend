@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
 
-// Class definitions - ALL CLASSES HAVE ALL SECTIONS A, B, C, D
+// Class definitions
 const CLASSES = [
   { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby },
   { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School },
@@ -15,7 +15,6 @@ const CLASSES = [
   { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star },
 ];
 
-// All available sections
 const SECTIONS = ['A', 'B', 'C', 'D'];
 
 export default function StudentDetails() {
@@ -36,7 +35,6 @@ export default function StudentDetails() {
     class_id: '',
     section: 'A',
     assigned_teacher_id: '',
-    // REMOVED assigned_staff_id
     parent_name: '',
     parent_email: '',
     parent_phone: '',
@@ -82,6 +80,22 @@ export default function StudentDetails() {
     }
   };
 
+  // Auto-assign teacher when class is selected
+  const handleClassChange = (classId) => {
+    setFormData(prev => ({ ...prev, class_id: classId }));
+    
+    // Find teacher assigned to this class
+    const matchingTeacher = teachers.find(teacher => 
+      teacher.assigned_class_id && teacher.assigned_class_id._id === classId
+    );
+    
+    if (matchingTeacher) {
+      setFormData(prev => ({ ...prev, assigned_teacher_id: matchingTeacher._id }));
+    } else {
+      setFormData(prev => ({ ...prev, assigned_teacher_id: '' }));
+    }
+  };
+
   const handleFileUpload = (e, fieldName) => {
     const file = e.target.files[0];
     if (file) {
@@ -104,7 +118,6 @@ export default function StudentDetails() {
         class_id: formData.class_id,
         section: formData.section,
         assigned_teacher_id: formData.assigned_teacher_id || null,
-        // REMOVED assigned_staff_id
         parent_name: formData.parent_name,
         parent_email: formData.parent_email,
         parent_phone: formData.parent_phone,
@@ -163,7 +176,6 @@ export default function StudentDetails() {
       class_id: student.class_id || '',
       section: student.section || 'A',
       assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
-      // REMOVED assigned_staff_id
       parent_name: student.parent_name || '',
       parent_email: student.parent_email || '',
       parent_phone: student.parent_phone || '',
@@ -191,7 +203,6 @@ export default function StudentDetails() {
       class_id: '',
       section: 'A',
       assigned_teacher_id: '',
-      // REMOVED assigned_staff_id
       parent_name: '',
       parent_email: '',
       parent_phone: '',
@@ -246,24 +257,27 @@ export default function StudentDetails() {
     return classObj ? classObj.name : 'Not Assigned';
   };
 
- const getTeacherName = (teacherId) => {
-  // teacherId could be an object (populated) or a string (ID)
-  if (!teacherId) return 'Not Assigned';
-  
-  // If it's already populated with name
-  if (typeof teacherId === 'object' && teacherId.name) {
-    return teacherId.name;
-  }
-  
-  // If it's just an ID, find in teachers array
-  const teacher = teachers.find(t => t._id === teacherId || t._id === teacherId?._id);
-  return teacher ? teacher.name : 'Not Assigned';
-};
+  const getTeacherName = (teacherId) => {
+    if (!teacherId) return 'Not Assigned';
+    if (typeof teacherId === 'object' && teacherId.name) {
+      return teacherId.name;
+    }
+    const teacher = teachers.find(t => t._id === teacherId || t._id === teacherId?._id);
+    return teacher ? teacher.name : 'Not Assigned';
+  };
 
   const getVehicleNumber = (vehicleId) => {
     if (!vehicleId) return 'N/A';
     const vehicle = vehicles.find(v => v._id === vehicleId);
     return vehicle ? vehicle.vehicle_number : 'N/A';
+  };
+
+  // Get teacher for a specific class (for display)
+  const getTeacherForClass = (classId, section) => {
+    const teacher = teachers.find(t => 
+      t.assigned_class_id?._id === classId || t.assigned_class_id === classId
+    );
+    return teacher ? teacher.name : 'Not Assigned';
   };
 
   const stats = {
@@ -437,6 +451,9 @@ export default function StudentDetails() {
                   <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">
                     {filteredClassStudents.length} Students
                   </span>
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    Teacher: {getTeacherForClass(classSection.id, 'A')}
+                  </span>
                 </div>
               </div>
 
@@ -534,7 +551,10 @@ export default function StudentDetails() {
                   <Users className="mx-auto text-gray-400 mb-3" size={48} />
                   <p className="text-gray-500">No students in {classSection.name}</p>
                   <button
-                    onClick={() => setShowModal(true)}
+                    onClick={() => {
+                      setFormData({ ...formData, class_id: classSection.id });
+                      setShowModal(true);
+                    }}
                     className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all"
                   >
                     Add First Student
@@ -608,7 +628,7 @@ export default function StudentDetails() {
                       <select
                         required
                         value={formData.class_id}
-                        onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
+                        onChange={(e) => handleClassChange(e.target.value)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       >
                         <option value="">Select Class</option>
@@ -652,16 +672,28 @@ export default function StudentDetails() {
                       onChange={(e) => setFormData({ ...formData, assigned_teacher_id: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
-                      <option value="">Select Teacher</option>
+                      <option value="">Auto-assigned based on class</option>
                       {teachers.map((teacher) => (
                         <option key={teacher._id} value={teacher._id}>
-                          {teacher.name} - {teacher.designation}
+                          {teacher.name} - {teacher.designation} 
+                          {teacher.assigned_class_id?.name ? ` (${teacher.assigned_class_id.name})` : ''}
                         </option>
                       ))}
                     </select>
+                    {formData.class_id && !formData.assigned_teacher_id && (
+                      <p className="text-xs text-orange-500 mt-1">
+                        ⚠️ No teacher assigned to this class. Please select a teacher manually.
+                      </p>
+                    )}
+                    {formData.class_id && formData.assigned_teacher_id && (
+                      <p className="text-xs text-green-500 mt-1">
+                        ✅ Teacher assigned successfully
+                      </p>
+                    )}
                   </div>
                 </div>
 
+                {/* Rest of the form remains the same */}
                 {/* Parent Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
