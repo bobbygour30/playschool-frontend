@@ -68,6 +68,10 @@ export default function FacultyRegistration() {
       setFaculty(facultyRes.data || []);
       setStats(statsRes.data || { total: 0, active: 0, inactive: 0, onLeave: 0 });
       setStudents(studentsRes.data || []);
+      
+      // Debug log to check data
+      console.log('Faculty Data:', facultyRes.data);
+      console.log('Students Data:', studentsRes.data);
     } catch (error) {
       console.error('Error loading faculty:', error);
       alert('Failed to load faculty data');
@@ -146,12 +150,31 @@ export default function FacultyRegistration() {
     setShowStudentsModal(true);
   };
 
+  // FIXED: Get students by class and section (not by teacher ID)
   const getStudentsByFaculty = () => {
     if (!selectedFaculty) return [];
-    return students.filter(student => 
-      student.assigned_teacher_id === selectedFaculty._id ||
-      student.assigned_teacher_id?._id === selectedFaculty._id
+    
+    // Match students based on class_id and section
+    const matchedStudents = students.filter(student => 
+      student.class_id === selectedFaculty.assigned_class && 
+      student.section === selectedFaculty.assigned_section
     );
+    
+    console.log('Selected Faculty:', selectedFaculty.faculty_name, selectedFaculty.assigned_class, selectedFaculty.assigned_section);
+    console.log('Matched Students:', matchedStudents.length);
+    
+    return matchedStudents;
+  };
+
+  // FIXED: Get student count for each faculty card
+  const getStudentCountForFaculty = (facultyMember) => {
+    // Count students that match this faculty's class and section
+    const count = students.filter(student => 
+      student.class_id === facultyMember.assigned_class && 
+      student.section === facultyMember.assigned_section
+    ).length;
+    
+    return count;
   };
 
   const resetForm = () => {
@@ -340,10 +363,8 @@ export default function FacultyRegistration() {
           ) : (
             filteredFaculty.map((facultyMember) => {
               const ClassIcon = getClassIcon(facultyMember.assigned_class);
-              const studentCount = students.filter(s => 
-                s.assigned_teacher_id === facultyMember._id || 
-                s.assigned_teacher_id?._id === facultyMember._id
-              ).length;
+              // FIXED: Use the new function to get student count
+              const studentCount = getStudentCountForFaculty(facultyMember);
               
               return (
                 <div key={facultyMember._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
