@@ -191,4 +191,68 @@ export const deleteFacultyAuth = (id) => api.delete(`/faculty-auth/${id}`);
 export const updateFacultyAuthStatus = (id, status) => api.patch(`/faculty-auth/${id}/status`, { status });
 export const getFacultyAuthStats = () => api.get('/faculty-auth/stats/overview');
 
+
+// ==================== LEAVE MANAGEMENT ====================
+const LEAVE_API_URL = 'https://golden-playschool-app-backend.vercel.app';
+
+// Get all leave requests with filters
+export const getLeaveRequests = (params) => {
+  const url = params ? `/api/leave/admin/all?${params}` : '/api/leave/admin/all';
+  return axios.get(`${LEAVE_API_URL}${url}`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+};
+
+// Get leave statistics
+export const getLeaveStats = (month, year) => {
+  let url = '/api/leave/admin/stats';
+  if (month && year) {
+    url += `?month=${month}&year=${year}`;
+  }
+  return axios.get(`${LEAVE_API_URL}${url}`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+};
+
+// Get leave request by ID
+export const getLeaveById = (leaveId) => {
+  return axios.get(`${LEAVE_API_URL}/api/leave/admin/${leaveId}`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+};
+
+// Approve leave request
+export const approveLeave = (leaveId, adminRemarks) => {
+  return axios.put(
+    `${LEAVE_API_URL}/api/leave/admin/${leaveId}/approve`,
+    { adminRemarks: adminRemarks || 'Approved' },
+    {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+};
+
+// Reject leave request
+export const rejectLeave = (leaveId, adminRemarks) => {
+  return axios.put(
+    `${LEAVE_API_URL}/api/leave/admin/${leaveId}/reject`,
+    { adminRemarks: adminRemarks || 'Rejected' },
+    {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+};
+
 export default api;
