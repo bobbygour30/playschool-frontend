@@ -195,60 +195,46 @@ export const getFacultyAuthStats = () => api.get('/faculty-auth/stats/overview')
 // ==================== LEAVE MANAGEMENT ====================
 const LEAVE_API_URL = 'https://golden-playschool-app-backend.vercel.app';
 
-// Get all leave requests with filters
+// Get all leave requests with filters (NO TOKEN REQUIRED)
 export const getLeaveRequests = (params) => {
   const url = params ? `/api/leave/admin/all?${params}` : '/api/leave/admin/all';
-  return axios.get(`${LEAVE_API_URL}${url}`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-    },
-  });
+  return axios.get(`${LEAVE_API_URL}${url}`);
 };
 
-// Get leave statistics
+// Get leave statistics (NO TOKEN REQUIRED)
 export const getLeaveStats = (month, year) => {
   let url = '/api/leave/admin/stats';
   if (month && year) {
     url += `?month=${month}&year=${year}`;
   }
-  return axios.get(`${LEAVE_API_URL}${url}`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-    },
-  });
+  return axios.get(`${LEAVE_API_URL}${url}`);
 };
 
-// Get leave request by ID
+// Get leave request by ID (NO TOKEN REQUIRED)
 export const getLeaveById = (leaveId) => {
-  return axios.get(`${LEAVE_API_URL}/api/leave/admin/${leaveId}`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-    },
-  });
+  return axios.get(`${LEAVE_API_URL}/api/leave/admin/${leaveId}`);
 };
 
-// Approve leave request
+// Approve leave request (NO TOKEN REQUIRED)
 export const approveLeave = (leaveId, adminRemarks) => {
   return axios.put(
     `${LEAVE_API_URL}/api/leave/admin/${leaveId}/approve`,
     { adminRemarks: adminRemarks || 'Approved' },
     {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json',
       },
     }
   );
 };
 
-// Reject leave request
+// Reject leave request (NO TOKEN REQUIRED)
 export const rejectLeave = (leaveId, adminRemarks) => {
   return axios.put(
     `${LEAVE_API_URL}/api/leave/admin/${leaveId}/reject`,
     { adminRemarks: adminRemarks || 'Rejected' },
     {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json',
       },
     }
