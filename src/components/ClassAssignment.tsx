@@ -8,8 +8,8 @@ import {
   RefreshCw, Copy, MoreVertical, Edit2, Save
 } from 'lucide-react';
 import { 
-  getMobileClasses,
   getMobileTeachers,
+  getMobileClasses,
   getClassSchedules,
   getAssignments,
   createSchedule,
@@ -30,7 +30,6 @@ const TIME_SLOTS = [
 
 export default function ClassAssignment() {
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
   const [classes, setClasses] = useState([]);
   const [allClasses, setAllClasses] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -77,54 +76,35 @@ export default function ClassAssignment() {
     }
   }, [formData.teacherId, allClasses, teachers]);
 
-  // --- FIX ---
-  // Classes and teachers are now loaded from the SAME backend (mobileApi)
-  // that createSchedule/createAssignment validate against. Previously
-  // these came from the local :5000 `api` instance while saves went to
-  // the Vercel mobile backend, so classId/teacherId sent on submit
-  // usually didn't exist in the mobile backend's database, causing
-  // "Class not found" / "Teacher not found" / "Invalid ID format" 404s.
-  //
-  // There is also no more hardcoded CLASS_OPTIONS fallback — a fallback
-  // with fake ids like 'toddler' is worse than no data, since it lets
-  // the user submit a value that will always fail validation. Instead we
-  // show a clear error and a retry button if loading fails.
   const loadData = async () => {
     try {
       setLoading(true);
-      setLoadError('');
 
-      const [classesRes, teachersRes] = await Promise.all([
-        getMobileClasses(),
-        getMobileTeachers(),
-      ]);
-
-      const classesData = classesRes.data?.classes || classesRes.data || [];
+      // ✅ FIXED: classes & teachers now come from the MOBILE backend,
+      // so their _id values match what createSchedule/createAssignment expect.
+      const classesRes = await getMobileClasses();
+      const classesData = classesRes.data.classes || [];
       const formattedClasses = classesData.map(cls => ({
-        _id: cls._id || cls.id,
-        name: cls.name || cls.className || cls.class_name || 'Unknown Class',
+        _id: cls._id,
+        name: cls.className || 'Unknown Class',
         section: cls.section || 'A',
       }));
-
       setAllClasses(formattedClasses);
       setClasses(formattedClasses);
 
-      const teachersData = teachersRes.data?.teachers || teachersRes.data || [];
-      setTeachers(
-        teachersData.filter(t => (t.role ? t.role === 'Teacher' : true) && (t.status ? t.status === 'Active' : true))
-      );
+      const teachersRes = await getMobileTeachers();
+      const teachersData = teachersRes.data.teachers || [];
+      setTeachers(teachersData.map(t => ({
+        _id: t._id,
+        name: t.name,
+        assigned_class_id: t.assigned_class_id,
+      })));
 
       await loadSchedules();
       await loadAssignments();
     } catch (error) {
       console.error('Error loading data:', error);
-      setAllClasses([]);
-      setClasses([]);
-      setTeachers([]);
-      setLoadError(
-        error.response?.data?.msg ||
-        'Failed to load classes or teachers. Check that VITE_MOBILE_API_URL is reachable and exposes class/teacher endpoints.'
-      );
+      alert('Failed to load some data. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -150,18 +130,6 @@ export default function ClassAssignment() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // --- FIX ---
-    // Guard against submitting with no real class/teacher selected
-    // (e.g. if the lists failed to load). This avoids sending an empty
-    // or stale classId/teacherId that the backend would reject anyway,
-    // and gives the user an immediate, specific message instead of a
-    // generic failure after a round trip.
-    if (!formData.classId || !formData.teacherId) {
-      alert('Please select both a teacher and a class before saving.');
-      return;
-    }
-
     try {
       const payload = modalType === 'schedule' 
         ? {
@@ -206,9 +174,6 @@ export default function ClassAssignment() {
       await loadAssignments();
     } catch (error) {
       console.error('Error saving:', error);
-      // Surfaces the backend's actual message (e.g. "Class not found",
-      // "Teacher not found", "Invalid ID format") instead of a silent
-      // generic failure, so the real cause is visible immediately.
       alert(error.response?.data?.msg || 'Failed to save. Please try again.');
     }
   };
@@ -295,7 +260,7 @@ export default function ClassAssignment() {
   };
 
   const getClassName = (classId) => {
-    const cls = allClasses.find(c => c._id === classId || c.id === classId);
+    const cls = classes.find(c => c._id === classId);
     return cls ? `${cls.name} ${cls.section || ''}`.trim() : 'Unknown Class';
   };
 
@@ -317,7 +282,7 @@ export default function ClassAssignment() {
   const getTeacherAssignedClass = (teacherId) => {
     const teacher = teachers.find(t => t._id === teacherId);
     if (teacher && teacher.assigned_class_id) {
-      const cls = allClasses.find(c => c._id === teacher.assigned_class_id || c.id === teacher.assigned_class_id);
+      const cls = allClasses.find(c => c._id === teacher.assigned_class_id);
       return cls ? cls.name : 'Not Assigned';
     }
     return 'Not Assigned';
@@ -406,23 +371,6 @@ export default function ClassAssignment() {
               </button>
             </div>
           </div>
-
-          {/* FIX: surface load failures instead of silently falling back to fake data */}
-          {loadError && (
-            <div className="mt-4 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={18} />
-                <span className="text-sm">{loadError}</span>
-              </div>
-              <button
-                onClick={loadData}
-                className="flex items-center gap-1 text-sm font-semibold px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
-              >
-                <RefreshCw size={14} />
-                Retry
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Tab Navigation */}
@@ -738,7 +686,6 @@ export default function ClassAssignment() {
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Select Teacher */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Select Teacher *</label>
                   <select
@@ -746,11 +693,8 @@ export default function ClassAssignment() {
                     value={formData.teacherId}
                     onChange={(e) => setFormData({ ...formData, teacherId: e.target.value, classId: '' })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                    disabled={teachers.length === 0}
                   >
-                    <option value="">
-                      {teachers.length === 0 ? 'No teachers available' : 'Select Teacher'}
-                    </option>
+                    <option value="">Select Teacher</option>
                     {teachers.map((teacher) => (
                       <option key={teacher._id} value={teacher._id}>
                         {teacher.name} {teacher.assigned_class_id ? `(${getTeacherAssignedClass(teacher._id)})` : '(No Class Assigned)'}
@@ -764,7 +708,6 @@ export default function ClassAssignment() {
                   )}
                 </div>
 
-                {/* Select Class */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Class *</label>
                   <select
@@ -777,8 +720,8 @@ export default function ClassAssignment() {
                     <option value="">
                       {formData.teacherId ? 'Select Class' : 'Select Teacher First'}
                     </option>
-                    {(formData.teacherId ? classes : allClasses).map((cls) => (
-                      <option key={cls._id || cls.id} value={cls._id || cls.id}>
+                    {classes.map((cls) => (
+                      <option key={cls._id} value={cls._id}>
                         {cls.name} {cls.section || ''}
                       </option>
                     ))}
@@ -796,7 +739,6 @@ export default function ClassAssignment() {
                 </div>
               </div>
 
-              {/* Rest of the form remains the same */}
               {modalType === 'schedule' && (
                 <>
                   <div>
