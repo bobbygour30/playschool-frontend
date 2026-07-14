@@ -3,7 +3,8 @@ import {
   Users, GraduationCap, Phone, Bus, LayoutDashboard, Menu, X, 
   Sparkles, ChevronRight, LogOut, Settings, Bell, User,
   TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
-  Truck, Briefcase, DollarSign, Heart
+  Truck, Briefcase, DollarSign, Heart,
+  BookMarked
 } from 'lucide-react';
 import Overview from './Overview';
 import StudentDetails from './Students';
@@ -14,8 +15,9 @@ import Finance from './Finance';
 import ParentRegistration from './ParentRegistration';
 import FacultyRegistration from './FacultyRegistration';
 import LeaveManagement from './LeaveManagement';
+import ClassAssignment from './ClassAssignment';
 
-type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves';
+type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment';
 
 export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState<Page>('overview');
@@ -54,6 +56,7 @@ const navigation = [
   { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
   { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
   { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-teal-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
+   { id: 'classAssignment' as Page, name: 'Class Assignment', icon: BookMarked, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
   { id: 'leaves' as Page, name: 'Leave Management', icon: Calendar, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
   { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
   { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
@@ -76,6 +79,8 @@ const navigation = [
         return <Finance />;
       case 'parents':
         return <ParentRegistration />;
+      case 'classAssignment':
+        return <ClassAssignment />;
       case 'faculty':
         return <FacultyRegistration />;
          case 'leaves':

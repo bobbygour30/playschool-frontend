@@ -136,13 +136,13 @@ export const uploadGeneralDocument = async (file, type = 'general') => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', type);
-  
+
   const response = await api.post('/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
   });
-  
+
   return response.data;
 };
 
@@ -156,7 +156,7 @@ export const getDashboardStats = async () => {
       getAcademicStats(),
       getFinancialOverview(),
     ]);
-    
+
     return {
       students: {
         total: students.data.length,
@@ -190,7 +190,6 @@ export const updateFacultyAuth = (id, data) => api.put(`/faculty-auth/${id}`, da
 export const deleteFacultyAuth = (id) => api.delete(`/faculty-auth/${id}`);
 export const updateFacultyAuthStatus = (id, status) => api.patch(`/faculty-auth/${id}/status`, { status });
 export const getFacultyAuthStats = () => api.get('/faculty-auth/stats/overview');
-
 
 // ==================== LEAVE MANAGEMENT ====================
 const LEAVE_API_URL = 'https://golden-playschool-app-backend.vercel.app';
@@ -239,6 +238,79 @@ export const rejectLeave = (leaveId, adminRemarks) => {
       },
     }
   );
+};
+
+// ==================== CLASS ASSIGNMENT (MOBILE BACKEND - NO AUTH) ====================
+// ✅ Using mobile backend URL directly
+const MOBILE_API_URL = import.meta.env.VITE_MOBILE_API_URL || 'https://golden-playschool-app-backend.vercel.app';
+
+const mobileApi = axios.create({
+  baseURL: MOBILE_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// --- FIX ---
+// createSchedule/createAssignment below validate classId/teacherId against
+// THIS backend's database (via mongoose Class.findById / User.findById).
+// So the dropdowns that feed those IDs must also be populated from THIS
+// backend, not from the local :5000 `api` instance — otherwise you send
+// ObjectIds that don't exist in this database and get 404 "Class not
+// found" / "Teacher not found" errors on save.
+//
+// ⚠️ Confirm these two routes actually exist on your mobile backend.
+// If they don't, add them there (they just need to return the Class and
+// User/Teacher collections, same shape as your local /academics/classes
+// and /staff endpoints).
+export const getMobileClasses = () => mobileApi.get('/api/class-assignment/classes');
+export const getMobileTeachers = () => mobileApi.get('/api/class-assignment/teachers');
+
+export const getClassSchedules = (params) => {
+  const query = params ? `?${params}` : '';
+  return mobileApi.get(`/api/class-assignment/schedules${query}`);
+};
+
+export const getScheduleById = (id) => mobileApi.get(`/api/class-assignment/schedule/${id}`);
+
+export const createSchedule = (data) => mobileApi.post('/api/class-assignment/schedule', data);
+
+export const updateSchedule = (id, data) => mobileApi.put(`/api/class-assignment/schedule/${id}`, data);
+
+export const deleteSchedule = (id) => mobileApi.delete(`/api/class-assignment/schedule/${id}`);
+
+export const getTodayClasses = () => mobileApi.get('/api/class-assignment/today');
+
+export const getUpcomingClasses = (days) => {
+  const query = days ? `?days=${days}` : '';
+  return mobileApi.get(`/api/class-assignment/upcoming${query}`);
+};
+
+export const getAssignments = (params) => {
+  const query = params ? `?${params}` : '';
+  return mobileApi.get(`/api/class-assignment/assignments${query}`);
+};
+
+export const createAssignment = (data) => mobileApi.post('/api/class-assignment/assignment', data);
+
+export const updateAssignment = (id, data) => mobileApi.put(`/api/class-assignment/assignment/${id}`, data);
+
+export const deleteAssignment = (id) => mobileApi.delete(`/api/class-assignment/assignment/${id}`);
+
+export const markAssignmentComplete = (id, isCompleted) =>
+  mobileApi.put(`/api/class-assignment/assignment/${id}/complete`, { isCompleted });
+
+// ==================== TEACHER CLASS ASSIGNMENTS ====================
+export const getTeachersWithClasses = () => {
+  return api.get('/staff/teachers/with-classes');
+};
+
+export const getTeacherClasses = (teacherId) => {
+  return api.get(`/staff/teachers/${teacherId}/classes`);
+};
+
+export const assignClassToTeacher = (teacherId, classId) => {
+  return api.patch(`/staff/teachers/${teacherId}/assign-class`, { classId });
 };
 
 export default api;
