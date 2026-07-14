@@ -39,7 +39,7 @@ export default function ClassAssignment() {
   const [modalType, setModalType] = useState('schedule');
   const [editingItem, setEditingItem] = useState(null);
   const [selectedDay, setSelectedDay] = useState(DAYS[new Date().getDay() - 1] || 'Monday');
-  const [activeTab, setActiveTab] = useState('schedule');
+  const [activeTab, setActiveTab] = useState('assignment');
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     classId: '',
@@ -321,31 +321,6 @@ export default function ClassAssignment() {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setModalType('schedule');
-                  setEditingItem(null);
-                  setFormData({
-                    classId: '',
-                    teacherId: '',
-                    dayOfWeek: 'Monday',
-                    startTime: '09:00 AM',
-                    endTime: '10:30 AM',
-                    subject: '',
-                    roomNumber: '',
-                    title: '',
-                    description: '',
-                    assignedDate: '',
-                  });
-                  setShowModal(true);
-                }}
-                className="group relative px-5 py-3 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
-              >
-                <div className="flex items-center gap-2">
-                  <Repeat size={18} />
-                  <span className="font-semibold">Add Schedule</span>
-                </div>
-              </button>
-              <button
-                onClick={() => {
                   setModalType('assignment');
                   setEditingItem(null);
                   setFormData({
@@ -373,302 +348,147 @@ export default function ClassAssignment() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-1 mb-8 shadow-lg border border-gray-200/50 flex">
-          <button
-            onClick={() => setActiveTab('schedule')}
-            className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all ${
-              activeTab === 'schedule'
-                ? 'bg-gradient-to-r from-indigo-500 to-blue-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Repeat size={18} />
-              Recurring Schedules
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab('assignment')}
-            className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all ${
-              activeTab === 'assignment'
-                ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <CalendarIcon size={18} />
-              One-Time Assignments
-            </div>
-          </button>
-        </div>
-
-        {/* Schedule Tab */}
-        {activeTab === 'schedule' && (
-          <div>
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-6 shadow-lg border border-gray-200/50 overflow-x-auto">
-              <div className="flex gap-2 min-w-max">
-                {DAYS.map((day) => (
-                  <button
-                    key={day}
-                    onClick={() => setSelectedDay(day)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                      selectedDay === day
-                        ? 'bg-gradient-to-r from-indigo-500 to-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {day.slice(0, 3)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {getDaySchedules(selectedDay).length === 0 ? (
-                <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-12 text-center shadow-lg border border-gray-200/50">
-                  <Clock className="mx-auto text-gray-400 mb-3" size={48} />
-                  <p className="text-gray-500">No schedules for {selectedDay}</p>
-                  <button
-                    onClick={() => {
-                      setModalType('schedule');
-                      setEditingItem(null);
-                      setFormData({
-                        ...formData,
-                        dayOfWeek: selectedDay,
-                        classId: '',
-                        teacherId: '',
-                        startTime: '09:00 AM',
-                        endTime: '10:30 AM',
-                      });
-                      setShowModal(true);
-                    }}
-                    className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
-                  >
-                    Add Schedule
-                  </button>
-                </div>
-              ) : (
-                getDaySchedules(selectedDay).map((schedule) => (
-                  <div
-                    key={schedule.id}
-                    className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200"
-                  >
-                    <div className="p-5">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center">
-                              <BookOpen className="text-white" size={18} />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-lg text-gray-800">
-                                {getClassName(schedule.classId)}
-                              </h3>
-                              <p className="text-sm text-gray-500 flex items-center gap-2">
-                                <Clock size={14} />
-                                {schedule.formattedTime}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Teacher</p>
-                              <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                                <User size={12} />
-                                {schedule.teacherName}
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Subject</p>
-                              <p className="text-sm font-semibold text-gray-800">
-                                {schedule.subject || 'General'}
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Room</p>
-                              <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                                <MapPin size={12} />
-                                {schedule.roomNumber || 'N/A'}
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Status</p>
-                              <span className={`text-sm font-semibold ${schedule.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                                {schedule.isActive ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <button
-                            onClick={() => handleEdit(schedule, 'schedule')}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                            title="Edit"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(schedule.id, 'schedule')}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Assignment Tab */}
-        {activeTab === 'assignment' && (
-          <div>
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-6 shadow-lg border border-gray-200/50">
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    placeholder="Search assignments by title, class, or teacher..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
+        <div>
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-6 shadow-lg border border-gray-200/50">
+            <div className="flex gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search assignments by title, class, or teacher..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
               </div>
             </div>
+          </div>
 
-            <div className="space-y-4">
-              {filteredAssignments.length === 0 ? (
-                <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-12 text-center shadow-lg border border-gray-200/50">
-                  <Calendar className="mx-auto text-gray-400 mb-3" size={48} />
-                  <p className="text-gray-500">No assignments found</p>
-                  <button
-                    onClick={() => {
-                      setModalType('assignment');
-                      setEditingItem(null);
-                      setFormData({
-                        ...formData,
-                        assignedDate: new Date().toISOString().split('T')[0],
-                        classId: '',
-                        teacherId: '',
-                        startTime: '09:00 AM',
-                        endTime: '10:30 AM',
-                      });
-                      setShowModal(true);
-                    }}
-                    className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all"
-                  >
-                    Add Assignment
-                  </button>
-                </div>
-              ) : (
-                filteredAssignments.map((assignment) => (
-                  <div
-                    key={assignment.id}
-                    className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200"
-                  >
-                    <div className="p-5">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-                              <CalendarIcon className="text-white" size={18} />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-lg text-gray-800">
-                                {assignment.title}
-                              </h3>
-                              <p className="text-sm text-gray-500 flex items-center gap-2">
-                                <BookOpen size={14} />
-                                {getClassName(assignment.classId)}
-                                <span className="mx-1">•</span>
-                                <Clock size={14} />
-                                {assignment.formattedTime}
-                              </p>
-                            </div>
+          <div className="space-y-4">
+            {filteredAssignments.length === 0 ? (
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-12 text-center shadow-lg border border-gray-200/50">
+                <Calendar className="mx-auto text-gray-400 mb-3" size={48} />
+                <p className="text-gray-500">No assignments found</p>
+                <button
+                  onClick={() => {
+                    setModalType('assignment');
+                    setEditingItem(null);
+                    setFormData({
+                      ...formData,
+                      assignedDate: new Date().toISOString().split('T')[0],
+                      classId: '',
+                      teacherId: '',
+                      startTime: '09:00 AM',
+                      endTime: '10:30 AM',
+                    });
+                    setShowModal(true);
+                  }}
+                  className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all"
+                >
+                  Add Assignment
+                </button>
+              </div>
+            ) : (
+              filteredAssignments.map((assignment) => (
+                <div
+                  key={assignment.id}
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200"
+                >
+                  <div className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                            <CalendarIcon className="text-white" size={18} />
                           </div>
-                          
-                          {assignment.description && (
-                            <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                              {assignment.description}
+                          <div>
+                            <h3 className="font-bold text-lg text-gray-800">
+                              {assignment.title}
+                            </h3>
+                            <p className="text-sm text-gray-500 flex items-center gap-2">
+                              <BookOpen size={14} />
+                              {getClassName(assignment.classId)}
+                              <span className="mx-1">•</span>
+                              <Clock size={14} />
+                              {assignment.formattedTime}
                             </p>
-                          )}
-
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Teacher</p>
-                              <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                                <User size={12} />
-                                {assignment.teacherName}
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Date</p>
-                              <p className="text-sm font-semibold text-gray-800">
-                                {assignment.assignedDate ? new Date(assignment.assignedDate).toLocaleDateString() : 'N/A'}
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Room</p>
-                              <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                                <MapPin size={12} />
-                                {assignment.roomNumber || 'N/A'}
-                              </p>
-                            </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                              <p className="text-xs text-gray-500">Status</p>
-                              <button
-                                onClick={() => handleMarkComplete(assignment.id, !assignment.isCompleted)}
-                                className={`text-sm font-semibold flex items-center gap-1 ${
-                                  assignment.isCompleted ? 'text-green-600' : 'text-orange-500'
-                                }`}
-                              >
-                                {assignment.isCompleted ? (
-                                  <>
-                                    <CheckCircle size={14} />
-                                    Completed
-                                  </>
-                                ) : (
-                                  <>
-                                    <ClockIcon size={14} />
-                                    Pending
-                                  </>
-                                )}
-                              </button>
-                            </div>
                           </div>
                         </div>
-                        <div className="flex gap-2 ml-4">
-                          <button
-                            onClick={() => handleEdit(assignment, 'assignment')}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                            title="Edit"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(assignment.id, 'assignment')}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                        
+                        {assignment.description && (
+                          <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                            {assignment.description}
+                          </p>
+                        )}
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                          <div className="bg-gray-50 rounded-lg p-2">
+                            <p className="text-xs text-gray-500">Teacher</p>
+                            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                              <User size={12} />
+                              {assignment.teacherName}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-2">
+                            <p className="text-xs text-gray-500">Date</p>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {assignment.assignedDate ? new Date(assignment.assignedDate).toLocaleDateString() : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-2">
+                            <p className="text-xs text-gray-500">Room</p>
+                            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                              <MapPin size={12} />
+                              {assignment.roomNumber || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-2">
+                            <p className="text-xs text-gray-500">Status</p>
+                            <button
+                              onClick={() => handleMarkComplete(assignment.id, !assignment.isCompleted)}
+                              className={`text-sm font-semibold flex items-center gap-1 ${
+                                assignment.isCompleted ? 'text-green-600' : 'text-orange-500'
+                              }`}
+                            >
+                              {assignment.isCompleted ? (
+                                <>
+                                  <CheckCircle size={14} />
+                                  Completed
+                                </>
+                              ) : (
+                                <>
+                                  <ClockIcon size={14} />
+                                  Pending
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => handleEdit(assignment, 'assignment')}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Edit"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(assignment.id, 'assignment')}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              ))
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Add/Edit Modal */}
@@ -677,7 +497,7 @@ export default function ClassAssignment() {
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">
-                {editingItem ? 'Edit' : 'Add'} {modalType === 'schedule' ? 'Schedule' : 'Assignment'}
+                {editingItem ? 'Edit' : 'Add'} Assignment
               </h2>
               <button onClick={resetForm} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
                 <X size={24} />
@@ -739,125 +559,65 @@ export default function ClassAssignment() {
                 </div>
               </div>
 
-              {modalType === 'schedule' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Day of Week *</label>
-                    <select
-                      required
-                      value={formData.dayOfWeek}
-                      onChange={(e) => setFormData({ ...formData, dayOfWeek: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                    >
-                      {DAYS.map((day) => (
-                        <option key={day} value={day}>{day}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Start Time *</label>
-                      <select
-                        required
-                        value={formData.startTime}
-                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                      >
-                        {TIME_SLOTS.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">End Time *</label>
-                      <select
-                        required
-                        value={formData.endTime}
-                        onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                      >
-                        {TIME_SLOTS.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                    <input
-                      type="text"
-                      value={formData.subject}
-                      onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter subject"
-                    />
-                  </div>
-                </>
-              )}
-
-              {modalType === 'assignment' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
-                      placeholder="Enter assignment title"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
-                      placeholder="Enter description"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.assignedDate}
-                      onChange={(e) => setFormData({ ...formData, assignedDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Start Time *</label>
-                      <select
-                        required
-                        value={formData.startTime}
-                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
-                      >
-                        {TIME_SLOTS.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">End Time *</label>
-                      <select
-                        required
-                        value={formData.endTime}
-                        onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
-                      >
-                        {TIME_SLOTS.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  placeholder="Enter assignment title"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  placeholder="Enter description"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={formData.assignedDate}
+                  onChange={(e) => setFormData({ ...formData, assignedDate: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Time *</label>
+                  <select
+                    required
+                    value={formData.startTime}
+                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  >
+                    {TIME_SLOTS.map((time) => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">End Time *</label>
+                  <select
+                    required
+                    value={formData.endTime}
+                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  >
+                    {TIME_SLOTS.map((time) => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Room Number</label>
