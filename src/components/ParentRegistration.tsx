@@ -8,8 +8,7 @@ import {
 import { getParents, createParent, updateParent, deleteParent, updateParentStatus, getParentStats } from '../services/api';
 
 const CLASSES = [
-  'Toddler', 'Pre-Nursery', 'Nursery', 'KG-1', '1st Standard', 
-  '2nd Standard', '3rd Standard', '4th Standard', '5th Standard'
+  'Toddler', 'Pre-Nursery', 'Nursery', 'KG-1',
 ];
 
 const PARENT_ROLES = ['Father', 'Mother', 'Guardian'];
