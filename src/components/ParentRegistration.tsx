@@ -1,26 +1,44 @@
+// ParentRegistration.tsx - Sync UI Removed
 import { useEffect, useState } from 'react';
 import { 
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
-  MapPin, Calendar, User, Lock, Eye, EyeOff, Filter, Download,
+  MapPin, Calendar, User, Lock, Eye, EyeOff, Filter,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, CheckCircle,
-  Clock, Award, Star, Heart, Baby, School
+  Clock, Award, Star, Heart, Baby, School, BookOpen, UserCheck,
+  Link, Unlink
 } from 'lucide-react';
-import { getParents, createParent, updateParent, deleteParent, updateParentStatus, getParentStats } from '../services/api';
+import { 
+  getParents, createParent, updateParent, deleteParent, 
+  updateParentStatus, getParentStats, getStudents, 
+  getParentStudents, linkStudentToParent, unlinkStudentFromParent,
+  getClasses
+} from '../services/api';
 
 const CLASSES = [
-  'Toddler', 'Pre-Nursery', 'Nursery', 'KG-1',
+  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years' },
+  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years' },
+  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years' },
+  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years' },
 ];
 
 const PARENT_ROLES = ['Father', 'Mother', 'Guardian'];
 
 export default function ParentRegistration() {
   const [parents, setParents] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [classes, setClasses] = useState(CLASSES);
+  const [parentStudents, setParentStudents] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [selectedParent, setSelectedParent] = useState(null);
   const [editingParent, setEditingParent] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedClassForLinking, setSelectedClassForLinking] = useState('');
+  const [selectedStudentsForLinking, setSelectedStudentsForLinking] = useState([]);
+  const [selectedClassForForm, setSelectedClassForForm] = useState('');
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -33,9 +51,7 @@ export default function ParentRegistration() {
     mobile_number: '',
     email: '',
     address: '',
-    student_name: '',
-    student_dob: '',
-    class_grade: '',
+    student_ids: [],
     emergency_contact: '',
     username: '',
     password: '',
@@ -50,18 +66,106 @@ export default function ParentRegistration() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [parentsRes, statsRes] = await Promise.all([
-        getParents(),
-        getParentStats(),
-      ]);
-      setParents(parentsRes.data || []);
-      setStats(statsRes.data || { total: 0, active: 0, inactive: 0, suspended: 0 });
+      
+      let parentsData = [];
+      try {
+        const parentsRes = await getParents();
+        if (parentsRes && parentsRes.data && Array.isArray(parentsRes.data)) {
+          parentsData = parentsRes.data;
+        } else if (Array.isArray(parentsRes)) {
+          parentsData = parentsRes;
+        } else {
+          console.warn('Parents response is not an array:', parentsRes);
+          parentsData = [];
+        }
+      } catch (parentError) {
+        console.error('Error fetching parents:', parentError);
+        parentsData = [];
+      }
+      
+      setParents(parentsData);
+      
+      let statsData = { total: 0, active: 0, inactive: 0, suspended: 0 };
+      try {
+        const statsRes = await getParentStats();
+        if (statsRes && statsRes.data) {
+          statsData = statsRes.data;
+        }
+      } catch (statsError) {
+        console.error('Error fetching stats:', statsError);
+      }
+      setStats(statsData);
+      
+      let studentsData = [];
+      try {
+        const studentsRes = await getStudents();
+        if (studentsRes && studentsRes.data && Array.isArray(studentsRes.data)) {
+          studentsData = studentsRes.data;
+        } else if (Array.isArray(studentsRes)) {
+          studentsData = studentsRes;
+        }
+      } catch (studentError) {
+        console.error('Error fetching students:', studentError);
+        studentsData = [];
+      }
+      setStudents(studentsData);
+      
+      let classesData = CLASSES;
+      try {
+        const classesRes = await getClasses();
+        if (classesRes && classesRes.data && Array.isArray(classesRes.data) && classesRes.data.length > 0) {
+          classesData = classesRes.data;
+        }
+      } catch (classError) {
+        console.error('Error fetching classes:', classError);
+      }
+      setClasses(classesData);
+      
+      const studentMap = {};
+      if (parentsData.length > 0) {
+        for (const parent of parentsData) {
+          try {
+            if (parent && parent._id) {
+              const studentsRes = await getParentStudents(parent._id);
+              studentMap[parent._id] = (studentsRes && studentsRes.data && Array.isArray(studentsRes.data)) 
+                ? studentsRes.data 
+                : [];
+            } else {
+              studentMap[parent._id] = [];
+            }
+          } catch (error) {
+            console.error(`Error loading students for parent ${parent._id}:`, error);
+            studentMap[parent._id] = [];
+          }
+        }
+      }
+      setParentStudents(studentMap);
+      
+      console.log('Parent Data:', parentsData);
+      console.log('Students Data:', studentsData);
+      console.log('Classes Data:', classesData);
     } catch (error) {
-      console.error('Error loading parents:', error);
-      alert('Failed to load parent data');
+      console.error('Error loading parent data:', error);
+      alert('Failed to load parent data. Please refresh the page.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStudentToggleInForm = (studentId) => {
+    setFormData(prev => {
+      const currentIds = prev.student_ids || [];
+      if (currentIds.includes(studentId)) {
+        return { ...prev, student_ids: currentIds.filter(id => id !== studentId) };
+      } else {
+        return { ...prev, student_ids: [...currentIds, studentId] };
+      }
+    });
+  };
+
+  const getStudentsByClassForForm = (classId) => {
+    if (!classId) return students;
+    return students.filter(s => s.class_id === classId);
   };
 
   const handleSubmit = async (e) => {
@@ -114,16 +218,78 @@ export default function ParentRegistration() {
       mobile_number: parent.mobile_number || '',
       email: parent.email || '',
       address: parent.address || '',
-      student_name: parent.student_name || '',
-      student_dob: parent.student_dob ? parent.student_dob.split('T')[0] : '',
-      class_grade: parent.class_grade || '',
+      student_ids: parent.student_ids || [],
       emergency_contact: parent.emergency_contact || '',
       username: parent.username || '',
       password: '',
       status: parent.status || 'Active',
       notes: parent.notes || '',
     });
+    if (parent.student_ids && parent.student_ids.length > 0) {
+      const firstStudent = students.find(s => s._id === parent.student_ids[0]);
+      if (firstStudent) {
+        setSelectedClassForForm(firstStudent.class_id);
+      }
+    } else {
+      setSelectedClassForForm('');
+    }
     setShowModal(true);
+  };
+
+  const handleLinkStudents = (parent) => {
+    setSelectedParent(parent);
+    setSelectedClassForLinking('');
+    setSelectedStudentsForLinking([]);
+    setShowLinkModal(true);
+  };
+
+  const handleClassSelectForLinking = (classId) => {
+    setSelectedClassForLinking(classId);
+    setSelectedStudentsForLinking([]);
+  };
+
+  const handleStudentToggleForLinking = (studentId) => {
+    setSelectedStudentsForLinking(prev => {
+      if (prev.includes(studentId)) {
+        return prev.filter(id => id !== studentId);
+      } else {
+        return [...prev, studentId];
+      }
+    });
+  };
+
+  const handleLinkSelectedStudents = async () => {
+    if (selectedStudentsForLinking.length === 0) {
+      alert('Please select at least one student to link.');
+      return;
+    }
+
+    try {
+      for (const studentId of selectedStudentsForLinking) {
+        await linkStudentToParent(selectedParent._id, studentId);
+      }
+      await loadData();
+      alert(`${selectedStudentsForLinking.length} student(s) linked successfully!`);
+      setShowLinkModal(false);
+      setSelectedClassForLinking('');
+      setSelectedStudentsForLinking([]);
+    } catch (error) {
+      console.error('Error linking students:', error);
+      alert('Failed to link students');
+    }
+  };
+
+  const handleUnlinkStudent = async (parentId, studentId) => {
+    if (confirm('Remove this student from parent?')) {
+      try {
+        await unlinkStudentFromParent(parentId, studentId);
+        await loadData();
+        alert('Student unlinked successfully!');
+      } catch (error) {
+        console.error('Error unlinking student:', error);
+        alert('Failed to unlink student');
+      }
+    }
   };
 
   const resetForm = () => {
@@ -133,32 +299,39 @@ export default function ParentRegistration() {
       mobile_number: '',
       email: '',
       address: '',
-      student_name: '',
-      student_dob: '',
-      class_grade: '',
+      student_ids: [],
       emergency_contact: '',
       username: '',
       password: '',
       status: 'Active',
       notes: '',
     });
+    setSelectedClassForForm('');
     setEditingParent(null);
     setShowModal(false);
+    setSelectedParent(null);
+    setShowLinkModal(false);
+    setSelectedClassForLinking('');
+    setSelectedStudentsForLinking([]);
   };
 
   const getFilteredParents = () => {
-    let filtered = parents;
+    const parentsArray = Array.isArray(parents) ? parents : [];
+    let filtered = parentsArray;
+    
     if (searchTerm) {
       filtered = filtered.filter(p =>
-        p.parent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.mobile_number?.includes(searchTerm) ||
-        p.student_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        p?.parent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p?.mobile_number?.includes(searchTerm) ||
+        p?.username?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
+    
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(p => p.status === statusFilter);
+      filtered = filtered.filter(p => p?.status === statusFilter);
     }
+    
     return filtered;
   };
 
@@ -169,6 +342,30 @@ export default function ParentRegistration() {
       case 'Suspended': return 'bg-red-100 text-red-700';
       default: return 'bg-gray-100 text-gray-700';
     }
+  };
+
+  const getStudentsByClassForLinking = (classId) => {
+    if (!classId) return [];
+    const classStudents = students.filter(s => s.class_id === classId);
+    const linkedStudentIds = parentStudents[selectedParent?._id]?.map(s => s._id) || [];
+    return classStudents.filter(s => !linkedStudentIds.includes(s._id));
+  };
+
+  const getClassName = (classId) => {
+    const classObj = classes.find(c => c.id === classId || c._id === classId);
+    return classObj ? classObj.name : classId || 'Not Assigned';
+  };
+
+  const getClassDisplayName = (classId) => {
+    const classObj = classes.find(c => c.id === classId || c._id === classId);
+    if (classObj) {
+      return `${classObj.name} ${classObj.ageGroup ? `(${classObj.ageGroup})` : ''}`;
+    }
+    return classId || 'Not Assigned';
+  };
+
+  const getSelectedStudentsForForm = () => {
+    return formData.student_ids || [];
   };
 
   const filteredParents = getFilteredParents();
@@ -196,7 +393,7 @@ export default function ParentRegistration() {
               </h1>
               <p className="text-gray-600 mt-2 flex items-center gap-2">
                 <Users size={18} className="text-blue-500" />
-                Manage parent accounts and student information
+                Manage parent accounts and student links
               </p>
             </div>
             <button
@@ -212,7 +409,7 @@ export default function ParentRegistration() {
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Removed Sync stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100 shadow-lg">
             <div className="flex items-center justify-between mb-4">
@@ -221,7 +418,7 @@ export default function ParentRegistration() {
               </div>
               <TrendingUp className="text-blue-500" size={20} />
             </div>
-            <h3 className="text-2xl font-bold text-gray-800">{stats.total}</h3>
+            <h3 className="text-2xl font-bold text-gray-800">{stats.total || 0}</h3>
             <p className="text-gray-600 text-sm">Total Parents</p>
           </div>
 
@@ -230,7 +427,7 @@ export default function ParentRegistration() {
               <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
                 <CheckCircle className="text-white" size={24} />
               </div>
-              <span className="text-2xl font-bold text-green-600">{stats.active}</span>
+              <span className="text-2xl font-bold text-green-600">{stats.active || 0}</span>
             </div>
             <h3 className="text-2xl font-bold text-gray-800">Active</h3>
             <p className="text-gray-600 text-sm">Active accounts</p>
@@ -241,7 +438,7 @@ export default function ParentRegistration() {
               <div className="w-12 h-12 bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl flex items-center justify-center">
                 <AlertCircle className="text-white" size={24} />
               </div>
-              <span className="text-2xl font-bold text-gray-600">{stats.inactive}</span>
+              <span className="text-2xl font-bold text-gray-600">{stats.inactive || 0}</span>
             </div>
             <h3 className="text-2xl font-bold text-gray-800">Inactive</h3>
             <p className="text-gray-600 text-sm">Inactive accounts</p>
@@ -252,21 +449,21 @@ export default function ParentRegistration() {
               <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center">
                 <Clock className="text-white" size={24} />
               </div>
-              <span className="text-2xl font-bold text-red-600">{stats.suspended}</span>
+              <span className="text-2xl font-bold text-red-600">{stats.suspended || 0}</span>
             </div>
             <h3 className="text-2xl font-bold text-gray-800">Suspended</h3>
             <p className="text-gray-600 text-sm">Suspended accounts</p>
           </div>
         </div>
 
-        {/* Search and Filter */}
+        {/* Search and Filter - Removed Sync filter */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 shadow-lg border border-gray-200/50">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder="Search by name, email, phone, or student name..."
+                placeholder="Search by name, email, phone, or username..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -288,7 +485,7 @@ export default function ParentRegistration() {
           </div>
         </div>
 
-        {/* Parents Table */}
+        {/* Parents Table - Removed Sync column */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -296,8 +493,7 @@ export default function ParentRegistration() {
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Parent</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Student</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Class</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Students</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Username</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase">Actions</th>
@@ -306,78 +502,103 @@ export default function ParentRegistration() {
               <tbody className="divide-y divide-gray-200">
                 {filteredParents.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                       <Users className="mx-auto mb-3 text-gray-400" size={48} />
                       <p className="text-lg">No parents found</p>
                     </td>
                   </tr>
                 ) : (
-                  filteredParents.map((parent) => (
-                    <tr key={parent._id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <User className="text-white" size={16} />
+                  filteredParents.map((parent) => {
+                    const studentList = parentStudents[parent._id] || [];
+                    
+                    return (
+                      <tr key={parent._id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                              <User className="text-white" size={16} />
+                            </div>
+                            <div>
+                              <div className="font-semibold text-gray-900">{parent.parent_name}</div>
+                              <div className="text-xs text-gray-500">{parent.parent_role}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-semibold text-gray-900">{parent.parent_name}</div>
-                            <div className="text-xs text-gray-500">{parent.parent_role}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">{parent.mobile_number}</div>
+                          <div className="text-xs text-gray-500">{parent.email}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {studentList.length > 0 ? (
+                              studentList.map(student => (
+                                <span 
+                                  key={student._id} 
+                                  className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold flex items-center gap-1"
+                                >
+                                  {student.name}
+                                  <button
+                                    onClick={() => handleUnlinkStudent(parent._id, student._id)}
+                                    className="hover:text-red-600"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-gray-400">No students linked</span>
+                            )}
+                            <button
+                              onClick={() => handleLinkStudents(parent)}
+                              className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold hover:bg-green-200"
+                            >
+                              <Plus size={12} className="inline" /> Link
+                            </button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{parent.mobile_number}</div>
-                        <div className="text-xs text-gray-500">{parent.email}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{parent.student_name}</div>
-                        <div className="text-xs text-gray-500">{parent.student_age} years old</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                          {parent.class_grade}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <code className="text-sm text-gray-600">{parent.username}</code>
-                      </td>
-                      <td className="px-6 py-4">
-                        <select
-                          value={parent.status}
-                          onChange={(e) => handleStatusChange(parent._id, e.target.value)}
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border-0 cursor-pointer ${getStatusColor(parent.status)}`}
-                        >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                          <option value="Suspended">Suspended</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => handleEdit(parent)}
-                          className="text-blue-600 hover:text-blue-800 mr-3 transition-colors"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(parent._id)}
-                          className="text-red-600 hover:text-red-800 transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="px-6 py-4">
+                          <code className="text-sm text-gray-600">{parent.username}</code>
+                        </td>
+                        <td className="px-6 py-4">
+                          <select
+                            value={parent.status}
+                            onChange={(e) => handleStatusChange(parent._id, e.target.value)}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold border-0 cursor-pointer ${getStatusColor(parent.status)}`}
+                          >
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                            <option value="Suspended">Suspended</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => handleEdit(parent)}
+                            className="text-blue-600 hover:text-blue-800 mr-2 transition-colors"
+                            title="Edit Parent"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(parent._id)}
+                            className="text-red-600 hover:text-red-800 transition-colors"
+                            title="Delete Parent"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Parent Registration Modal */}
+        {/* Parent Registration Modal WITH STUDENT ASSIGNMENT */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
                   {editingParent ? 'Edit Parent' : 'Register New Parent'}
@@ -445,39 +666,6 @@ export default function ParentRegistration() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Student Name *</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={formData.student_name} 
-                      onChange={(e) => setFormData({ ...formData, student_name: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="Student name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Student DOB *</label>
-                    <input 
-                      type="date" 
-                      required 
-                      value={formData.student_dob} 
-                      onChange={(e) => setFormData({ ...formData, student_dob: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Class/Grade *</label>
-                    <select 
-                      required 
-                      value={formData.class_grade} 
-                      onChange={(e) => setFormData({ ...formData, class_grade: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select Class</option>
-                      {CLASSES.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                    </select>
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Emergency Contact *</label>
                     <input 
                       type="tel" 
@@ -531,19 +719,121 @@ export default function ParentRegistration() {
                       <option value="Suspended">Suspended</option>
                     </select>
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                    <textarea 
-                      value={formData.notes} 
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
-                      rows={2} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="Additional notes..."
-                    />
-                  </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4">
+                {/* STUDENT ASSIGNMENT SECTION IN FORM */}
+                <div className="border-t border-gray-200 pt-4 mt-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Users size={16} className="text-blue-500" />
+                      Assign Students
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      {getSelectedStudentsForForm().length} student(s) selected
+                    </span>
+                  </div>
+
+                  <div className="mb-3">
+                    <select
+                      value={selectedClassForForm}
+                      onChange={(e) => setSelectedClassForForm(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    >
+                      <option value="">-- Filter by class --</option>
+                      {classes.map((cls) => {
+                        const classId = cls.id || cls._id;
+                        const className = cls.name || cls.className;
+                        const studentCount = students.filter(s => s.class_id === classId).length;
+                        return (
+                          <option key={classId} value={classId}>
+                            {className} ({studentCount} students)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 bg-gray-50">
+                    {students.length === 0 ? (
+                      <p className="text-center text-gray-500 py-2 text-sm">
+                        No students available. Please add students first.
+                      </p>
+                    ) : (
+                      getStudentsByClassForForm(selectedClassForForm).map((student) => {
+                        const isSelected = formData.student_ids?.includes(student._id) || false;
+                        return (
+                          <label
+                            key={student._id}
+                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-blue-50 border border-blue-300'
+                                : 'hover:bg-gray-100 border border-transparent'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleStudentToggleInForm(student._id)}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                            <div className="flex-1 flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-gray-800 text-sm">{student.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {getClassName(student.class_id)} | Section: {student.section || 'A'}
+                                </p>
+                              </div>
+                              {student.rollNumber && (
+                                <span className="text-xs text-gray-400">Roll: {student.rollNumber}</span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })
+                    )}
+                    {selectedClassForForm && getStudentsByClassForForm(selectedClassForForm).length === 0 && (
+                      <p className="text-center text-gray-500 py-2 text-sm">
+                        No students in this class.
+                      </p>
+                    )}
+                  </div>
+
+                  {getSelectedStudentsForForm().length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {getSelectedStudentsForForm().map(studentId => {
+                        const student = students.find(s => s._id === studentId);
+                        return student ? (
+                          <span 
+                            key={studentId}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs"
+                          >
+                            {student.name}
+                            <button
+                              type="button"
+                              onClick={() => handleStudentToggleInForm(studentId)}
+                              className="hover:text-red-600"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea 
+                    value={formData.notes} 
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
+                    rows={2} 
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    placeholder="Additional notes..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button 
                     type="button" 
                     onClick={resetForm} 
@@ -559,6 +849,138 @@ export default function ParentRegistration() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Link Students Modal */}
+        {showLinkModal && selectedParent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Link Students to {selectedParent.parent_name}</h2>
+                  <p className="text-white/80 text-sm mt-1">Select a class, then choose students to assign</p>
+                </div>
+                <button onClick={resetForm} className="text-white hover:bg-white/20 rounded-lg p-1">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Step 1: Select Class
+                  </label>
+                  <select
+                    value={selectedClassForLinking}
+                    onChange={(e) => handleClassSelectForLinking(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value="">-- Select a class --</option>
+                    {classes.map((cls) => {
+                      const classId = cls.id || cls._id;
+                      const className = cls.name || cls.className;
+                      const ageGroup = cls.ageGroup || '';
+                      const studentsInClass = students.filter(s => s.class_id === classId).length;
+                      const linkedCount = parentStudents[selectedParent?._id]?.filter(s => s.class_id === classId).length || 0;
+                      const availableCount = studentsInClass - linkedCount;
+                      
+                      return (
+                        <option key={classId} value={classId}>
+                          {className} {ageGroup ? `(${ageGroup})` : ''} - {availableCount} available
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedClassForLinking && (
+                    <p className="text-xs text-green-600 mt-1">
+                      Showing students from {getClassDisplayName(selectedClassForLinking)}
+                    </p>
+                  )}
+                </div>
+
+                {selectedClassForLinking && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Step 2: Select Students ({getStudentsByClassForLinking(selectedClassForLinking).length} available)
+                    </label>
+                    <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-xl p-3">
+                      {getStudentsByClassForLinking(selectedClassForLinking).length === 0 ? (
+                        <p className="text-center text-gray-500 py-4">
+                          No students available in this class to link.
+                          <br />
+                          <span className="text-xs">All students are already linked to this parent.</span>
+                        </p>
+                      ) : (
+                        getStudentsByClassForLinking(selectedClassForLinking).map((student) => (
+                          <label
+                            key={student._id}
+                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                              selectedStudentsForLinking.includes(student._id)
+                                ? 'bg-green-50 border-2 border-green-400'
+                                : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedStudentsForLinking.includes(student._id)}
+                              onChange={() => handleStudentToggleForLinking(student._id)}
+                              className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                            />
+                            <div className="flex-1">
+                              <p className="font-semibold text-gray-800">{student.name}</p>
+                              <p className="text-xs text-gray-500">
+                                Class: {getClassName(student.class_id)} | 
+                                Section: {student.section || 'A'} | 
+                                Roll: {student.rollNumber || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                              <Users className="text-white" size={14} />
+                            </div>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedStudentsForLinking.length > 0 && (
+                  <div className="bg-blue-50 rounded-lg p-3 flex items-center justify-between">
+                    <span className="text-sm text-blue-700">
+                      Selected: <strong>{selectedStudentsForLinking.length}</strong> student(s)
+                    </span>
+                    <button
+                      onClick={() => setSelectedStudentsForLinking([])}
+                      className="text-sm text-red-600 hover:text-red-800"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={resetForm}
+                    className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleLinkSelectedStudents}
+                    disabled={selectedStudentsForLinking.length === 0}
+                    className={`px-6 py-2 rounded-xl text-white transition-all ${
+                      selectedStudentsForLinking.length > 0
+                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg'
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <Link size={16} className="inline mr-2" />
+                    Link {selectedStudentsForLinking.length} Student(s)
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
