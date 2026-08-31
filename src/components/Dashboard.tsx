@@ -16,14 +16,30 @@ import ParentRegistration from './ParentRegistration';
 import FacultyRegistration from './FacultyRegistration';
 import LeaveManagement from './LeaveManagement';
 import ClassAssignment from './ClassAssignment';
+import Login from './Login';
 
 type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment';
 
+// Hardcoded credentials
+const VALID_CREDENTIALS = {
+  email: 'admin@goldenplay.com',
+  password: 'admin#playschool@098'
+};
+
 export default function Dashboard() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState<Page>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Check if user is already logged in (session)
+  useEffect(() => {
+    const authStatus = localStorage.getItem('isAuthenticated');
+    if (authStatus === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   // Handle responsive sidebar
   useEffect(() => {
@@ -49,24 +65,51 @@ export default function Dashboard() {
     };
   }, []);
 
-// Add to navigation array
-const navigation = [
-  { id: 'overview' as Page, name: 'Dashboard', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-  { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
-  { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
-  { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-  { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-teal-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
-   { id: 'classAssignment' as Page, name: 'Class Assignment', icon: BookMarked, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
-  { id: 'leaves' as Page, name: 'Leave Management', icon: Calendar, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-  { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
-  { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
-  { id: 'finance' as Page, name: 'Finance', icon: DollarSign, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
-];
+  // Handle login
+  const handleLogin = (email: string, password: string) => {
+    if (email === VALID_CREDENTIALS.email && password === VALID_CREDENTIALS.password) {
+      setIsAuthenticated(true);
+      localStorage.setItem('isAuthenticated', 'true');
+      return true;
+    }
+    return false;
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('isAuthenticated');
+    setCurrentPage('overview');
+  };
+
+  // Navigation handler function
+  const handleNavigate = (page: string) => {
+    setCurrentPage(page as Page);
+  };
+
+  // If not authenticated, show login page
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  // Navigation array
+  const navigation = [
+    { id: 'overview' as Page, name: 'Dashboard', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+    { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
+    { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
+    { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+    { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-teal-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
+    { id: 'classAssignment' as Page, name: 'Class Assignment', icon: BookMarked, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
+    { id: 'leaves' as Page, name: 'Leave Management', icon: Calendar, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+    { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
+    { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
+    { id: 'finance' as Page, name: 'Finance', icon: DollarSign, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
+  ];
 
   const renderPage = () => {
     switch (currentPage) {
       case 'overview':
-        return <Overview />;
+        return <Overview onNavigate={handleNavigate} />;
       case 'studentDetails':
         return <StudentDetails />;
       case 'academics':
@@ -83,10 +126,10 @@ const navigation = [
         return <ClassAssignment />;
       case 'faculty':
         return <FacultyRegistration />;
-         case 'leaves':
-      return <LeaveManagement />;
+      case 'leaves':
+        return <LeaveManagement />;
       default:
-        return <Overview />;
+        return <Overview onNavigate={handleNavigate} />;
     }
   };
 
@@ -140,8 +183,8 @@ const navigation = [
                 </div>
               </div>
               <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  PlaySchool
+                <h1 className="text-sm font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  Golden PlaySchool
                 </h1>
                 <p className="text-xs text-gray-500">Admin Dashboard</p>
               </div>
@@ -154,22 +197,6 @@ const navigation = [
             {sidebarOpen ? <X size={20} className="text-gray-600" /> : <Menu size={20} className="text-gray-600" />}
           </button>
         </div>
-
-        {/* User Profile Section */}
-        {sidebarOpen && (
-          <div className="p-4 border-b border-gray-200/50">
-            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                <User className="text-white" size={20} />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-gray-800">Admin User</p>
-                <p className="text-xs text-gray-500">Super Administrator</p>
-              </div>
-              <ChevronRight size={16} className="text-gray-400" />
-            </div>
-          </div>
-        )}
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -210,16 +237,27 @@ const navigation = [
           })}
         </nav>
 
-        {/* Footer Section */}
+        {/* Footer Section with Logout */}
         {sidebarOpen && (
           <div className="p-4 border-t border-gray-200/50 space-y-2">
-            <button className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-50 transition-all duration-300">
-              <Settings size={20} />
-              <span className="font-medium">Settings</span>
-            </button>
-            <button className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-300">
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-300"
+            >
               <LogOut size={20} />
               <span className="font-medium">Logout</span>
+            </button>
+          </div>
+        )}
+        {/* When sidebar is collapsed, show logout icon */}
+        {!sidebarOpen && (
+          <div className="p-4 border-t border-gray-200/50">
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center p-2 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-300"
+              title="Logout"
+            >
+              <LogOut size={20} />
             </button>
           </div>
         )}

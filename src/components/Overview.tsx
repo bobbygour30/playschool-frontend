@@ -19,7 +19,11 @@ interface Stats {
   pendingFees: number;
 }
 
-export default function Overview() {
+interface OverviewProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function Overview({ onNavigate }: OverviewProps) {
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
     activeStudents: 0,
@@ -95,6 +99,13 @@ export default function Overview() {
       month: 'long', 
       day: 'numeric' 
     });
+  };
+
+  // Navigation handler for quick actions
+  const handleNavigate = (page: string) => {
+    if (onNavigate) {
+      onNavigate(page);
+    }
   };
 
   const cards = [
@@ -186,30 +197,8 @@ export default function Overview() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200">
-      <div className="p-6 md:p-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl p-8 text-white shadow-2xl">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="text-yellow-300" size={24} />
-                  <span className="text-yellow-300 font-semibold">Welcome Back!</span>
-                </div>
-                <h1 className="text-3xl md:text-4xl font-bold mb-2">Dashboard Overview</h1>
-                <p className="text-blue-100">Here's what's happening with your school today</p>
-              </div>
-              <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-xl px-6 py-3">
-                <Calendar size={20} />
-                <div>
-                  <div className="text-sm font-medium">{formatDate()}</div>
-                  <div className="text-xs text-blue-200">{formatTime()}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+      <div className="">
+        
         {/* Main Stats Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {cards.map((card) => {
@@ -304,22 +293,34 @@ export default function Overview() {
               <h2 className="text-xl font-bold text-gray-800">Quick Actions</h2>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <button className="group p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
+              <button 
+                onClick={() => handleNavigate('studentDetails')}
+                className="group p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl hover:shadow-md transition-all duration-300 text-left hover:scale-105"
+              >
                 <Users className="text-blue-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
                 <div className="font-semibold text-gray-800">Add Student</div>
                 <div className="text-xs text-gray-500">New enrollment</div>
               </button>
-              <button className="group p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
+              <button 
+                onClick={() => handleNavigate('faculty')}
+                className="group p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl hover:shadow-md transition-all duration-300 text-left hover:scale-105"
+              >
                 <GraduationCap className="text-green-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
                 <div className="font-semibold text-gray-800">Add Staff</div>
                 <div className="text-xs text-gray-500">Hire new staff</div>
               </button>
-              <button className="group p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
+              <button 
+                onClick={() => handleNavigate('vendor')}
+                className="group p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl hover:shadow-md transition-all duration-300 text-left hover:scale-105"
+              >
                 <Truck className="text-orange-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
                 <div className="font-semibold text-gray-800">Add Vendor</div>
                 <div className="text-xs text-gray-500">Register vendor</div>
               </button>
-              <button className="group p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl hover:shadow-md transition-all duration-300 text-left">
+              <button 
+                onClick={() => handleNavigate('finance')}
+                className="group p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl hover:shadow-md transition-all duration-300 text-left hover:scale-105"
+              >
                 <DollarSign className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" size={24} />
                 <div className="font-semibold text-gray-800">Add Fee</div>
                 <div className="text-xs text-gray-500">Record payment</div>

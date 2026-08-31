@@ -103,18 +103,42 @@ export default function Finance() {
     }
   };
 
+  // Fixed: Calculate total fee immediately with current values
   const calculateTotalFee = () => {
-    const total = (parseFloat(formData.admission_fee) || 0) +
-                  (parseFloat(formData.tuition_fee) || 0) +
-                  (parseFloat(formData.transport_fee) || 0) +
-                  (parseFloat(formData.activity_fee) || 0);
+    const admission = parseFloat(formData.admission_fee) || 0;
+    const tuition = parseFloat(formData.tuition_fee) || 0;
+    const transport = parseFloat(formData.transport_fee) || 0;
+    const activity = parseFloat(formData.activity_fee) || 0;
+    const total = admission + tuition + transport + activity;
+    return total;
+  };
+
+  // Fixed: Update total amount in form data
+  const updateTotalAmount = () => {
+    const total = calculateTotalFee();
     setFormData(prev => ({ ...prev, total_amount: total.toString() }));
   };
 
+  // Fixed: Handle fee field changes with immediate total update
+  const handleFeeFieldChange = (field, value) => {
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      // Calculate total with updated values
+      const admission = parseFloat(field === 'admission_fee' ? value : newData.admission_fee) || 0;
+      const tuition = parseFloat(field === 'tuition_fee' ? value : newData.tuition_fee) || 0;
+      const transport = parseFloat(field === 'transport_fee' ? value : newData.transport_fee) || 0;
+      const activity = parseFloat(field === 'activity_fee' ? value : newData.activity_fee) || 0;
+      const total = admission + tuition + transport + activity;
+      newData.total_amount = total.toString();
+      return newData;
+    });
+  };
+
   const calculateNetSalary = () => {
-    const net = (parseFloat(formData.basic_salary) || 0) +
-                (parseFloat(formData.allowance) || 0) -
-                (parseFloat(formData.deductions) || 0);
+    const basic = parseFloat(formData.basic_salary) || 0;
+    const allowance = parseFloat(formData.allowance) || 0;
+    const deductions = parseFloat(formData.deductions) || 0;
+    const net = basic + allowance - deductions;
     setFormData(prev => ({ ...prev, net_salary: net.toString() }));
   };
 
@@ -248,6 +272,9 @@ export default function Finance() {
         net_salary: '',
         payment_status: '',
         remarks: '',
+        receipt_doc: null,
+        salary_slip: null,
+        payment_date_salary: '',
       });
     } 
     else if (type === 'expense') {
@@ -282,6 +309,8 @@ export default function Finance() {
         net_salary: '',
         payment_status: '',
         remarks: '',
+        salary_slip: null,
+        payment_date_salary: '',
       });
     }
     else if (type === 'salary') {
@@ -318,6 +347,8 @@ export default function Finance() {
         payment_method: '',
         transaction_id: '',
         notes: '',
+        receipt_doc: null,
+        payment_date_salary: '',
       });
     }
     
@@ -836,43 +867,73 @@ export default function Finance() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Admission Fee</label>
-                        <input type="number" step="0.01" value={formData.admission_fee} onChange={(e) => {
-                          setFormData({ ...formData, admission_fee: e.target.value });
-                          setTimeout(calculateTotalFee, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.admission_fee} 
+                          onChange={(e) => handleFeeFieldChange('admission_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Tuition Fee</label>
-                        <input type="number" step="0.01" value={formData.tuition_fee} onChange={(e) => {
-                          setFormData({ ...formData, tuition_fee: e.target.value });
-                          setTimeout(calculateTotalFee, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.tuition_fee} 
+                          onChange={(e) => handleFeeFieldChange('tuition_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Transport Fee</label>
-                        <input type="number" step="0.01" value={formData.transport_fee} onChange={(e) => {
-                          setFormData({ ...formData, transport_fee: e.target.value });
-                          setTimeout(calculateTotalFee, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.transport_fee} 
+                          onChange={(e) => handleFeeFieldChange('transport_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Activity Fee</label>
-                        <input type="number" step="0.01" value={formData.activity_fee} onChange={(e) => {
-                          setFormData({ ...formData, activity_fee: e.target.value });
-                          setTimeout(calculateTotalFee, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.activity_fee} 
+                          onChange={(e) => handleFeeFieldChange('activity_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount *</label>
-                        <input type="number" required step="0.01" value={formData.total_amount} readOnly className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50" />
+                        <input 
+                          type="number" 
+                          required 
+                          step="0.01" 
+                          value={formData.total_amount} 
+                          readOnly 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold text-teal-700" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Due Date *</label>
-                        <input type="date" required value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="date" 
+                          required 
+                          value={formData.due_date} 
+                          onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
-                        <select required value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                        <select 
+                          required 
+                          value={formData.status} 
+                          onChange={(e) => setFormData({ ...formData, status: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        >
                           <option value="Pending">Pending</option>
                           <option value="Paid">Paid</option>
                           <option value="Overdue">Overdue</option>
@@ -880,7 +941,11 @@ export default function Finance() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                        <select value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                        <select 
+                          value={formData.payment_method} 
+                          onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        >
                           <option value="Cash">Cash</option>
                           <option value="Card">Card</option>
                           <option value="Bank Transfer">Bank Transfer</option>
@@ -889,15 +954,31 @@ export default function Finance() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Date</label>
-                        <input type="date" value={formData.payment_date} onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="date" 
+                          value={formData.payment_date} 
+                          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Transaction ID</label>
-                        <input type="text" value={formData.transaction_id} onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="text" 
+                          value={formData.transaction_id} 
+                          onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                        <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="Additional notes..." />
+                        <textarea 
+                          value={formData.notes} 
+                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
+                          rows={2} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          placeholder="Additional notes..." 
+                        />
                       </div>
                     </div>
                   </>
@@ -908,7 +989,12 @@ export default function Finance() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Expense Category *</label>
-                      <select required value={formData.expense_category} onChange={(e) => setFormData({ ...formData, expense_category: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                      <select 
+                        required 
+                        value={formData.expense_category} 
+                        onChange={(e) => setFormData({ ...formData, expense_category: e.target.value })} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      >
                         <option value="">Select Category</option>
                         <option value="Maintenance">Maintenance</option>
                         <option value="Utilities">Utilities</option>
@@ -920,27 +1006,61 @@ export default function Finance() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Expense Date *</label>
-                      <input type="date" required value={formData.expense_date} onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input 
+                        type="date" 
+                        required 
+                        value={formData.expense_date} 
+                        onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
-                      <textarea required value={formData.expense_description} onChange={(e) => setFormData({ ...formData, expense_description: e.target.value })} rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="Describe the expense..." />
+                      <textarea 
+                        required 
+                        value={formData.expense_description} 
+                        onChange={(e) => setFormData({ ...formData, expense_description: e.target.value })} 
+                        rows={2} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        placeholder="Describe the expense..." 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Amount *</label>
-                      <input type="number" required step="0.01" value={formData.expense_amount} onChange={(e) => setFormData({ ...formData, expense_amount: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input 
+                        type="number" 
+                        required 
+                        step="0.01" 
+                        value={formData.expense_amount} 
+                        onChange={(e) => setFormData({ ...formData, expense_amount: e.target.value })} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Name</label>
-                      <input type="text" value={formData.vendor_name} onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input 
+                        type="text" 
+                        value={formData.vendor_name} 
+                        onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Bill/Invoice Number</label>
-                      <input type="text" value={formData.bill_number} onChange={(e) => setFormData({ ...formData, bill_number: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      <input 
+                        type="text" 
+                        value={formData.bill_number} 
+                        onChange={(e) => setFormData({ ...formData, bill_number: e.target.value })} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Payment Mode</label>
-                      <select value={formData.payment_mode} onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                      <select 
+                        value={formData.payment_mode} 
+                        onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })} 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      >
                         <option value="Cash">Cash</option>
                         <option value="Card">Card</option>
                         <option value="Bank Transfer">Bank Transfer</option>
@@ -950,7 +1070,12 @@ export default function Finance() {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Receipt/Bill Document</label>
                       <div className="flex items-center gap-2">
-                        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'receipt_doc')} className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                        <input 
+                          type="file" 
+                          accept=".pdf,.jpg,.jpeg,.png" 
+                          onChange={(e) => handleFileUpload(e, 'receipt_doc')} 
+                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" 
+                        />
                         {formData.receipt_doc && <FileText size={20} className="text-green-600" />}
                       </div>
                     </div>
@@ -989,52 +1114,105 @@ export default function Finance() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Salary Month *</label>
-                        <input type="month" required value={formData.salary_month} onChange={(e) => setFormData({ ...formData, salary_month: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="month" 
+                          required 
+                          value={formData.salary_month} 
+                          onChange={(e) => setFormData({ ...formData, salary_month: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary *</label>
-                        <input type="number" required step="0.01" value={formData.basic_salary} onChange={(e) => {
-                          setFormData({ ...formData, basic_salary: e.target.value });
-                          setTimeout(calculateNetSalary, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          required 
+                          step="0.01" 
+                          value={formData.basic_salary} 
+                          onChange={(e) => {
+                            setFormData({ ...formData, basic_salary: e.target.value });
+                            setTimeout(calculateNetSalary, 100);
+                          }} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Allowances</label>
-                        <input type="number" step="0.01" value={formData.allowance} onChange={(e) => {
-                          setFormData({ ...formData, allowance: e.target.value });
-                          setTimeout(calculateNetSalary, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.allowance} 
+                          onChange={(e) => {
+                            setFormData({ ...formData, allowance: e.target.value });
+                            setTimeout(calculateNetSalary, 100);
+                          }} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
-                        <input type="number" step="0.01" value={formData.deductions} onChange={(e) => {
-                          setFormData({ ...formData, deductions: e.target.value });
-                          setTimeout(calculateNetSalary, 100);
-                        }} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.deductions} 
+                          onChange={(e) => {
+                            setFormData({ ...formData, deductions: e.target.value });
+                            setTimeout(calculateNetSalary, 100);
+                          }} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Net Salary *</label>
-                        <input type="number" required step="0.01" value={formData.net_salary} readOnly className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold" />
+                        <input 
+                          type="number" 
+                          required 
+                          step="0.01" 
+                          value={formData.net_salary} 
+                          readOnly 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold text-teal-700" 
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status *</label>
-                        <select required value={formData.payment_status} onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                        <select 
+                          required 
+                          value={formData.payment_status} 
+                          onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        >
                           <option value="Pending">Pending</option>
                           <option value="Completed">Completed</option>
                         </select>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Date</label>
-                        <input type="date" value={formData.payment_date} onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                        <input 
+                          type="date" 
+                          value={formData.payment_date} 
+                          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-                        <textarea value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="Additional remarks..." />
+                        <textarea 
+                          value={formData.remarks} 
+                          onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} 
+                          rows={2} 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          placeholder="Additional remarks..." 
+                        />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Salary Slip Document</label>
                         <div className="flex items-center gap-2">
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'salary_slip')} className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                          <input 
+                            type="file" 
+                            accept=".pdf,.jpg,.jpeg,.png" 
+                            onChange={(e) => handleFileUpload(e, 'salary_slip')} 
+                            className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" 
+                          />
                           {formData.salary_slip && <FileText size={20} className="text-green-600" />}
                         </div>
                       </div>
