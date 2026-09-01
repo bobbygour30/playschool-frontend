@@ -1,9 +1,11 @@
+// components/StudentDetails.jsx
 import { useEffect, useState } from 'react';
 import { 
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
-  UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen
+  UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
+  DollarSign, CreditCard, Receipt, CheckCircle, XCircle
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
 
@@ -16,6 +18,7 @@ const CLASSES = [
 ];
 
 const SECTIONS = ['A', 'B', 'C', 'D'];
+const PAYMENT_MODES = ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Cheque'];
 
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
@@ -28,6 +31,7 @@ export default function StudentDetails() {
   const [selectedSection, setSelectedSection] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [feeStats, setFeeStats] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     date_of_birth: '',
@@ -46,6 +50,11 @@ export default function StudentDetails() {
     transport_type: 'Walker',
     vehicle_id: '',
     status: 'Active',
+    fee_amount: '',
+    kit_charges: '',
+    fee_paid: false,
+    payment_date: '',
+    payment_mode: 'Cash',
     birth_certificate: null,
     aadhar_card: null,
     parent_aadhar_front: null,
@@ -72,12 +81,33 @@ export default function StudentDetails() {
       const allStaff = staffRes.data || [];
       setTeachers(allStaff.filter(s => s.role === 'Teacher' && s.status === 'Active'));
       setVehicles((vehiclesRes.data || []).filter(v => v.status === 'Active'));
+      
+      // Calculate fee stats
+      calculateFeeStats(studentsRes.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
       alert('Failed to load data. Please check your connection.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateFeeStats = (studentsList) => {
+    const total = studentsList.length;
+    const paid = studentsList.filter(s => s.fee_paid).length;
+    const unpaid = total - paid;
+    const totalAmount = studentsList.reduce((sum, s) => sum + (s.total_amount || 0), 0);
+    const paidAmount = studentsList.filter(s => s.fee_paid).reduce((sum, s) => sum + (s.total_amount || 0), 0);
+    const unpaidAmount = totalAmount - paidAmount;
+    
+    setFeeStats({
+      total,
+      paid,
+      unpaid,
+      totalAmount,
+      paidAmount,
+      unpaidAmount
+    });
   };
 
   // Auto-assign teacher when class is selected
@@ -107,6 +137,16 @@ export default function StudentDetails() {
     }
   };
 
+  // Auto-calculate total when fee or kit changes
+  const handleFeeChange = (field, value) => {
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      const fee = parseFloat(newData.fee_amount) || 0;
+      const kit = parseFloat(newData.kit_charges) || 0;
+      return newData;
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -129,6 +169,11 @@ export default function StudentDetails() {
         transport_type: formData.transport_type,
         vehicle_id: formData.transport_type === 'Cab' ? formData.vehicle_id : null,
         status: formData.status,
+        fee_amount: parseFloat(formData.fee_amount) || 0,
+        kit_charges: parseFloat(formData.kit_charges) || 0,
+        fee_paid: formData.fee_paid,
+        payment_date: formData.fee_paid ? formData.payment_date : null,
+        payment_mode: formData.payment_mode,
         documents: {
           birth_certificate: formData.birth_certificate,
           aadhar_card: formData.aadhar_card,
@@ -187,6 +232,11 @@ export default function StudentDetails() {
       transport_type: student.transport_type || 'Walker',
       vehicle_id: student.vehicle_id?._id || student.vehicle_id || '',
       status: student.status || 'Active',
+      fee_amount: student.fee_amount || '',
+      kit_charges: student.kit_charges || '',
+      fee_paid: student.fee_paid || false,
+      payment_date: student.payment_date ? student.payment_date.split('T')[0] : '',
+      payment_mode: student.payment_mode || 'Cash',
       birth_certificate: student.documents?.birth_certificate || null,
       aadhar_card: student.documents?.aadhar_card || null,
       parent_aadhar_front: student.documents?.parent_aadhar_front || null,
@@ -214,6 +264,11 @@ export default function StudentDetails() {
       transport_type: 'Walker',
       vehicle_id: '',
       status: 'Active',
+      fee_amount: '',
+      kit_charges: '',
+      fee_paid: false,
+      payment_date: '',
+      payment_mode: 'Cash',
       birth_certificate: null,
       aadhar_card: null,
       parent_aadhar_front: null,
@@ -299,6 +354,11 @@ export default function StudentDetails() {
     );
   }
 
+  // Calculate total fee + kit for display
+  const getTotalAmount = (student) => {
+    return (student.fee_amount || 0) + (student.kit_charges || 0);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50">
       <div className="p-6 md:p-8">
@@ -311,7 +371,7 @@ export default function StudentDetails() {
               </h1>
               <p className="text-gray-600 mt-2 flex items-center gap-2">
                 <Users size={18} className="text-purple-500" />
-                Class-wise student management with complete documentation
+                Class-wise student management with complete documentation and fee tracking
               </p>
             </div>
             <button
@@ -326,6 +386,58 @@ export default function StudentDetails() {
             </button>
           </div>
         </div>
+
+        {/* Fee Summary Cards */}
+        {feeStats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <DollarSign className="text-white" size={20} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Total Amount</p>
+                  <p className="text-2xl font-bold text-gray-800">₹{feeStats.totalAmount.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 border border-green-100 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                  <CheckCircle className="text-white" size={20} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Paid Amount</p>
+                  <p className="text-2xl font-bold text-green-600">₹{feeStats.paidAmount.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-2xl p-5 border border-red-100 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center">
+                  <XCircle className="text-white" size={20} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Unpaid Amount</p>
+                  <p className="text-2xl font-bold text-red-600">₹{feeStats.unpaidAmount.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-100 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                  <Users className="text-white" size={20} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Fee Status</p>
+                  <p className="text-lg font-bold text-gray-800">
+                    <span className="text-green-600">{feeStats.paid}</span> / <span className="text-red-600">{feeStats.unpaid}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -500,6 +612,31 @@ export default function StudentDetails() {
                           <Mail size={10} /> {student.parent_email}
                           <Phone size={10} className="ml-2" /> {student.parent_phone}
                         </div>
+                      </div>
+
+                      {/* Fee Information */}
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                          <DollarSign size={10} />
+                          Fee Details
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs text-gray-600">Fee: ₹{student.fee_amount || 0}</span>
+                            <span className="text-xs text-gray-600 ml-2">Kit: ₹{student.kit_charges || 0}</span>
+                            <span className="text-xs font-semibold text-purple-600 ml-2">Total: ₹{getTotalAmount(student)}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            student.fee_paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {student.fee_paid ? 'Paid' : 'Unpaid'}
+                          </span>
+                        </div>
+                        {student.fee_paid && student.payment_date && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Paid on: {new Date(student.payment_date).toLocaleDateString()} • {student.payment_mode}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between">
@@ -693,7 +830,6 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Rest of the form remains the same */}
                 {/* Parent Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -762,6 +898,94 @@ export default function StudentDetails() {
                         placeholder="Full address"
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Fee and Charges */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <DollarSign size={18} className="text-purple-600" />
+                    Fee & Charges
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fee Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.fee_amount}
+                        onChange={(e) => handleFeeChange('fee_amount', e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Enter fee amount"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Kit Charges (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.kit_charges}
+                        onChange={(e) => handleFeeChange('kit_charges', e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Enter kit charges"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Total Amount (₹)
+                      </label>
+                      <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-700 font-semibold">
+                        ₹{(parseFloat(formData.fee_amount) || 0) + (parseFloat(formData.kit_charges) || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fee Status
+                      </label>
+                      <select
+                        value={formData.fee_paid ? 'paid' : 'unpaid'}
+                        onChange={(e) => setFormData({ ...formData, fee_paid: e.target.value === 'paid' })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="unpaid">Unpaid</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                    </div>
+                    {formData.fee_paid && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Payment Date
+                          </label>
+                          <input
+                            type="date"
+                            value={formData.payment_date}
+                            onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Payment Mode
+                          </label>
+                          <select
+                            value={formData.payment_mode}
+                            onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          >
+                            {PAYMENT_MODES.map(mode => (
+                              <option key={mode} value={mode}>{mode}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

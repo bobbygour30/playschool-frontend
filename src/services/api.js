@@ -1,3 +1,4 @@
+// services/api.js
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -18,6 +19,26 @@ export const getStudentClassStats = () => api.get('/students/stats/class-wise');
 export const createStudent = (data) => api.post('/students', data);
 export const updateStudent = (id, data) => api.put(`/students/${id}`, data);
 export const deleteStudent = (id) => api.delete(`/students/${id}`);
+
+// ==================== STUDENT FEE MANAGEMENT ====================
+export const updateStudentFee = (id, data) => api.patch(`/students/${id}/fee`, data);
+export const getFeeSummary = () => api.get('/students/stats/fee-summary');
+
+// Fee status helpers
+export const markFeePaid = (id, paymentData) => {
+  return api.patch(`/students/${id}/fee`, {
+    fee_paid: true,
+    payment_date: paymentData?.payment_date || new Date().toISOString().split('T')[0],
+    payment_mode: paymentData?.payment_mode || 'Cash'
+  });
+};
+
+export const markFeeUnpaid = (id) => {
+  return api.patch(`/students/${id}/fee`, {
+    fee_paid: false,
+    payment_date: null
+  });
+};
 
 // ==================== STAFF ====================
 export const getStaff = () => api.get('/staff');
