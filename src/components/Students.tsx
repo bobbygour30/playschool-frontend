@@ -5,7 +5,8 @@ import {
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
-  DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2
+  DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
+  Dropbox
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
 
@@ -19,6 +20,7 @@ const CLASSES = [
 
 const SECTIONS = ['A', 'B', 'C', 'D'];
 const PAYMENT_MODES = ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Cheque'];
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
@@ -37,6 +39,7 @@ export default function StudentDetails() {
     name: '',
     date_of_birth: '',
     gender: 'Male',
+    blood_group: '',
     class_id: '',
     section: 'A',
     assigned_teacher_id: '',
@@ -51,8 +54,14 @@ export default function StudentDetails() {
     transport_type: 'Walker',
     vehicle_id: '',
     status: 'Active',
-    fee_amount: '',
-    kit_charges: '',
+    // New fee fields
+    registration_fee: '',
+    admission_fee: '',
+    tuition_fee: '',
+    activity_fee: '',
+    kit_fee: '',
+    cab_fee: '',
+    camera_fee: '',
     fee_paid: false,
     payment_date: '',
     payment_mode: 'Cash',
@@ -83,7 +92,6 @@ export default function StudentDetails() {
       setTeachers(allStaff.filter(s => s.role === 'Teacher' && s.status === 'Active'));
       setVehicles((vehiclesRes.data || []).filter(v => v.status === 'Active'));
       
-      // Calculate fee stats
       calculateFeeStats(studentsRes.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -111,11 +119,9 @@ export default function StudentDetails() {
     });
   };
 
-  // Auto-assign teacher when class is selected
   const handleClassChange = (classId) => {
     setFormData(prev => ({ ...prev, class_id: classId }));
     
-    // Find teacher assigned to this class
     const matchingTeacher = teachers.find(teacher => 
       teacher.assigned_class_id && teacher.assigned_class_id._id === classId
     );
@@ -138,29 +144,46 @@ export default function StudentDetails() {
     }
   };
 
-  // Auto-calculate total when fee or kit changes
-  const handleFeeChange = (field, value) => {
-    setFormData(prev => {
-      const newData = { ...prev, [field]: value };
-      const fee = parseFloat(newData.fee_amount) || 0;
-      const kit = parseFloat(newData.kit_charges) || 0;
-      return newData;
-    });
+  const calculateTotalFee = (data) => {
+    const reg = parseFloat(data.registration_fee) || 0;
+    const adm = parseFloat(data.admission_fee) || 0;
+    const tui = parseFloat(data.tuition_fee) || 0;
+    const act = parseFloat(data.activity_fee) || 0;
+    const kit = parseFloat(data.kit_fee) || 0;
+    const cab = parseFloat(data.cab_fee) || 0;
+    const cam = parseFloat(data.camera_fee) || 0;
+    return reg + adm + tui + act + kit + cab + cam;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Prevent double submission
     if (isSubmitting) return;
+    
+    // Validate mandatory documents
+    if (!formData.birth_certificate) {
+      alert('Birth Certificate is mandatory. Please upload.');
+      return;
+    }
+    if (!formData.parent_aadhar_front) {
+      alert('Parent Aadhar (Front) is mandatory. Please upload.');
+      return;
+    }
+    if (!formData.parent_aadhar_back) {
+      alert('Parent Aadhar (Back) is mandatory. Please upload.');
+      return;
+    }
     
     try {
       setIsSubmitting(true);
+      
+      const totalAmount = calculateTotalFee(formData);
       
       const studentData = {
         name: formData.name,
         date_of_birth: formData.date_of_birth,
         gender: formData.gender,
+        blood_group: formData.blood_group,
         class_id: formData.class_id,
         section: formData.section,
         assigned_teacher_id: formData.assigned_teacher_id || null,
@@ -175,8 +198,15 @@ export default function StudentDetails() {
         transport_type: formData.transport_type,
         vehicle_id: formData.transport_type === 'Cab' ? formData.vehicle_id : null,
         status: formData.status,
-        fee_amount: parseFloat(formData.fee_amount) || 0,
-        kit_charges: parseFloat(formData.kit_charges) || 0,
+        // Fee fields
+        registration_fee: parseFloat(formData.registration_fee) || 0,
+        admission_fee: parseFloat(formData.admission_fee) || 0,
+        tuition_fee: parseFloat(formData.tuition_fee) || 0,
+        activity_fee: parseFloat(formData.activity_fee) || 0,
+        kit_fee: parseFloat(formData.kit_fee) || 0,
+        cab_fee: parseFloat(formData.cab_fee) || 0,
+        camera_fee: parseFloat(formData.camera_fee) || 0,
+        total_amount: totalAmount,
         fee_paid: formData.fee_paid,
         payment_date: formData.fee_paid ? formData.payment_date : null,
         payment_mode: formData.payment_mode,
@@ -226,6 +256,7 @@ export default function StudentDetails() {
       name: student.name || '',
       date_of_birth: student.date_of_birth ? student.date_of_birth.split('T')[0] : '',
       gender: student.gender || 'Male',
+      blood_group: student.blood_group || '',
       class_id: student.class_id || '',
       section: student.section || 'A',
       assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
@@ -240,8 +271,13 @@ export default function StudentDetails() {
       transport_type: student.transport_type || 'Walker',
       vehicle_id: student.vehicle_id?._id || student.vehicle_id || '',
       status: student.status || 'Active',
-      fee_amount: student.fee_amount || '',
-      kit_charges: student.kit_charges || '',
+      registration_fee: student.registration_fee || '',
+      admission_fee: student.admission_fee || '',
+      tuition_fee: student.tuition_fee || '',
+      activity_fee: student.activity_fee || '',
+      kit_fee: student.kit_fee || '',
+      cab_fee: student.cab_fee || '',
+      camera_fee: student.camera_fee || '',
       fee_paid: student.fee_paid || false,
       payment_date: student.payment_date ? student.payment_date.split('T')[0] : '',
       payment_mode: student.payment_mode || 'Cash',
@@ -258,6 +294,7 @@ export default function StudentDetails() {
       name: '',
       date_of_birth: '',
       gender: 'Male',
+      blood_group: '',
       class_id: '',
       section: 'A',
       assigned_teacher_id: '',
@@ -272,8 +309,13 @@ export default function StudentDetails() {
       transport_type: 'Walker',
       vehicle_id: '',
       status: 'Active',
-      fee_amount: '',
-      kit_charges: '',
+      registration_fee: '',
+      admission_fee: '',
+      tuition_fee: '',
+      activity_fee: '',
+      kit_fee: '',
+      cab_fee: '',
+      camera_fee: '',
       fee_paid: false,
       payment_date: '',
       payment_mode: 'Cash',
@@ -336,12 +378,22 @@ export default function StudentDetails() {
     return vehicle ? vehicle.vehicle_number : 'N/A';
   };
 
-  // Get teacher for a specific class (for display)
   const getTeacherForClass = (classId, section) => {
     const teacher = teachers.find(t => 
       t.assigned_class_id?._id === classId || t.assigned_class_id === classId
     );
     return teacher ? teacher.name : 'Not Assigned';
+  };
+
+  const getTotalFee = (student) => {
+    const reg = student.registration_fee || 0;
+    const adm = student.admission_fee || 0;
+    const tui = student.tuition_fee || 0;
+    const act = student.activity_fee || 0;
+    const kit = student.kit_fee || 0;
+    const cab = student.cab_fee || 0;
+    const cam = student.camera_fee || 0;
+    return reg + adm + tui + act + kit + cab + cam;
   };
 
   const stats = {
@@ -362,11 +414,6 @@ export default function StudentDetails() {
       </div>
     );
   }
-
-  // Calculate total fee + kit for display
-  const getTotalAmount = (student) => {
-    return (student.fee_amount || 0) + (student.kit_charges || 0);
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50">
@@ -591,6 +638,11 @@ export default function StudentDetails() {
                             <h3 className="font-bold text-lg">{student.name}</h3>
                             <p className="text-xs text-white/80 flex items-center gap-2">
                               {student.gender} • {new Date(student.date_of_birth).toLocaleDateString()}
+                              {student.blood_group && (
+                                <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                                  {student.blood_group}
+                                </span>
+                              )}
                               <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
                                 Section {student.section || 'A'}
                               </span>
@@ -623,18 +675,23 @@ export default function StudentDetails() {
                         </div>
                       </div>
 
-                      {/* Fee Information */}
+                      {/* Fee Information - Updated with all fee types */}
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
                         <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                           <DollarSign size={10} />
-                          Fee Details
+                          Fee Breakdown
                         </p>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs text-gray-600">Fee: ₹{student.fee_amount || 0}</span>
-                            <span className="text-xs text-gray-600 ml-2">Kit: ₹{student.kit_charges || 0}</span>
-                            <span className="text-xs font-semibold text-purple-600 ml-2">Total: ₹{getTotalAmount(student)}</span>
-                          </div>
+                        <div className="grid grid-cols-2 gap-1 text-xs">
+                          <span className="text-gray-600">Registration: ₹{student.registration_fee || 0}</span>
+                          <span className="text-gray-600">Admission: ₹{student.admission_fee || 0}</span>
+                          <span className="text-gray-600">Tuition: ₹{student.tuition_fee || 0}</span>
+                          <span className="text-gray-600">Activity: ₹{student.activity_fee || 0}</span>
+                          <span className="text-gray-600">Kit: ₹{student.kit_fee || 0}</span>
+                          <span className="text-gray-600">Cab: ₹{student.cab_fee || 0}</span>
+                          <span className="text-gray-600">Camera: ₹{student.camera_fee || 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1 pt-1 border-t border-blue-200">
+                          <span className="text-xs font-semibold text-purple-600">Total: ₹{getTotalFee(student)}</span>
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                             student.fee_paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                           }`}>
@@ -738,7 +795,7 @@ export default function StudentDetails() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Student Name *
+                        Student Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -752,7 +809,7 @@ export default function StudentDetails() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Date of Birth *
+                        Date of Birth <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="date"
@@ -764,7 +821,9 @@ export default function StudentDetails() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Gender *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Gender <span className="text-red-500">*</span>
+                      </label>
                       <select
                         required
                         value={formData.gender}
@@ -777,7 +836,26 @@ export default function StudentDetails() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Class *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Blood Group <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.blood_group}
+                        onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select Blood Group</option>
+                        {BLOOD_GROUPS.map(bg => (
+                          <option key={bg} value={bg}>{bg}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Class <span className="text-red-500">*</span>
+                      </label>
                       <select
                         required
                         value={formData.class_id}
@@ -795,7 +873,7 @@ export default function StudentDetails() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Section *
+                        Section <span className="text-red-500">*</span>
                       </label>
                       <select
                         required
@@ -812,7 +890,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Staff Assignment - Only Teacher now */}
+                {/* Staff Assignment */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <UserCheck size={18} className="text-purple-600" />
@@ -841,11 +919,6 @@ export default function StudentDetails() {
                         ⚠️ No teacher assigned to this class. Please select a teacher manually.
                       </p>
                     )}
-                    {formData.class_id && formData.assigned_teacher_id && (
-                      <p className="text-xs text-green-500 mt-1">
-                        ✅ Teacher assigned successfully
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -858,7 +931,7 @@ export default function StudentDetails() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Name *
+                        Parent Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -871,7 +944,7 @@ export default function StudentDetails() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Email *
+                        Parent Email <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="email"
@@ -884,7 +957,7 @@ export default function StudentDetails() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Phone *
+                        Parent Phone <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="tel"
@@ -910,7 +983,7 @@ export default function StudentDetails() {
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Address *
+                        Address <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         required
@@ -925,41 +998,125 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Fee and Charges */}
+                {/* Fee and Charges - Updated with all fee types */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <DollarSign size={18} className="text-purple-600" />
                     Fee & Charges
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Fee Amount (₹)
+                        Registration Fee (₹) <span className="text-red-500">*</span>
+                        <span className="text-xs text-gray-400 ml-1">(One time)</span>
                       </label>
                       <input
-                        type="number"
+                         
                         min="0"
                         step="0.01"
-                        value={formData.fee_amount}
-                        onChange={(e) => handleFeeChange('fee_amount', e.target.value)}
+                        required
+                        value={formData.registration_fee}
+                        onChange={(e) => setFormData({ ...formData, registration_fee: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Enter fee amount"
+                        placeholder="Enter registration fee"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Kit Charges (₹)
+                        Admission Fee (₹) <span className="text-red-500">*</span>
+                        <span className="text-xs text-gray-400 ml-1">(One time)</span>
                       </label>
                       <input
-                        type="number"
+                         
                         min="0"
                         step="0.01"
-                        value={formData.kit_charges}
-                        onChange={(e) => handleFeeChange('kit_charges', e.target.value)}
+                        required
+                        value={formData.admission_fee}
+                        onChange={(e) => setFormData({ ...formData, admission_fee: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Enter kit charges"
+                        placeholder="Enter admission fee"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tuition Fee (₹)
+                        <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
+                      </label>
+                      <input
+                         
+                        min="0"
+                        step="0.01"
+                        value={formData.tuition_fee}
+                        onChange={(e) => setFormData({ ...formData, tuition_fee: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter tuition fee"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Activity Fee (₹)
+                        <span className="text-xs text-gray-400 ml-1">(Annual)</span>
+                      </label>
+                      <input
+                         
+                        min="0"
+                        step="0.01"
+                        value={formData.activity_fee}
+                        onChange={(e) => setFormData({ ...formData, activity_fee: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter activity fee"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Kit Fee (₹)
+                        <span className="text-xs text-gray-400 ml-1">(Annual)</span>
+                      </label>
+                      <input
+                         
+                        min="0"
+                        step="0.01"
+                        value={formData.kit_fee}
+                        onChange={(e) => setFormData({ ...formData, kit_fee: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter kit fee"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cab Fee (₹)
+                        <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
+                      </label>
+                      <input
+                         
+                        min="0"
+                        step="0.01"
+                        value={formData.cab_fee}
+                        onChange={(e) => setFormData({ ...formData, cab_fee: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter cab fee"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Camera Fee (₹)
+                        <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
+                      </label>
+                      <input
+                         
+                        min="0"
+                        step="0.01"
+                        value={formData.camera_fee}
+                        onChange={(e) => setFormData({ ...formData, camera_fee: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter camera fee"
                       />
                     </div>
                     <div>
@@ -967,7 +1124,7 @@ export default function StudentDetails() {
                         Total Amount (₹)
                       </label>
                       <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-700 font-semibold">
-                        ₹{(parseFloat(formData.fee_amount) || 0) + (parseFloat(formData.kit_charges) || 0)}
+                        ₹{calculateTotalFee(formData)}
                       </div>
                     </div>
                     <div>
@@ -1027,7 +1184,7 @@ export default function StudentDetails() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Transport Type *
+                        Transport Type <span className="text-red-500">*</span>
                       </label>
                       <select
                         required
@@ -1062,7 +1219,7 @@ export default function StudentDetails() {
                     )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Emergency Contact *
+                        Emergency Contact <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="tel"
@@ -1074,7 +1231,9 @@ export default function StudentDetails() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status <span className="text-red-500">*</span>
+                      </label>
                       <select
                         required
                         value={formData.status}
@@ -1103,26 +1262,28 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Documents Upload */}
+                {/* Documents Upload - Clean mandatory indication with red asterisk */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Upload size={18} className="text-purple-600" />
                     Documents Upload
+                    <span className="text-xs text-gray-400 ml-2">(* Mandatory)</span>
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Birth Certificate
+                        Birth Certificate <span className="text-red-500">*</span>
                       </label>
                       <div className="flex items-center gap-2">
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
+                          required={!editingStudent}
                           onChange={(e) => handleFileUpload(e, 'birth_certificate')}
                           disabled={isSubmitting}
                           className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
-                        {formData.birth_certificate && <FileText size={20} className="text-green-600" />}
+                        {formData.birth_certificate && <CheckCircle size={20} className="text-green-600" />}
                       </div>
                     </div>
                     <div>
@@ -1137,40 +1298,45 @@ export default function StudentDetails() {
                           disabled={isSubmitting}
                           className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
-                        {formData.aadhar_card && <FileText size={20} className="text-green-600" />}
+                        {formData.aadhar_card && <CheckCircle size={20} className="text-green-600" />}
                       </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Aadhar (Front)
+                        Parent Aadhar (Front) <span className="text-red-500">*</span>
                       </label>
                       <div className="flex items-center gap-2">
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
+                          required={!editingStudent}
                           onChange={(e) => handleFileUpload(e, 'parent_aadhar_front')}
                           disabled={isSubmitting}
                           className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
-                        {formData.parent_aadhar_front && <FileText size={20} className="text-green-600" />}
+                        {formData.parent_aadhar_front && <CheckCircle size={20} className="text-green-600" />}
                       </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Aadhar (Back)
+                        Parent Aadhar (Back) <span className="text-red-500">*</span>
                       </label>
                       <div className="flex items-center gap-2">
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
+                          required={!editingStudent}
                           onChange={(e) => handleFileUpload(e, 'parent_aadhar_back')}
                           disabled={isSubmitting}
                           className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
-                        {formData.parent_aadhar_back && <FileText size={20} className="text-green-600" />}
+                        {formData.parent_aadhar_back && <CheckCircle size={20} className="text-green-600" />}
                       </div>
                     </div>
                   </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    <span className="text-red-500">*</span> Fields marked with asterisk are mandatory
+                  </p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
