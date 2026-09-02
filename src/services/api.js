@@ -80,28 +80,46 @@ export const uploadVendorDocument = (data) => api.post('/vendors/upload-document
 export const getAcademicClasses = () => api.get('/academics/classes');
 export const createAcademicClass = (data) => api.post('/academics/classes', data);
 
-// Assessments
+// Assessments - Updated with attachment support
 export const getAssessments = () => api.get('/academics/assessments');
 export const getAssessmentsByClass = (classId) => api.get(`/academics/assessments/${classId}`);
 export const getAssessment = (id) => api.get(`/academics/assessment/${id}`);
-export const createAssessment = (data) => api.post('/academics/assessments', data);
-export const updateAssessment = (id, data) => api.put(`/academics/assessment/${id}`, data);
+export const createAssessment = (data) => {
+  // data should include: class_id, title, date, subject, marks, status, description, attachments[]
+  return api.post('/academics/assessments', data);
+};
+export const updateAssessment = (id, data) => {
+  // data should include: title, date, subject, marks, status, description, attachments[]
+  return api.put(`/academics/assessment/${id}`, data);
+};
 export const deleteAssessment = (id) => api.delete(`/academics/assessment/${id}`);
 
-// Events
+// Events - Updated with attachment support
 export const getEvents = () => api.get('/academics/events');
 export const getEventsByClass = (classId) => api.get(`/academics/events/${classId}`);
 export const getEvent = (id) => api.get(`/academics/event/${id}`);
-export const createEvent = (data) => api.post('/academics/events', data);
-export const updateEvent = (id, data) => api.put(`/academics/event/${id}`, data);
+export const createEvent = (data) => {
+  // data should include: class_id, title, date, type, status, description, venue, attachments[]
+  return api.post('/academics/events', data);
+};
+export const updateEvent = (id, data) => {
+  // data should include: title, date, type, status, description, venue, attachments[]
+  return api.put(`/academics/event/${id}`, data);
+};
 export const deleteEvent = (id) => api.delete(`/academics/event/${id}`);
 
-// Culminations
+// Culminations - Updated with attachment support
 export const getCulminations = () => api.get('/academics/culminations');
 export const getCulminationsByClass = (classId) => api.get(`/academics/culminations/${classId}`);
 export const getCulmination = (id) => api.get(`/academics/culmination/${id}`);
-export const createCulmination = (data) => api.post('/academics/culminations', data);
-export const updateCulmination = (id, data) => api.put(`/academics/culmination/${id}`, data);
+export const createCulmination = (data) => {
+  // data should include: class_id, title, date, status, description, report, attachments[]
+  return api.post('/academics/culminations', data);
+};
+export const updateCulmination = (id, data) => {
+  // data should include: title, date, status, description, report, attachments[]
+  return api.put(`/academics/culmination/${id}`, data);
+};
 export const deleteCulmination = (id) => api.delete(`/academics/culmination/${id}`);
 
 // Academic Statistics
@@ -165,6 +183,50 @@ export const uploadGeneralDocument = async (file, type = 'general') => {
   });
   
   return response.data;
+};
+
+// ==================== FILE UPLOAD UTILITIES ====================
+/**
+ * Convert file to base64 string for API upload
+ */
+export const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+/**
+ * Format file size to human readable format
+ */
+export const formatFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
+
+/**
+ * Get file extension from filename
+ */
+export const getFileExtension = (filename) => {
+  return filename?.split('.').pop()?.toLowerCase() || '';
+};
+
+/**
+ * Check if file type is allowed
+ */
+export const isFileTypeAllowed = (fileType, allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/x-zip-compressed']) => {
+  return allowedTypes.includes(fileType);
+};
+
+/**
+ * Check if file size is within limit (default 10MB)
+ */
+export const isFileSizeValid = (fileSize, maxSize = 10 * 1024 * 1024) => {
+  return fileSize <= maxSize;
 };
 
 // ==================== DASHBOARD STATISTICS ====================

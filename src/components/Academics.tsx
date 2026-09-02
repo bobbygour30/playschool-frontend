@@ -30,6 +30,13 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+// File size formatter
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
+
 export default function Academics() {
   const [selectedClass, setSelectedClass] = useState('toddler');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -69,7 +76,7 @@ export default function Academics() {
     type: '',
     status: 'upcoming',
     report: '',
-    attachments: null
+    attachments: []
   });
   
   const [documentFormData, setDocumentFormData] = useState({
@@ -77,8 +84,13 @@ export default function Academics() {
     description: '',
     file: null,
     fileType: '',
-    fileName: ''
+    fileName: '',
+    fileSize: ''
   });
+
+  // File upload states
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -88,7 +100,6 @@ export default function Academics() {
     try {
       setLoading(true);
       
-      // Load assessments, events, culminations for the selected class
       const [assessmentsRes, eventsRes, culminationsRes, documentsRes, statsRes] = await Promise.all([
         getAssessmentsByClass(selectedClass),
         getEventsByClass(selectedClass),
@@ -102,7 +113,6 @@ export default function Academics() {
       setCulminations(culminationsRes.data || []);
       setDocuments(documentsRes.data || []);
       
-      // Update stats
       const classStats = statsRes.data?.[selectedClass] || {};
       setStats({
         totalAssessments: classStats.totalAssessments || 0,
@@ -110,7 +120,7 @@ export default function Academics() {
         totalEvents: classStats.totalEvents || 0,
         upcomingEvents: classStats.upcomingEvents || 0,
         totalDocuments: classStats.totalDocuments || 0,
-        averageScore: 0 // Calculate from assessments
+        averageScore: 0
       });
       
     } catch (error) {
@@ -124,17 +134,50 @@ export default function Academics() {
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size exceeds 10MB limit. Please choose a smaller file.');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setDocumentFormData({
           ...documentFormData,
           file: reader.result,
           fileName: file.name,
-          fileType: file.type
+          fileType: file.type,
+          fileSize: file.size
         });
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // Handle file upload for assessments, events, culminations
+  const handleAttachmentUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size exceeds 10MB limit. Please choose a smaller file.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadedFiles(prev => [...prev, {
+          file: reader.result,
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size
+        }]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeAttachment = (index) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDocumentSubmit = async (e) => {
@@ -148,6 +191,7 @@ export default function Academics() {
         file: documentFormData.file,
         file_name: documentFormData.fileName,
         file_type: documentFormData.fileType,
+        file_size: documentFormData.fileSize
       };
       
       await uploadAcademicDocument(documentData);
@@ -158,9 +202,10 @@ export default function Academics() {
         description: '',
         file: null,
         fileType: '',
-        fileName: ''
+        fileName: '',
+        fileSize: ''
       });
-      loadData(); // Reload documents
+      loadData();
     } catch (error) {
       console.error('Error uploading document:', error);
       alert('Failed to upload document. Please try again.');
@@ -172,7 +217,7 @@ export default function Academics() {
       try {
         await deleteAcademicDocument(docId);
         alert('Document deleted successfully!');
-        loadData(); // Reload documents
+        loadData();
       } catch (error) {
         console.error('Error deleting document:', error);
         alert('Failed to delete document. Please try again.');
@@ -186,6 +231,7 @@ export default function Academics() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setUploading(true);
     try {
       const itemData = {
         class_id: selectedClass,
@@ -193,12 +239,14 @@ export default function Academics() {
         date: formData.date,
         description: formData.description,
         status: formData.status,
+        attachments: uploadedFiles.map(f => f.file),
         ...(modalType === 'assessment' && {
           subject: formData.subject,
           marks: formData.marks || 'Pending'
         }),
         ...(modalType === 'event' && {
-          type: formData.type
+          type: formData.type,
+          venue: formData.venue || ''
         }),
         ...(modalType === 'culmination' && {
           report: formData.report || ''
@@ -225,11 +273,13 @@ export default function Academics() {
         alert(`${modalType} added successfully!`);
       }
       
-      loadData(); // Reload data
+      loadData();
       resetForm();
     } catch (error) {
       console.error('Error saving:', error);
       alert('Failed to save. Please try again.');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -244,7 +294,7 @@ export default function Academics() {
           await deleteCulmination(itemId);
         }
         alert(`${section.slice(0, -1)} deleted successfully!`);
-        loadData(); // Reload data
+        loadData();
       } catch (error) {
         console.error('Error deleting:', error);
         alert('Failed to delete. Please try again.');
@@ -264,8 +314,21 @@ export default function Academics() {
       type: item.type || '',
       status: item.status || 'upcoming',
       report: item.report || '',
-      attachments: null
+      venue: item.venue || '',
+      attachments: []
     });
+    // Load existing attachments
+    if (item.attachments && item.attachments.length > 0) {
+      setUploadedFiles(item.attachments.map(url => ({
+        file: url,
+        fileName: url.split('/').pop() || 'attachment',
+        fileType: 'existing',
+        fileSize: 0,
+        isExisting: true
+      })));
+    } else {
+      setUploadedFiles([]);
+    }
     setShowModal(true);
   };
 
@@ -279,8 +342,10 @@ export default function Academics() {
       type: '',
       status: 'upcoming',
       report: '',
-      attachments: null
+      venue: '',
+      attachments: []
     });
+    setUploadedFiles([]);
     setEditingItem(null);
     setShowModal(false);
   };
@@ -306,7 +371,45 @@ export default function Academics() {
     if (fileType?.includes('pdf')) return <FileText size={16} className="text-red-500" />;
     if (fileType?.includes('image')) return <Image size={16} className="text-blue-500" />;
     if (fileType?.includes('zip')) return <Folder size={16} className="text-yellow-500" />;
+    if (fileType?.includes('word')) return <FileText size={16} className="text-blue-600" />;
+    if (fileType?.includes('excel')) return <FileText size={16} className="text-green-600" />;
     return <File size={16} className="text-gray-500" />;
+  };
+
+  // Render attachment preview
+  const renderAttachmentPreview = (file, index) => {
+    const isExisting = file.isExisting;
+    const fileUrl = isExisting ? file.file : file.file;
+    const fileName = file.fileName || 'attachment';
+    const fileSize = file.fileSize || 0;
+    const fileType = file.fileType || '';
+
+    return (
+      <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2 border border-gray-200">
+        {fileType?.includes('image') && !isExisting ? (
+          <img src={fileUrl} alt={fileName} className="w-12 h-12 object-cover rounded-lg" />
+        ) : (
+          <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+            {getFileIcon(fileType)}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-700 truncate">{fileName}</p>
+          {fileSize > 0 && (
+            <p className="text-xs text-gray-500">{formatFileSize(fileSize)}</p>
+          )}
+        </div>
+        {!isExisting && (
+          <button
+            type="button"
+            onClick={() => removeAttachment(index)}
+            className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-all"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -508,6 +611,8 @@ export default function Academics() {
                           <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                             <span>{doc.file_name}</span>
                             <span>•</span>
+                            <span>{doc.file_size ? formatFileSize(doc.file_size) : 'Unknown size'}</span>
+                            <span>•</span>
                             <span>{new Date(doc.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
@@ -557,6 +662,7 @@ export default function Academics() {
                   e.stopPropagation();
                   setModalType('assessment');
                   setEditingItem(null);
+                  setUploadedFiles([]);
                   setShowModal(true);
                 }}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all flex items-center gap-1"
@@ -577,6 +683,7 @@ export default function Academics() {
                   <button
                     onClick={() => {
                       setModalType('assessment');
+                      setUploadedFiles([]);
                       setShowModal(true);
                     }}
                     className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -592,7 +699,7 @@ export default function Academics() {
                       <div key={assessment._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
                               <h3 className="font-semibold text-gray-800">{assessment.title}</h3>
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${statusBadge.bg} ${statusBadge.text}`}>
                                 {statusBadge.icon}
@@ -614,6 +721,27 @@ export default function Academics() {
                                 Score: {assessment.marks}
                               </span>
                             </div>
+                            {/* Attachments Preview */}
+                            {assessment.attachments && assessment.attachments.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {assessment.attachments.map((url, idx) => {
+                                  const fileName = url.split('/').pop() || `file-${idx}`;
+                                  const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                                  return (
+                                    <a
+                                      key={idx}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all text-xs"
+                                    >
+                                      {isImage ? <Image size={12} className="text-blue-500" /> : <FileText size={12} className="text-gray-500" />}
+                                      <span className="max-w-[100px] truncate">{fileName}</span>
+                                    </a>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -660,6 +788,7 @@ export default function Academics() {
                   e.stopPropagation();
                   setModalType('event');
                   setEditingItem(null);
+                  setUploadedFiles([]);
                   setShowModal(true);
                 }}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all flex items-center gap-1"
@@ -680,6 +809,7 @@ export default function Academics() {
                   <button
                     onClick={() => {
                       setModalType('event');
+                      setUploadedFiles([]);
                       setShowModal(true);
                     }}
                     className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
@@ -732,6 +862,27 @@ export default function Academics() {
                             {statusBadge.label}
                           </span>
                         </div>
+                        {/* Attachments Preview */}
+                        {event.attachments && event.attachments.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {event.attachments.map((url, idx) => {
+                              const fileName = url.split('/').pop() || `file-${idx}`;
+                              const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                              return (
+                                <a
+                                  key={idx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all text-xs"
+                                >
+                                  {isImage ? <Image size={12} className="text-blue-500" /> : <FileText size={12} className="text-gray-500" />}
+                                  <span className="max-w-[100px] truncate">{fileName}</span>
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -762,6 +913,7 @@ export default function Academics() {
                   e.stopPropagation();
                   setModalType('culmination');
                   setEditingItem(null);
+                  setUploadedFiles([]);
                   setShowModal(true);
                 }}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all flex items-center gap-1"
@@ -782,6 +934,7 @@ export default function Academics() {
                   <button
                     onClick={() => {
                       setModalType('culmination');
+                      setUploadedFiles([]);
                       setShowModal(true);
                     }}
                     className="mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -797,7 +950,7 @@ export default function Academics() {
                       <div key={culmination._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
                               <h3 className="font-semibold text-gray-800">{culmination.title}</h3>
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${statusBadge.bg} ${statusBadge.text}`}>
                                 {statusBadge.icon}
@@ -817,6 +970,27 @@ export default function Academics() {
                                 </span>
                               )}
                             </div>
+                            {/* Attachments Preview */}
+                            {culmination.attachments && culmination.attachments.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {culmination.attachments.map((url, idx) => {
+                                  const fileName = url.split('/').pop() || `file-${idx}`;
+                                  const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                                  return (
+                                    <a
+                                      key={idx}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all text-xs"
+                                    >
+                                      {isImage ? <Image size={12} className="text-blue-500" /> : <FileText size={12} className="text-gray-500" />}
+                                      <span className="max-w-[100px] truncate">{fileName}</span>
+                                    </a>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -897,6 +1071,14 @@ export default function Academics() {
                     />
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Accepted formats: PDF, JPG, PNG, DOC, ZIP (Max 10MB)</p>
+                  {documentFormData.fileName && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">
+                      <FileText size={16} className="text-cyan-500" />
+                      <span>{documentFormData.fileName}</span>
+                      <span className="text-gray-400">•</span>
+                      <span>{formatFileSize(documentFormData.fileSize)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
@@ -996,23 +1178,37 @@ export default function Academics() {
                 )}
 
                 {modalType === 'event' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Event Type *
-                    </label>
-                    <select
-                      required
-                      value={formData.type}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="">Select Type</option>
-                      <option value="celebration">Celebration</option>
-                      <option value="event">Event</option>
-                      <option value="meeting">Meeting</option>
-                      <option value="ceremony">Ceremony</option>
-                    </select>
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Event Type *
+                      </label>
+                      <select
+                        required
+                        value={formData.type}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="">Select Type</option>
+                        <option value="celebration">Celebration</option>
+                        <option value="event">Event</option>
+                        <option value="meeting">Meeting</option>
+                        <option value="ceremony">Ceremony</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Venue
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.venue || ''}
+                        onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Enter venue location"
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div>
@@ -1059,6 +1255,30 @@ export default function Academics() {
                   </div>
                 )}
 
+                {/* File Upload Section */}
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Attachments
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip"
+                      onChange={handleAttachmentUpload}
+                      className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Accepted formats: PDF, JPG, PNG, DOC, XLS, ZIP (Max 10MB)</p>
+
+                  {/* Uploaded Files List */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-sm font-medium text-gray-600">Uploaded Files:</p>
+                      {uploadedFiles.map((file, index) => renderAttachmentPreview(file, index))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4">
                   <button
                     type="button"
@@ -1069,13 +1289,21 @@ export default function Academics() {
                   </button>
                   <button
                     type="submit"
+                    disabled={uploading}
                     className={`px-6 py-2 bg-gradient-to-r ${
                       modalType === 'assessment' ? 'from-blue-500 to-indigo-600' :
                       modalType === 'event' ? 'from-purple-500 to-pink-600' :
                       'from-green-500 to-emerald-600'
-                    } text-white rounded-xl hover:shadow-lg transition-all`}
+                    } text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-2`}
                   >
-                    {editingItem ? 'Update' : 'Add'} {modalType}
+                    {uploading ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        Uploading...
+                      </>
+                    ) : (
+                      editingItem ? 'Update' : 'Add'
+                    )} {modalType}
                   </button>
                 </div>
               </form>
