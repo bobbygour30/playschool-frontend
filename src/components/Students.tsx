@@ -21,6 +21,7 @@ const CLASSES = [
 const SECTIONS = ['A', 'B', 'C', 'D'];
 const PAYMENT_MODES = ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Cheque'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian'];
 
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
@@ -44,6 +45,7 @@ export default function StudentDetails() {
     section: 'A',
     assigned_teacher_id: '',
     parent_name: '',
+    parent_relationship: 'Mother',
     parent_email: '',
     parent_phone: '',
     parent_aadhar: '',
@@ -188,6 +190,7 @@ export default function StudentDetails() {
         section: formData.section,
         assigned_teacher_id: formData.assigned_teacher_id || null,
         parent_name: formData.parent_name,
+        parent_relationship: formData.parent_relationship,
         parent_email: formData.parent_email,
         parent_phone: formData.parent_phone,
         parent_aadhar: formData.parent_aadhar,
@@ -261,6 +264,7 @@ export default function StudentDetails() {
       section: student.section || 'A',
       assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
       parent_name: student.parent_name || '',
+      parent_relationship: student.parent_relationship || 'Mother',
       parent_email: student.parent_email || '',
       parent_phone: student.parent_phone || '',
       parent_aadhar: student.parent_aadhar || '',
@@ -299,6 +303,7 @@ export default function StudentDetails() {
       section: 'A',
       assigned_teacher_id: '',
       parent_name: '',
+      parent_relationship: 'Mother',
       parent_email: '',
       parent_phone: '',
       parent_aadhar: '',
@@ -669,6 +674,9 @@ export default function StudentDetails() {
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-xs text-gray-500 mb-1">Parent Information</p>
                         <p className="text-sm font-medium text-gray-800">{student.parent_name}</p>
+                        {student.parent_relationship && (
+                          <p className="text-xs text-gray-500">Relationship: {student.parent_relationship}</p>
+                        )}
                         <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
                           <Mail size={10} /> {student.parent_email}
                           <Phone size={10} className="ml-2" /> {student.parent_phone}
@@ -922,7 +930,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Parent Information */}
+                {/* Parent Information with Relationship Dropdown */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Users size={18} className="text-purple-600" />
@@ -940,7 +948,24 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter parent name"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Relationship with Student <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.parent_relationship}
+                        onChange={(e) => setFormData({ ...formData, parent_relationship: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        {RELATIONSHIP_TYPES.map(rel => (
+                          <option key={rel} value={rel}>{rel}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -953,6 +978,7 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, parent_email: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="parent@email.com"
                       />
                     </div>
                     <div>
@@ -966,6 +992,7 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter phone number"
                       />
                     </div>
                     <div>
@@ -1011,14 +1038,14 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(One time)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         required
                         value={formData.registration_fee}
                         onChange={(e) => setFormData({ ...formData, registration_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter registration fee"
                       />
                     </div>
@@ -1028,14 +1055,14 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(One time)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         required
                         value={formData.admission_fee}
                         onChange={(e) => setFormData({ ...formData, admission_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter admission fee"
                       />
                     </div>
@@ -1045,13 +1072,13 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         value={formData.tuition_fee}
                         onChange={(e) => setFormData({ ...formData, tuition_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter tuition fee"
                       />
                     </div>
@@ -1061,13 +1088,13 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(Annual)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         value={formData.activity_fee}
                         onChange={(e) => setFormData({ ...formData, activity_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter activity fee"
                       />
                     </div>
@@ -1077,13 +1104,13 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(Annual)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         value={formData.kit_fee}
                         onChange={(e) => setFormData({ ...formData, kit_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter kit fee"
                       />
                     </div>
@@ -1093,13 +1120,13 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         value={formData.cab_fee}
                         onChange={(e) => setFormData({ ...formData, cab_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter cab fee"
                       />
                     </div>
@@ -1109,13 +1136,13 @@ export default function StudentDetails() {
                         <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
                       </label>
                       <input
-                         
+                        type="number"
                         min="0"
                         step="0.01"
                         value={formData.camera_fee}
                         onChange={(e) => setFormData({ ...formData, camera_fee: e.target.value })}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter camera fee"
                       />
                     </div>
@@ -1228,6 +1255,7 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter emergency contact"
                       />
                     </div>
                     <div>
