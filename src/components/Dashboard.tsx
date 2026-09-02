@@ -323,7 +323,7 @@ export default function Dashboard() {
         </div>
 
         {/* Page Content */}
-        <div className="p-6 md:p-8">
+        <div className="">
           {renderPage()}
         </div>
       </main>
