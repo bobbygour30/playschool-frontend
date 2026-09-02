@@ -67,26 +67,26 @@ const StatCard = memo(function StatCard({ card }: { card: StatCardData }) {
 
   return (
     <div
-      className={`group relative bg-gradient-to-br ${card.bgGradient} rounded-xl border ${card.borderColor} p-3 transition-shadow duration-300 hover:shadow-lg overflow-hidden`}
+      className={`group relative bg-gradient-to-br ${card.bgGradient} rounded-xl border ${card.borderColor} p-4 transition-shadow duration-300 hover:shadow-lg overflow-hidden`}
     >
-      <div className="flex items-start justify-between mb-1">
-        <div className={`w-8 h-8 bg-gradient-to-r ${card.gradient} rounded-lg flex items-center justify-center shadow-sm`}>
-          <Icon className="text-white" size={16} strokeWidth={2.25} />
+      <div className="flex items-start justify-between mb-2">
+        <div className={`w-10 h-10 bg-gradient-to-r ${card.gradient} rounded-lg flex items-center justify-center shadow-sm`}>
+          <Icon className="text-white" size={20} strokeWidth={2.25} />
         </div>
-        <div className={`flex items-center gap-0.5 ${card.trendUp ? 'text-emerald-600' : 'text-red-500'} text-[10px] font-semibold`}>
-          <TrendingUp size={10} />
+        <div className={`flex items-center gap-0.5 ${card.trendUp ? 'text-emerald-600' : 'text-red-500'} text-xs font-semibold`}>
+          <TrendingUp size={12} />
           <span>{card.trend}</span>
         </div>
       </div>
 
-      <div className="flex items-baseline gap-1.5 mb-0.5">
-        <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-        <span className="text-[10px] text-gray-500">total</span>
+      <div className="flex items-baseline gap-2 mb-1">
+        <p className="text-3xl font-bold text-gray-900">{card.value}</p>
+        <span className="text-sm text-gray-500 font-medium">total</span>
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-[10px] text-gray-500">{card.subtext}</p>
-        <div className="w-12 h-1 bg-white/70 rounded-full overflow-hidden">
+        <p className="text-sm text-gray-600 font-medium">{card.subtext}</p>
+        <div className="w-16 h-1.5 bg-white/70 rounded-full overflow-hidden">
           <div
             className={`h-full bg-gradient-to-r ${card.gradient} rounded-full`}
             style={{ width: `${progress}%` }}
@@ -94,7 +94,7 @@ const StatCard = memo(function StatCard({ card }: { card: StatCardData }) {
         </div>
       </div>
 
-      <Icon className="absolute -bottom-1 -right-1 text-gray-900/5 group-hover:text-gray-900/10 transition-colors" size={48} strokeWidth={1.5} />
+      <Icon className="absolute -bottom-1 -right-1 text-gray-900/5 group-hover:text-gray-900/10 transition-colors" size={56} strokeWidth={1.5} />
     </div>
   );
 });
@@ -103,17 +103,17 @@ const FinanceCard = memo(function FinanceCard({ card }: { card: FinanceCardData 
   const Icon = card.icon;
   return (
     <div
-      className={`relative h-full flex flex-col justify-between bg-gradient-to-br ${card.bgGradient} rounded-xl border ${card.borderColor} p-3 transition-shadow duration-300 hover:shadow-lg overflow-hidden`}
+      className={`relative h-full flex flex-col justify-between bg-gradient-to-br ${card.bgGradient} rounded-xl border ${card.borderColor} p-4 transition-shadow duration-300 hover:shadow-lg overflow-hidden`}
     >
-      <div className={`w-8 h-8 bg-gradient-to-r ${card.gradient} rounded-lg flex items-center justify-center shadow-sm mb-1.5`}>
-        <Icon className="text-white" size={16} strokeWidth={2.25} />
+      <div className={`w-10 h-10 bg-gradient-to-r ${card.gradient} rounded-lg flex items-center justify-center shadow-sm mb-2`}>
+        <Icon className="text-white" size={20} strokeWidth={2.25} />
       </div>
       <div>
-        <h3 className="text-gray-600 text-[10px] font-medium mb-0.5">{card.title}</h3>
-        <p className="text-2xl font-bold text-gray-900 mb-0.5">{card.value}</p>
-        <p className="text-[10px] text-gray-500">{card.subtext}</p>
+        <h3 className="text-gray-600 text-sm font-semibold mb-1">{card.title}</h3>
+        <p className="text-3xl font-bold text-gray-900 mb-1">{card.value}</p>
+        <p className="text-sm text-gray-500 font-medium">{card.subtext}</p>
       </div>
-      <Icon className="absolute -bottom-1 -right-1 text-gray-900/5" size={48} strokeWidth={1.5} />
+      <Icon className="absolute -bottom-1 -right-1 text-gray-900/5" size={56} strokeWidth={1.5} />
     </div>
   );
 });
@@ -126,11 +126,11 @@ const QuickActionButton = memo(function QuickActionButton({
   return (
     <button
       onClick={onClick}
-      className={`group p-3 ${bgClass} rounded-xl transition-shadow duration-300 text-left hover:shadow-md`}
+      className={`group p-4 ${bgClass} rounded-xl transition-shadow duration-300 text-left hover:shadow-md`}
     >
-      <Icon className={`${colorClass} mb-1 group-hover:scale-110 transition-transform duration-200`} size={18} strokeWidth={2.25} />
-      <div className="font-semibold text-gray-800 text-sm">{label}</div>
-      <div className="text-[10px] text-gray-500">{sublabel}</div>
+      <Icon className={`${colorClass} mb-1.5 group-hover:scale-110 transition-transform duration-200`} size={22} strokeWidth={2.25} />
+      <div className="font-semibold text-gray-800 text-base">{label}</div>
+      <div className="text-xs text-gray-500">{sublabel}</div>
     </button>
   );
 });
@@ -293,13 +293,13 @@ export default function Overview({ onNavigate }: OverviewProps) {
         <div className="animate-pulse space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-28 bg-white/80 rounded-xl" />
+              <div key={i} className="h-32 bg-white/80 rounded-xl" />
             ))}
           </div>
-          <div className="h-40 bg-white/80 rounded-xl" />
+          <div className="h-44 bg-white/80 rounded-xl" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-40 bg-white/80 rounded-xl" />
+              <div key={i} className="h-44 bg-white/80 rounded-xl" />
             ))}
           </div>
         </div>
@@ -311,21 +311,21 @@ export default function Overview({ onNavigate }: OverviewProps) {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 p-4 md:p-6 space-y-4">
 
       {/* 1. Core stat cards: Students, Staff, Vendors, Vehicles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card) => (
           <StatCard key={card.title} card={card} />
         ))}
       </div>
 
       {/* 2. Quick Actions */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-            <Target size={14} className="text-white" />
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-5">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+            <Target size={18} className="text-white" />
           </div>
-          <h2 className="text-base font-bold text-gray-800">Quick Actions</h2>
+          <h2 className="text-lg font-bold text-gray-800">Quick Actions</h2>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <QuickActionButton
             icon={GraduationCap}
             label="Add Student"
@@ -362,27 +362,27 @@ export default function Overview({ onNavigate }: OverviewProps) {
       </div>
 
       {/* 3. Revenue, Pending Fees & Performance — aligned in a single row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         <FinanceCard card={financeCards[0]} />
         <FinanceCard card={financeCards[1]} />
 
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-4 flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
-              <Gauge size={14} className="text-white" />
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-5 flex flex-col">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+              <Gauge size={18} className="text-white" />
             </div>
-            <h2 className="text-base font-bold text-gray-800">Performance</h2>
+            <h2 className="text-lg font-bold text-gray-800">Performance</h2>
           </div>
-          <div className="space-y-2 flex-1">
+          <div className="space-y-3 flex-1">
             {metrics.map((m) => (
               <div key={m.label}>
-                <div className="flex justify-between mb-0.5">
-                  <span className="text-[10px] text-gray-600">{m.label}</span>
-                  <span className="text-[10px] font-semibold text-gray-800">{m.value}%</span>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-600">{m.label}</span>
+                  <span className="text-sm font-semibold text-gray-800">{m.value}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-1">
+                <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className={`bg-gradient-to-r ${m.gradient} h-1 rounded-full`}
+                    className={`bg-gradient-to-r ${m.gradient} h-2 rounded-full`}
                     style={{ width: `${m.value}%` }}
                   />
                 </div>
@@ -393,26 +393,26 @@ export default function Overview({ onNavigate }: OverviewProps) {
       </div>
 
       {/* Achievement banner */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-3">
-        <div className="flex items-center gap-2 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg">
-          <Award className="text-yellow-600 flex-shrink-0" size={18} />
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-4">
+        <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg">
+          <Award className="text-yellow-600 flex-shrink-0" size={22} />
           <div>
-            <div className="font-semibold text-gray-800 text-sm">Great achievement!</div>
-            <div className="text-[10px] text-gray-600">Enrollment up by 12% this month</div>
+            <div className="font-semibold text-gray-800 text-base">Great achievement!</div>
+            <div className="text-sm text-gray-600">Enrollment up by 12% this month</div>
           </div>
-          <Star className="text-yellow-500 ml-auto flex-shrink-0" size={16} />
+          <Star className="text-yellow-500 ml-auto flex-shrink-0" size={20} />
         </div>
       </div>
 
       {/* Recent Activity Feed */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-6 h-6 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
-            <Activity size={14} className="text-white" />
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200/50 p-5">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
+            <Activity size={18} className="text-white" />
           </div>
-          <h2 className="text-base font-bold text-gray-800">Recent Activity</h2>
+          <h2 className="text-lg font-bold text-gray-800">Recent Activity</h2>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {[
             { icon: Users, iconBg: 'bg-green-100', iconColor: 'text-green-600', text: 'New student enrolled', time: '2h ago', tag: 'Active', tagColor: 'text-green-600' },
             { icon: Wallet, iconBg: 'bg-blue-100', iconColor: 'text-blue-600', text: 'Fee payment received', time: '5h ago', tag: 'Completed', tagColor: 'text-blue-600' },
@@ -420,16 +420,16 @@ export default function Overview({ onNavigate }: OverviewProps) {
           ].map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.text} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg transition-colors duration-200">
-                <div className={`w-6 h-6 ${item.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
-                  <Icon size={12} className={item.iconColor} />
+              <div key={item.text} className="flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                <div className={`w-8 h-8 ${item.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
+                  <Icon size={16} className={item.iconColor} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-800">{item.text}</p>
-                  <p className="text-[10px] text-gray-500">{item.time}</p>
+                  <p className="text-sm font-medium text-gray-800">{item.text}</p>
+                  <p className="text-xs text-gray-500">{item.time}</p>
                 </div>
-                <span className={`text-[10px] font-semibold ${item.tagColor} flex items-center gap-0.5`}>
-                  {item.tag} <ArrowUpRight size={10} />
+                <span className={`text-xs font-semibold ${item.tagColor} flex items-center gap-0.5`}>
+                  {item.tag} <ArrowUpRight size={12} />
                 </span>
               </div>
             );
