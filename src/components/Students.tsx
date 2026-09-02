@@ -5,7 +5,7 @@ import {
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
-  DollarSign, CreditCard, Receipt, CheckCircle, XCircle
+  DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
 
@@ -32,6 +32,7 @@ export default function StudentDetails() {
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [feeStats, setFeeStats] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     date_of_birth: '',
@@ -150,7 +151,12 @@ export default function StudentDetails() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Prevent double submission
+    if (isSubmitting) return;
+    
     try {
+      setIsSubmitting(true);
+      
       const studentData = {
         name: formData.name,
         date_of_birth: formData.date_of_birth,
@@ -196,6 +202,8 @@ export default function StudentDetails() {
       console.error('Error saving student:', error);
       const errorMessage = error.response?.data?.message || 'Failed to save student. Please try again.';
       alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -276,6 +284,7 @@ export default function StudentDetails() {
     });
     setEditingStudent(null);
     setShowModal(false);
+    setIsSubmitting(false);
   };
 
   const getFilteredStudents = () => {
@@ -710,7 +719,11 @@ export default function StudentDetails() {
                 <h2 className="text-xl font-bold text-white">
                   {editingStudent ? 'Edit Student' : 'Add New Student'}
                 </h2>
-                <button onClick={resetForm} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
+                <button 
+                  onClick={resetForm} 
+                  disabled={isSubmitting}
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
+                >
                   <X size={24} />
                 </button>
               </div>
@@ -732,7 +745,8 @@ export default function StudentDetails() {
                         required
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter student name"
                       />
                     </div>
@@ -745,7 +759,8 @@ export default function StudentDetails() {
                         required
                         value={formData.date_of_birth}
                         onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                     <div>
@@ -754,7 +769,8 @@ export default function StudentDetails() {
                         required
                         value={formData.gender}
                         onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
@@ -766,7 +782,8 @@ export default function StudentDetails() {
                         required
                         value={formData.class_id}
                         onChange={(e) => handleClassChange(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Select Class</option>
                         {CLASSES.map((cls) => (
@@ -784,7 +801,8 @@ export default function StudentDetails() {
                         required
                         value={formData.section}
                         onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         {SECTIONS.map(section => (
                           <option key={section} value={section}>Section {section}</option>
@@ -807,7 +825,8 @@ export default function StudentDetails() {
                     <select
                       value={formData.assigned_teacher_id}
                       onChange={(e) => setFormData({ ...formData, assigned_teacher_id: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      disabled={isSubmitting}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Auto-assigned based on class</option>
                       {teachers.map((teacher) => (
@@ -846,7 +865,8 @@ export default function StudentDetails() {
                         required
                         value={formData.parent_name}
                         onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                     <div>
@@ -858,7 +878,8 @@ export default function StudentDetails() {
                         required
                         value={formData.parent_email}
                         onChange={(e) => setFormData({ ...formData, parent_email: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                     <div>
@@ -870,7 +891,8 @@ export default function StudentDetails() {
                         required
                         value={formData.parent_phone}
                         onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                     <div>
@@ -881,7 +903,8 @@ export default function StudentDetails() {
                         type="text"
                         value={formData.parent_aadhar}
                         onChange={(e) => setFormData({ ...formData, parent_aadhar: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="XXXX-XXXX-XXXX"
                       />
                     </div>
@@ -893,8 +916,9 @@ export default function StudentDetails() {
                         required
                         value={formData.address}
                         onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        disabled={isSubmitting}
                         rows={2}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Full address"
                       />
                     </div>
@@ -918,7 +942,8 @@ export default function StudentDetails() {
                         step="0.01"
                         value={formData.fee_amount}
                         onChange={(e) => handleFeeChange('fee_amount', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter fee amount"
                       />
                     </div>
@@ -932,7 +957,8 @@ export default function StudentDetails() {
                         step="0.01"
                         value={formData.kit_charges}
                         onChange={(e) => handleFeeChange('kit_charges', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter kit charges"
                       />
                     </div>
@@ -951,7 +977,8 @@ export default function StudentDetails() {
                       <select
                         value={formData.fee_paid ? 'paid' : 'unpaid'}
                         onChange={(e) => setFormData({ ...formData, fee_paid: e.target.value === 'paid' })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="unpaid">Unpaid</option>
                         <option value="paid">Paid</option>
@@ -967,7 +994,8 @@ export default function StudentDetails() {
                             type="date"
                             value={formData.payment_date}
                             onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            disabled={isSubmitting}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div>
@@ -977,7 +1005,8 @@ export default function StudentDetails() {
                           <select
                             value={formData.payment_mode}
                             onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            disabled={isSubmitting}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                           >
                             {PAYMENT_MODES.map(mode => (
                               <option key={mode} value={mode}>{mode}</option>
@@ -1004,7 +1033,8 @@ export default function StudentDetails() {
                         required
                         value={formData.transport_type}
                         onChange={(e) => setFormData({ ...formData, transport_type: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="Walker">Walker</option>
                         <option value="Cab">Cab</option>
@@ -1018,7 +1048,8 @@ export default function StudentDetails() {
                         <select
                           value={formData.vehicle_id}
                           onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         >
                           <option value="">Select Vehicle</option>
                           {vehicles.map((vehicle) => (
@@ -1038,7 +1069,8 @@ export default function StudentDetails() {
                         required
                         value={formData.emergency_contact}
                         onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                     <div>
@@ -1047,7 +1079,8 @@ export default function StudentDetails() {
                         required
                         value={formData.status}
                         onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
@@ -1061,9 +1094,10 @@ export default function StudentDetails() {
                       <textarea
                         value={formData.medical_info}
                         onChange={(e) => setFormData({ ...formData, medical_info: e.target.value })}
+                        disabled={isSubmitting}
                         rows={2}
                         placeholder="Allergies, medical conditions, etc."
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -1085,7 +1119,8 @@ export default function StudentDetails() {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileUpload(e, 'birth_certificate')}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                          disabled={isSubmitting}
+                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         {formData.birth_certificate && <FileText size={20} className="text-green-600" />}
                       </div>
@@ -1099,7 +1134,8 @@ export default function StudentDetails() {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileUpload(e, 'aadhar_card')}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                          disabled={isSubmitting}
+                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         {formData.aadhar_card && <FileText size={20} className="text-green-600" />}
                       </div>
@@ -1113,7 +1149,8 @@ export default function StudentDetails() {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileUpload(e, 'parent_aadhar_front')}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                          disabled={isSubmitting}
+                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         {formData.parent_aadhar_front && <FileText size={20} className="text-green-600" />}
                       </div>
@@ -1127,7 +1164,8 @@ export default function StudentDetails() {
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
                           onChange={(e) => handleFileUpload(e, 'parent_aadhar_back')}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                          disabled={isSubmitting}
+                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         {formData.parent_aadhar_back && <FileText size={20} className="text-green-600" />}
                       </div>
@@ -1139,15 +1177,28 @@ export default function StudentDetails() {
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                    disabled={isSubmitting}
+                    className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all"
+                    disabled={isSubmitting}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {editingStudent ? 'Update Student' : 'Add Student'}
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        <span>
+                          {editingStudent ? 'Updating Student...' : 'Creating Student...'}
+                        </span>
+                      </>
+                    ) : (
+                      <span>
+                        {editingStudent ? 'Update Student' : 'Add Student'}
+                      </span>
+                    )}
                   </button>
                 </div>
               </form>
