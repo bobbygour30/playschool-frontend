@@ -1000,4 +1000,4 @@ export default function ParentRegistration() {
       </div>
     </div>
   );
-}
+} e

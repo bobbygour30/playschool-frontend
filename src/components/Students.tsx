@@ -6,9 +6,9 @@ import {
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
   DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
-  Dropbox, File
+  Dropbox, File, ArrowUpCircle
 } from 'lucide-react';
-import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors } from '../services/api';
+import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors, promoteAllStudents } from '../services/api';
 
 // Class definitions
 const CLASSES = [
@@ -58,6 +58,9 @@ export default function StudentDetails() {
   const [editingStudent, setEditingStudent] = useState(null);
   const [feeStats, setFeeStats] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [isPromoting, setIsPromoting] = useState(false);
+  const [promotionAcademicYear, setPromotionAcademicYear] = useState('');
   
   // Track document changes - which documents have been updated
   const [documentChanges, setDocumentChanges] = useState({
@@ -168,6 +171,9 @@ export default function StudentDetails() {
     });
   };
 
+  // Strips non-digits and caps length at 10 — used for parent_phone and emergency_contact
+  const handleDigitInput = (value) => value.replace(/\D/g, '').slice(0, 10);
+
   const handleClassChange = (classId) => {
     setFormData(prev => ({ ...prev, class_id: classId }));
     
@@ -229,6 +235,16 @@ export default function StudentDetails() {
     e.preventDefault();
     
     if (isSubmitting) return;
+    
+    // Validate phone numbers
+    if (formData.parent_phone.length !== 10) {
+      alert('Parent Phone must be exactly 10 digits.');
+      return;
+    }
+    if (formData.emergency_contact.length !== 10) {
+      alert('Emergency Contact must be exactly 10 digits.');
+      return;
+    }
     
     // Validate mandatory documents
     const hasBirthCert = formData.birth_certificate || formData.birth_certificate_url;
@@ -341,6 +357,28 @@ export default function StudentDetails() {
         console.error('Error deleting student:', error);
         alert('Failed to delete student. Please try again.');
       }
+    }
+  };
+
+  const handlePromoteStudents = async () => {
+    try {
+      setIsPromoting(true);
+      const res = await promoteAllStudents(promotionAcademicYear.trim());
+      const { promoted, graduated, skipped } = res.data.results;
+      alert(
+        `Promotion complete!\n\n` +
+        `Promoted to next class: ${promoted}\n` +
+        `Graduated: ${graduated}\n` +
+        `Skipped (no standard class assigned): ${skipped}`
+      );
+      await loadData();
+      setShowPromoteModal(false);
+      setPromotionAcademicYear('');
+    } catch (error) {
+      console.error('Error promoting students:', error);
+      alert(error.response?.data?.message || 'Failed to promote students. Please try again.');
+    } finally {
+      setIsPromoting(false);
     }
   };
 
@@ -684,16 +722,28 @@ export default function StudentDetails() {
                 Class-wise student management with complete documentation and fee tracking
               </p>
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="group relative px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
-            >
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
-              <div className="flex items-center gap-2 relative">
-                <UserPlus size={20} />
-                <span className="font-semibold">Add New Student</span>
-              </div>
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPromoteModal(true)}
+                className="group relative px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
+              >
+                <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
+                <div className="flex items-center gap-2 relative">
+                  <ArrowUpCircle size={20} />
+                  <span className="font-semibold">Promote Students</span>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowModal(true)}
+                className="group relative px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
+              >
+                <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
+                <div className="flex items-center gap-2 relative">
+                  <UserPlus size={20} />
+                  <span className="font-semibold">Add New Student</span>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1044,6 +1094,82 @@ export default function StudentDetails() {
           );
         })}
 
+        {/* Promote Students Modal */}
+        {showPromoteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl">
+              <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <ArrowUpCircle size={20} /> Promote Students to Next Class
+                </h2>
+                <button
+                  onClick={() => !isPromoting && setShowPromoteModal(false)}
+                  disabled={isPromoting}
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
+                  <AlertCircle className="text-amber-500 flex-shrink-0" size={20} />
+                  <p className="text-sm text-amber-800">
+                    This will move every <strong>Active</strong> student to the next class:
+                    Toddler → Pre-Nursery → Nursery → KG-1. Students currently in
+                    <strong> KG-1</strong> will be marked <strong>Graduated</strong>.
+                    This action affects all students at once and cannot be undone automatically.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Academic Year (for record-keeping)
+                  </label>
+                  <input
+                    type="text"
+                    value={promotionAcademicYear}
+                    onChange={(e) => setPromotionAcademicYear(e.target.value)}
+                    placeholder="e.g. 2026-2027"
+                    disabled={isPromoting}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-100"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm text-gray-600 bg-gray-50 rounded-xl p-3">
+                  <div>Toddler → <strong>Pre-Nursery</strong></div>
+                  <div>Nursery → <strong>KG-1</strong></div>
+                  <div>Pre-Nursery → <strong>Nursery</strong></div>
+                  <div>KG-1 → <strong>Graduated</strong></div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setShowPromoteModal(false)}
+                    disabled={isPromoting}
+                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePromoteStudents}
+                    disabled={isPromoting}
+                    className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-70 flex items-center gap-2"
+                  >
+                    {isPromoting ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Promoting...
+                      </>
+                    ) : (
+                      'Confirm Promotion'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Add/Edit Student Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1256,12 +1382,19 @@ export default function StudentDetails() {
                       <input
                         type="tel"
                         required
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="\d{10}"
+                        title="Enter exactly 10 digits"
                         value={formData.parent_phone}
-                        onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, parent_phone: handleDigitInput(e.target.value) })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Enter phone number"
+                        placeholder="10-digit phone number"
                       />
+                      {formData.parent_phone && formData.parent_phone.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1556,12 +1689,19 @@ export default function StudentDetails() {
                       <input
                         type="tel"
                         required
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="\d{10}"
+                        title="Enter exactly 10 digits"
                         value={formData.emergency_contact}
-                        onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, emergency_contact: handleDigitInput(e.target.value) })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="Enter emergency contact"
+                        placeholder="10-digit emergency contact"
                       />
+                      {formData.emergency_contact && formData.emergency_contact.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

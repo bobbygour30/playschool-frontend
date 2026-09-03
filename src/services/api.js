@@ -19,6 +19,10 @@ export const getStudentClassStats = () => api.get('/students/stats/class-wise');
 export const createStudent = (data) => api.post('/students', data);
 export const updateStudent = (id, data) => api.put(`/students/${id}`, data);
 export const deleteStudent = (id) => api.delete(`/students/${id}`);
+// Bulk-promotes all Active students to the next class (KG-1 students graduate).
+// academicYear is optional, purely for the audit record (e.g. "2026-2027").
+export const promoteAllStudents = (academicYear) =>
+  api.post('/students/promote-all', { academic_year: academicYear });
 
 // ==================== STUDENT FEE MANAGEMENT ====================
 export const updateStudentFee = (id, data) => api.patch(`/students/${id}/fee`, data);
