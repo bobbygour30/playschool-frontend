@@ -495,33 +495,7 @@ export default function Finance() {
                 Manage fees collection, expenses, and staff salaries
               </p>
             </div>
-            <div className="flex gap-3 flex-wrap">
-              <button
-                onClick={syncAllStudentFees}
-                disabled={isSyncing}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSyncing ? (
-                  <>
-                    <RefreshCw size={18} className="animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={18} />
-                    Sync Student Fees
-                  </>
-                )}
-              </button>
-              <button className="px-4 py-2 bg-white rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2">
-                <Download size={18} />
-                Export Report
-              </button>
-              <button className="px-4 py-2 bg-white rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2">
-                <Printer size={18} />
-                Print
-              </button>
-            </div>
+            
           </div>
         </div>
 
