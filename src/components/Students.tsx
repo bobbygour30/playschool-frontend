@@ -6,9 +6,9 @@ import {
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
   DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
-  Dropbox
+  Dropbox, File
 } from 'lucide-react';
-import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff } from '../services/api';
+import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors } from '../services/api';
 
 // Class definitions
 const CLASSES = [
@@ -22,11 +22,33 @@ const SECTIONS = ['A', 'B', 'C', 'D'];
 const PAYMENT_MODES = ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Cheque'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian'];
+const TRANSPORT_TYPES = ['Walker', 'Cab', 'Bus'];
+
+// Helper to check if document is a URL (Cloudinary or other)
+const isDocumentUrl = (doc) => {
+  if (!doc) return false;
+  return doc.startsWith('http://') || doc.startsWith('https://') || doc.startsWith('data:');
+};
+
+// Helper to get file name from URL
+const getFileNameFromUrl = (url) => {
+  if (!url) return 'Document';
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    const parts = pathname.split('/');
+    const fileName = parts[parts.length - 1];
+    return fileName || 'Document';
+  } catch {
+    return 'Document';
+  }
+};
 
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,6 +58,15 @@ export default function StudentDetails() {
   const [editingStudent, setEditingStudent] = useState(null);
   const [feeStats, setFeeStats] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Track document changes - which documents have been updated
+  const [documentChanges, setDocumentChanges] = useState({
+    birth_certificate: false,
+    aadhar_card: false,
+    parent_aadhar_front: false,
+    parent_aadhar_back: false,
+  });
+
   const [formData, setFormData] = useState({
     name: '',
     date_of_birth: '',
@@ -55,6 +86,7 @@ export default function StudentDetails() {
     enrollment_date: new Date().toISOString().split('T')[0],
     transport_type: 'Walker',
     vehicle_id: '',
+    vendor_id: '',
     status: 'Active',
     // New fee fields
     registration_fee: '',
@@ -67,10 +99,15 @@ export default function StudentDetails() {
     fee_paid: false,
     payment_date: '',
     payment_mode: 'Cash',
+    // Document fields - store both file data and existing URLs
     birth_certificate: null,
+    birth_certificate_url: null,
     aadhar_card: null,
+    aadhar_card_url: null,
     parent_aadhar_front: null,
+    parent_aadhar_front_url: null,
     parent_aadhar_back: null,
+    parent_aadhar_back_url: null,
   });
 
   useEffect(() => {
@@ -80,11 +117,12 @@ export default function StudentDetails() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [studentsRes, classesRes, vehiclesRes, staffRes] = await Promise.all([
+      const [studentsRes, classesRes, vehiclesRes, staffRes, vendorsRes] = await Promise.all([
         getStudents(),
         getClasses(),
         getVehicles(),
         getStaff(),
+        getVendors(),
       ]);
 
       setStudents(studentsRes.data || []);
@@ -93,6 +131,15 @@ export default function StudentDetails() {
       const allStaff = staffRes.data || [];
       setTeachers(allStaff.filter(s => s.role === 'Teacher' && s.status === 'Active'));
       setVehicles((vehiclesRes.data || []).filter(v => v.status === 'Active'));
+      
+      const allVendors = vendorsRes.data || [];
+      // Filter vendors that have vehicle_number and are active
+      const activeVendorsWithVehicles = allVendors.filter(v => 
+        v.status === 'Active' && 
+        v.vehicle_number && 
+        v.vehicle_number.trim() !== ''
+      );
+      setVendors(activeVendorsWithVehicles);
       
       calculateFeeStats(studentsRes.data || []);
     } catch (error) {
@@ -140,10 +187,31 @@ export default function StudentDetails() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, [fieldName]: reader.result }));
+        // Mark this document as changed
+        setDocumentChanges(prev => ({ ...prev, [fieldName]: true }));
+        setFormData(prev => ({ 
+          ...prev, 
+          [fieldName]: reader.result,
+          // Clear the URL since we're uploading a new file
+          [`${fieldName}_url`]: null
+        }));
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // Helper to get document display value
+  const getDocumentDisplay = (fieldName) => {
+    const fileData = formData[fieldName];
+    const urlData = formData[`${fieldName}_url`];
+    
+    if (fileData && documentChanges[fieldName]) {
+      return { type: 'new', data: fileData };
+    }
+    if (urlData) {
+      return { type: 'existing', data: urlData };
+    }
+    return null;
   };
 
   const calculateTotalFee = (data) => {
@@ -163,16 +231,26 @@ export default function StudentDetails() {
     if (isSubmitting) return;
     
     // Validate mandatory documents
-    if (!formData.birth_certificate) {
+    const hasBirthCert = formData.birth_certificate || formData.birth_certificate_url;
+    const hasParentAadharFront = formData.parent_aadhar_front || formData.parent_aadhar_front_url;
+    const hasParentAadharBack = formData.parent_aadhar_back || formData.parent_aadhar_back_url;
+    
+    if (!hasBirthCert) {
       alert('Birth Certificate is mandatory. Please upload.');
       return;
     }
-    if (!formData.parent_aadhar_front) {
+    if (!hasParentAadharFront) {
       alert('Parent Aadhar (Front) is mandatory. Please upload.');
       return;
     }
-    if (!formData.parent_aadhar_back) {
+    if (!hasParentAadharBack) {
       alert('Parent Aadhar (Back) is mandatory. Please upload.');
+      return;
+    }
+    
+    // Validate transport selection
+    if (formData.transport_type !== 'Walker' && !formData.vendor_id) {
+      alert('Please select a vendor for transport.');
       return;
     }
     
@@ -180,6 +258,23 @@ export default function StudentDetails() {
       setIsSubmitting(true);
       
       const totalAmount = calculateTotalFee(formData);
+      
+      // Find the selected vendor to get vehicle_id
+      let vehicleId = null;
+      if (formData.transport_type !== 'Walker' && formData.vendor_id) {
+        const selectedVendor = vendors.find(v => v._id === formData.vendor_id);
+        if (selectedVendor) {
+          vehicleId = selectedVendor.vehicle_id || selectedVendor._id;
+        }
+      }
+      
+      // Prepare documents - use existing URLs if not changed
+      const documents = {
+        birth_certificate: documentChanges.birth_certificate ? formData.birth_certificate : formData.birth_certificate_url,
+        aadhar_card: documentChanges.aadhar_card ? formData.aadhar_card : formData.aadhar_card_url,
+        parent_aadhar_front: documentChanges.parent_aadhar_front ? formData.parent_aadhar_front : formData.parent_aadhar_front_url,
+        parent_aadhar_back: documentChanges.parent_aadhar_back ? formData.parent_aadhar_back : formData.parent_aadhar_back_url,
+      };
       
       const studentData = {
         name: formData.name,
@@ -199,7 +294,8 @@ export default function StudentDetails() {
         medical_info: formData.medical_info || '',
         enrollment_date: formData.enrollment_date,
         transport_type: formData.transport_type,
-        vehicle_id: formData.transport_type === 'Cab' ? formData.vehicle_id : null,
+        vehicle_id: vehicleId,
+        vendor_id: formData.transport_type !== 'Walker' ? formData.vendor_id : null,
         status: formData.status,
         // Fee fields
         registration_fee: parseFloat(formData.registration_fee) || 0,
@@ -213,12 +309,7 @@ export default function StudentDetails() {
         fee_paid: formData.fee_paid,
         payment_date: formData.fee_paid ? formData.payment_date : null,
         payment_mode: formData.payment_mode,
-        documents: {
-          birth_certificate: formData.birth_certificate,
-          aadhar_card: formData.aadhar_card,
-          parent_aadhar_front: formData.parent_aadhar_front,
-          parent_aadhar_back: formData.parent_aadhar_back,
-        },
+        documents: documents,
       };
       
       if (editingStudent) {
@@ -254,7 +345,47 @@ export default function StudentDetails() {
   };
 
   const handleEdit = (student) => {
+    console.log('Editing student:', student); // Debug log
+    
     setEditingStudent(student);
+    setDocumentChanges({
+      birth_certificate: false,
+      aadhar_card: false,
+      parent_aadhar_front: false,
+      parent_aadhar_back: false,
+    });
+    
+    // Find vendor ID from the student data
+    let vendorId = student.vendor_id || '';
+    
+    // If vendor_id is an object with _id, extract it
+    if (vendorId && typeof vendorId === 'object' && vendorId._id) {
+      vendorId = vendorId._id;
+    }
+    
+    // If vendor_id is not set but vehicle_id is, try to find vendor by vehicle_id
+    if (!vendorId && student.vehicle_id) {
+      const vehicleId = typeof student.vehicle_id === 'object' ? student.vehicle_id._id : student.vehicle_id;
+      const foundVendor = vendors.find(v => v.vehicle_id === vehicleId || v._id === vehicleId);
+      if (foundVendor) {
+        vendorId = foundVendor._id;
+      }
+    }
+    
+    // Also find vehicle_id from vendor if available
+    let vehicleId = student.vehicle_id || '';
+    if (vehicleId && typeof vehicleId === 'object' && vehicleId._id) {
+      vehicleId = vehicleId._id;
+    }
+    
+    // If we have a vendor selected, try to get vehicle_id from vendor
+    if (vendorId) {
+      const selectedVendor = vendors.find(v => v._id === vendorId);
+      if (selectedVendor && selectedVendor.vehicle_id) {
+        vehicleId = selectedVendor.vehicle_id;
+      }
+    }
+    
     setFormData({
       name: student.name || '',
       date_of_birth: student.date_of_birth ? student.date_of_birth.split('T')[0] : '',
@@ -273,7 +404,8 @@ export default function StudentDetails() {
       medical_info: student.medical_info || '',
       enrollment_date: student.enrollment_date ? student.enrollment_date.split('T')[0] : new Date().toISOString().split('T')[0],
       transport_type: student.transport_type || 'Walker',
-      vehicle_id: student.vehicle_id?._id || student.vehicle_id || '',
+      vehicle_id: vehicleId,
+      vendor_id: vendorId, // Set the vendor ID for the dropdown
       status: student.status || 'Active',
       registration_fee: student.registration_fee || '',
       admission_fee: student.admission_fee || '',
@@ -285,11 +417,17 @@ export default function StudentDetails() {
       fee_paid: student.fee_paid || false,
       payment_date: student.payment_date ? student.payment_date.split('T')[0] : '',
       payment_mode: student.payment_mode || 'Cash',
-      birth_certificate: student.documents?.birth_certificate || null,
-      aadhar_card: student.documents?.aadhar_card || null,
-      parent_aadhar_front: student.documents?.parent_aadhar_front || null,
-      parent_aadhar_back: student.documents?.parent_aadhar_back || null,
+      // Document fields - store existing URLs
+      birth_certificate: null,
+      birth_certificate_url: student.documents?.birth_certificate || null,
+      aadhar_card: null,
+      aadhar_card_url: student.documents?.aadhar_card || null,
+      parent_aadhar_front: null,
+      parent_aadhar_front_url: student.documents?.parent_aadhar_front || null,
+      parent_aadhar_back: null,
+      parent_aadhar_back_url: student.documents?.parent_aadhar_back || null,
     });
+    
     setShowModal(true);
   };
 
@@ -313,6 +451,7 @@ export default function StudentDetails() {
       enrollment_date: new Date().toISOString().split('T')[0],
       transport_type: 'Walker',
       vehicle_id: '',
+      vendor_id: '',
       status: 'Active',
       registration_fee: '',
       admission_fee: '',
@@ -325,9 +464,19 @@ export default function StudentDetails() {
       payment_date: '',
       payment_mode: 'Cash',
       birth_certificate: null,
+      birth_certificate_url: null,
       aadhar_card: null,
+      aadhar_card_url: null,
       parent_aadhar_front: null,
+      parent_aadhar_front_url: null,
       parent_aadhar_back: null,
+      parent_aadhar_back_url: null,
+    });
+    setDocumentChanges({
+      birth_certificate: false,
+      aadhar_card: false,
+      parent_aadhar_front: false,
+      parent_aadhar_back: false,
     });
     setEditingStudent(null);
     setShowModal(false);
@@ -379,8 +528,27 @@ export default function StudentDetails() {
 
   const getVehicleNumber = (vehicleId) => {
     if (!vehicleId) return 'N/A';
+    // Handle object case
+    if (typeof vehicleId === 'object' && vehicleId._id) {
+      vehicleId = vehicleId._id;
+    }
     const vehicle = vehicles.find(v => v._id === vehicleId);
-    return vehicle ? vehicle.vehicle_number : 'N/A';
+    if (vehicle) return vehicle.vehicle_number;
+    
+    const vendor = vendors.find(v => v._id === vehicleId || v.vehicle_id === vehicleId);
+    if (vendor) return vendor.vehicle_number || vendor.vendor_name || 'N/A';
+    
+    return 'N/A';
+  };
+
+  const getVendorName = (vendorId) => {
+    if (!vendorId) return 'N/A';
+    // Handle object case
+    if (typeof vendorId === 'object' && vendorId._id) {
+      vendorId = vendorId._id;
+    }
+    const vendor = vendors.find(v => v._id === vendorId);
+    return vendor ? vendor.vendor_name : 'N/A';
   };
 
   const getTeacherForClass = (classId, section) => {
@@ -407,6 +575,87 @@ export default function StudentDetails() {
     preNursery: students.filter(s => s.class_id === 'pre-nursery').length,
     nursery: students.filter(s => s.class_id === 'nursery').length,
     kg1: students.filter(s => s.class_id === 'kg-1').length,
+  };
+
+  // Render document upload field with preview
+  const renderDocumentUpload = (label, fieldName, required = false) => {
+    const isChanged = documentChanges[fieldName];
+    const fileData = formData[fieldName];
+    const urlData = formData[`${fieldName}_url`];
+    const hasDocument = fileData || urlData;
+    
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {label} {required && <span className="text-red-500">*</span>}
+          {editingStudent && hasDocument && !isChanged && (
+            <span className="text-xs text-green-600 ml-2">(Current document preserved)</span>
+          )}
+          {editingStudent && isChanged && (
+            <span className="text-xs text-blue-600 ml-2">(New document uploaded)</span>
+          )}
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            required={!editingStudent && required}
+            onChange={(e) => handleFileUpload(e, fieldName)}
+            disabled={isSubmitting}
+            className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          {hasDocument && (
+            <div className="flex items-center gap-1">
+              {isChanged ? (
+                <CheckCircle size={20} className="text-blue-600" title="New document uploaded" />
+              ) : (
+                <CheckCircle size={20} className="text-green-600" title="Document exists" />
+              )}
+              {urlData && !isChanged && (
+                <a 
+                  href={urlData} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-purple-600 hover:text-purple-800 text-xs underline ml-1"
+                  title="View existing document"
+                >
+                  View
+                </a>
+              )}
+              {urlData && !isChanged && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Remove ${label}?`)) {
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        [`${fieldName}_url`]: null,
+                        [fieldName]: null
+                      }));
+                      setDocumentChanges(prev => ({ ...prev, [fieldName]: true }));
+                    }
+                  }}
+                  className="text-red-500 hover:text-red-700 text-xs ml-1"
+                  title="Remove document"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {editingStudent && urlData && !isChanged && (
+          <p className="text-xs text-gray-400 mt-1">
+            Current file: {getFileNameFromUrl(urlData)}
+          </p>
+        )}
+        {isChanged && fileData && (
+          <p className="text-xs text-blue-500 mt-1">
+            New file uploaded. Will replace existing document.
+          </p>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -683,7 +932,7 @@ export default function StudentDetails() {
                         </div>
                       </div>
 
-                      {/* Fee Information - Updated with all fee types */}
+                      {/* Fee Information */}
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
                         <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                           <DollarSign size={10} />
@@ -715,10 +964,17 @@ export default function StudentDetails() {
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          {student.transport_type === 'Cab' ? (
+                          {(student.transport_type === 'Cab' || student.transport_type === 'Bus') ? (
                             <>
                               <Truck size={14} className="text-cyan-600" />
-                              <span className="text-sm text-gray-700">Cab: {getVehicleNumber(student.vehicle_id)}</span>
+                              <span className="text-sm text-gray-700">
+                                {student.transport_type}: {getVehicleNumber(student.vehicle_id)}
+                                {student.vendor_id && (
+                                  <span className="text-xs text-gray-500 ml-1">
+                                    ({getVendorName(student.vendor_id)})
+                                  </span>
+                                )}
+                              </span>
                             </>
                           ) : (
                             <>
@@ -745,11 +1001,23 @@ export default function StudentDetails() {
                         </div>
                       </div>
 
-                      {(student.documents?.birth_certificate || student.documents?.aadhar_card) && (
+                      {/* Documents indicator */}
+                      {student.documents && (
                         <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
                           <FolderOpen size={12} className="text-gray-400" />
-                          <span className="text-xs text-gray-500">Documents uploaded</span>
-                          <Eye size={12} className="text-gray-400 ml-auto cursor-pointer" />
+                          <span className="text-xs text-gray-500">
+                            Documents: {Object.values(student.documents).filter(d => d).length} uploaded
+                          </span>
+                          {student.documents.birth_certificate && (
+                            <a 
+                              href={student.documents.birth_certificate} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-purple-600 hover:text-purple-800 underline"
+                            >
+                              View Birth Cert
+                            </a>
+                          )}
                         </div>
                       )}
                     </div>
@@ -930,7 +1198,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Parent Information with Relationship Dropdown */}
+                {/* Parent Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Users size={18} className="text-purple-600" />
@@ -953,7 +1221,7 @@ export default function StudentDetails() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Relationship with Student <span className="text-red-500">*</span>
+                        Relationship <span className="text-red-500">*</span>
                       </label>
                       <select
                         required
@@ -1025,7 +1293,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Fee and Charges - Updated with all fee types */}
+                {/* Fee and Charges */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <DollarSign size={18} className="text-purple-600" />
@@ -1202,7 +1470,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Transport Details */}
+                {/* Transport Details - UPDATED to show selected vendor */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Truck size={18} className="text-purple-600" />
@@ -1216,32 +1484,69 @@ export default function StudentDetails() {
                       <select
                         required
                         value={formData.transport_type}
-                        onChange={(e) => setFormData({ ...formData, transport_type: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ 
+                            ...formData, 
+                            transport_type: e.target.value,
+                            vendor_id: '',
+                            vehicle_id: ''
+                          });
+                        }}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
-                        <option value="Walker">Walker</option>
-                        <option value="Cab">Cab</option>
+                        {TRANSPORT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
                       </select>
+                      {editingStudent && formData.transport_type !== 'Walker' && formData.vendor_id && (
+                        <p className="text-xs text-green-600 mt-1">
+                          ✓ Currently assigned to: {getVendorName(formData.vendor_id)}
+                        </p>
+                      )}
                     </div>
-                    {formData.transport_type === 'Cab' && (
+                    {(formData.transport_type === 'Cab' || formData.transport_type === 'Bus') && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select Vehicle
+                          Select Vendor/Vehicle <span className="text-red-500">*</span>
                         </label>
                         <select
-                          value={formData.vehicle_id}
-                          onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                          required
+                          value={formData.vendor_id}
+                          onChange={(e) => {
+                            const vendorId = e.target.value;
+                            setFormData({ 
+                              ...formData, 
+                              vendor_id: vendorId
+                            });
+                          }}
                           disabled={isSubmitting}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         >
-                          <option value="">Select Vehicle</option>
-                          {vehicles.map((vehicle) => (
-                            <option key={vehicle._id} value={vehicle._id}>
-                              {vehicle.vehicle_number} - {vehicle.route}
-                            </option>
-                          ))}
+                          <option value="">Select Vendor/Vehicle</option>
+                          {vendors.map((vendor) => {
+                            // Check if this vendor is the currently selected one
+                            const isSelected = vendor._id === formData.vendor_id;
+                            return (
+                              <option key={vendor._id} value={vendor._id}>
+                                {vendor.vendor_name} - {vendor.vehicle_number} 
+                                {vendor.vendor_type && ` (${vendor.vendor_type})`}
+                                {vendor.route_details && ` - ${vendor.route_details.substring(0, 30)}${vendor.route_details.length > 30 ? '...' : ''}`}
+                                {isSelected && ' ✓'}
+                              </option>
+                            );
+                          })}
                         </select>
+                        {vendors.length === 0 && (
+                          <p className="text-xs text-orange-500 mt-1">
+                            ⚠️ No active vendors with vehicles found. Please add vendors in Vendor Management.
+                          </p>
+                        )}
+                        {formData.vendor_id && (
+                          <p className="text-xs text-green-600 mt-1">
+                            ✓ Vendor selected: {getVendorName(formData.vendor_id)}
+                          </p>
+                        )}
                       </div>
                     )}
                     <div>
@@ -1290,80 +1595,27 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Documents Upload - Clean mandatory indication with red asterisk */}
+                {/* Documents Upload */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Upload size={18} className="text-purple-600" />
                     Documents Upload
                     <span className="text-xs text-gray-400 ml-2">(* Mandatory)</span>
+                    {editingStudent && (
+                      <span className="text-xs text-blue-600 ml-2">(Upload new to replace existing)</span>
+                    )}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Birth Certificate <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          required={!editingStudent}
-                          onChange={(e) => handleFileUpload(e, 'birth_certificate')}
-                          disabled={isSubmitting}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        {formData.birth_certificate && <CheckCircle size={20} className="text-green-600" />}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Student Aadhar Card
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => handleFileUpload(e, 'aadhar_card')}
-                          disabled={isSubmitting}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        {formData.aadhar_card && <CheckCircle size={20} className="text-green-600" />}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Aadhar (Front) <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          required={!editingStudent}
-                          onChange={(e) => handleFileUpload(e, 'parent_aadhar_front')}
-                          disabled={isSubmitting}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        {formData.parent_aadhar_front && <CheckCircle size={20} className="text-green-600" />}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Aadhar (Back) <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          required={!editingStudent}
-                          onChange={(e) => handleFileUpload(e, 'parent_aadhar_back')}
-                          disabled={isSubmitting}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        {formData.parent_aadhar_back && <CheckCircle size={20} className="text-green-600" />}
-                      </div>
-                    </div>
+                    {renderDocumentUpload('Birth Certificate', 'birth_certificate', true)}
+                    {renderDocumentUpload('Student Aadhar Card', 'aadhar_card', false)}
+                    {renderDocumentUpload('Parent Aadhar (Front)', 'parent_aadhar_front', true)}
+                    {renderDocumentUpload('Parent Aadhar (Back)', 'parent_aadhar_back', true)}
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
                     <span className="text-red-500">*</span> Fields marked with asterisk are mandatory
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Supported formats: PDF, JPG, JPEG, PNG
                   </p>
                 </div>
 
