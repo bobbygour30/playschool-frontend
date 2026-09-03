@@ -1,17 +1,16 @@
-// ParentRegistration.tsx - Sync UI Removed
-import { useEffect, useState } from 'react';
-import { 
-  Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
-  MapPin, Calendar, User, Lock, Eye, EyeOff, Filter,
-  UserPlus, GraduationCap, TrendingUp, AlertCircle, CheckCircle,
-  Clock, Award, Star, Heart, Baby, School, BookOpen, UserCheck,
-  Link, Unlink
+// ParentRegistration.tsx
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Plus, Search, Edit, Trash2, X, Users, Mail, Phone,
+  User, Eye, EyeOff, Filter,
+  UserPlus, TrendingUp, AlertCircle, CheckCircle,
+  Clock, Link, Unlink,
 } from 'lucide-react';
-import { 
-  getParents, createParent, updateParent, deleteParent, 
-  updateParentStatus, getParentStats, getStudents, 
+import {
+  getParents, createParent, updateParent, deleteParent,
+  updateParentStatus, getParentStats, getStudents,
   getParentStudents, linkStudentToParent, unlinkStudentFromParent,
-  getClasses
+  getAvailableStudentsForParent, getClasses,
 } from '../services/api';
 
 const CLASSES = [
@@ -21,7 +20,7 @@ const CLASSES = [
   { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years' },
 ];
 
-const PARENT_ROLES = ['Father', 'Mother', 'Guardian'];
+const CONTACT_PERSON_ROLES = ['Father', 'Mother', 'Guardian'];
 
 export default function ParentRegistration() {
   const [parents, setParents] = useState([]);
@@ -32,28 +31,38 @@ export default function ParentRegistration() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
-  const [showLinkModal, setShowLinkModal] = useState(false);
-  const [selectedParent, setSelectedParent] = useState(null);
   const [editingParent, setEditingParent] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedClassForLinking, setSelectedClassForLinking] = useState('');
+
+  // Link-students modal
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [selectedParent, setSelectedParent] = useState(null);
+  const [availableStudentsForLinking, setAvailableStudentsForLinking] = useState([]);
+  const [loadingAvailableStudents, setLoadingAvailableStudents] = useState(false);
   const [selectedStudentsForLinking, setSelectedStudentsForLinking] = useState([]);
-  const [selectedClassForForm, setSelectedClassForForm] = useState('');
+
+  // Unlink modal
+  const [showUnlinkModal, setShowUnlinkModal] = useState(false);
+  const [unlinkTarget, setUnlinkTarget] = useState(null);
+  const [unlinkReason, setUnlinkReason] = useState('');
+  const [isUnlinking, setIsUnlinking] = useState(false);
+
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
     inactive: 0,
-    suspended: 0
+    suspended: 0,
   });
+
   const [formData, setFormData] = useState({
-    parent_name: '',
-    parent_role: 'Father',
+    father_name: '',
+    mother_name: '',
     mobile_number: '',
     email: '',
     address: '',
     student_ids: [],
     emergency_contact: '',
-    username: '',
+    contact_person_role: 'Father',
     password: '',
     status: 'Active',
     notes: '',
@@ -66,7 +75,7 @@ export default function ParentRegistration() {
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       let parentsData = [];
       try {
         const parentsRes = await getParents();
@@ -74,28 +83,21 @@ export default function ParentRegistration() {
           parentsData = parentsRes.data;
         } else if (Array.isArray(parentsRes)) {
           parentsData = parentsRes;
-        } else {
-          console.warn('Parents response is not an array:', parentsRes);
-          parentsData = [];
         }
       } catch (parentError) {
         console.error('Error fetching parents:', parentError);
-        parentsData = [];
       }
-      
       setParents(parentsData);
-      
+
       let statsData = { total: 0, active: 0, inactive: 0, suspended: 0 };
       try {
         const statsRes = await getParentStats();
-        if (statsRes && statsRes.data) {
-          statsData = statsRes.data;
-        }
+        if (statsRes && statsRes.data) statsData = statsRes.data;
       } catch (statsError) {
         console.error('Error fetching stats:', statsError);
       }
       setStats(statsData);
-      
+
       let studentsData = [];
       try {
         const studentsRes = await getStudents();
@@ -106,10 +108,9 @@ export default function ParentRegistration() {
         }
       } catch (studentError) {
         console.error('Error fetching students:', studentError);
-        studentsData = [];
       }
       setStudents(studentsData);
-      
+
       let classesData = CLASSES;
       try {
         const classesRes = await getClasses();
@@ -120,18 +121,16 @@ export default function ParentRegistration() {
         console.error('Error fetching classes:', classError);
       }
       setClasses(classesData);
-      
+
       const studentMap = {};
       if (parentsData.length > 0) {
         for (const parent of parentsData) {
           try {
             if (parent && parent._id) {
               const studentsRes = await getParentStudents(parent._id);
-              studentMap[parent._id] = (studentsRes && studentsRes.data && Array.isArray(studentsRes.data)) 
-                ? studentsRes.data 
+              studentMap[parent._id] = (studentsRes && studentsRes.data && Array.isArray(studentsRes.data))
+                ? studentsRes.data
                 : [];
-            } else {
-              studentMap[parent._id] = [];
             }
           } catch (error) {
             console.error(`Error loading students for parent ${parent._id}:`, error);
@@ -140,10 +139,6 @@ export default function ParentRegistration() {
         }
       }
       setParentStudents(studentMap);
-      
-      console.log('Parent Data:', parentsData);
-      console.log('Students Data:', studentsData);
-      console.log('Classes Data:', classesData);
     } catch (error) {
       console.error('Error loading parent data:', error);
       alert('Failed to load parent data. Please refresh the page.');
@@ -152,20 +147,37 @@ export default function ParentRegistration() {
     }
   };
 
-  const handleStudentToggleInForm = (studentId) => {
-    setFormData(prev => {
-      const currentIds = prev.student_ids || [];
-      if (currentIds.includes(studentId)) {
-        return { ...prev, student_ids: currentIds.filter(id => id !== studentId) };
-      } else {
-        return { ...prev, student_ids: [...currentIds, studentId] };
-      }
+  // Every student that is already linked to ANY parent, across the whole system
+  const allLinkedStudentIds = useMemo(() => {
+    const ids = new Set();
+    Object.values(parentStudents).forEach((list) => {
+      (list || []).forEach((s) => ids.add(s._id));
+    });
+    return ids;
+  }, [parentStudents]);
+
+  // Students that can be assigned from within the create/edit form:
+  // must match the entered email, and must not already be linked to a DIFFERENT parent
+  const getAssignableStudentsForForm = () => {
+    const emailLower = (formData.email || '').trim().toLowerCase();
+    if (!emailLower) return [];
+    const currentlyLinkedToThisParent = new Set(formData.student_ids || []);
+    return students.filter((s) => {
+      const studentEmail = (s.parent_email || '').trim().toLowerCase();
+      if (studentEmail !== emailLower) return false;
+      const linkedElsewhere = allLinkedStudentIds.has(s._id) && !currentlyLinkedToThisParent.has(s._id);
+      return !linkedElsewhere;
     });
   };
 
-  const getStudentsByClassForForm = (classId) => {
-    if (!classId) return students;
-    return students.filter(s => s.class_id === classId);
+  const handleStudentToggleInForm = (studentId) => {
+    setFormData((prev) => {
+      const currentIds = prev.student_ids || [];
+      if (currentIds.includes(studentId)) {
+        return { ...prev, student_ids: currentIds.filter((id) => id !== studentId) };
+      }
+      return { ...prev, student_ids: [...currentIds, studentId] };
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -213,49 +225,42 @@ export default function ParentRegistration() {
   const handleEdit = (parent) => {
     setEditingParent(parent);
     setFormData({
-      parent_name: parent.parent_name || '',
-      parent_role: parent.parent_role || 'Father',
+      father_name: parent.father_name || '',
+      mother_name: parent.mother_name || '',
       mobile_number: parent.mobile_number || '',
       email: parent.email || '',
       address: parent.address || '',
-      student_ids: parent.student_ids || [],
+      student_ids: (parent.student_ids || []).map((s) => (typeof s === 'object' ? s._id : s)),
       emergency_contact: parent.emergency_contact || '',
-      username: parent.username || '',
+      contact_person_role: parent.contact_person_role || 'Father',
       password: '',
       status: parent.status || 'Active',
       notes: parent.notes || '',
     });
-    if (parent.student_ids && parent.student_ids.length > 0) {
-      const firstStudent = students.find(s => s._id === parent.student_ids[0]);
-      if (firstStudent) {
-        setSelectedClassForForm(firstStudent.class_id);
-      }
-    } else {
-      setSelectedClassForForm('');
-    }
     setShowModal(true);
   };
 
-  const handleLinkStudents = (parent) => {
+  // ---------- Link students modal ----------
+  const handleLinkStudents = async (parent) => {
     setSelectedParent(parent);
-    setSelectedClassForLinking('');
     setSelectedStudentsForLinking([]);
     setShowLinkModal(true);
-  };
-
-  const handleClassSelectForLinking = (classId) => {
-    setSelectedClassForLinking(classId);
-    setSelectedStudentsForLinking([]);
+    setLoadingAvailableStudents(true);
+    try {
+      const res = await getAvailableStudentsForParent(parent._id);
+      setAvailableStudentsForLinking(res.data || []);
+    } catch (error) {
+      console.error('Error loading available students:', error);
+      setAvailableStudentsForLinking([]);
+    } finally {
+      setLoadingAvailableStudents(false);
+    }
   };
 
   const handleStudentToggleForLinking = (studentId) => {
-    setSelectedStudentsForLinking(prev => {
-      if (prev.includes(studentId)) {
-        return prev.filter(id => id !== studentId);
-      } else {
-        return [...prev, studentId];
-      }
-    });
+    setSelectedStudentsForLinking((prev) =>
+      prev.includes(studentId) ? prev.filter((id) => id !== studentId) : [...prev, studentId]
+    );
   };
 
   const handleLinkSelectedStudents = async () => {
@@ -263,75 +268,99 @@ export default function ParentRegistration() {
       alert('Please select at least one student to link.');
       return;
     }
-
     try {
       for (const studentId of selectedStudentsForLinking) {
         await linkStudentToParent(selectedParent._id, studentId);
       }
       await loadData();
       alert(`${selectedStudentsForLinking.length} student(s) linked successfully!`);
-      setShowLinkModal(false);
-      setSelectedClassForLinking('');
-      setSelectedStudentsForLinking([]);
+      closeLinkModal();
     } catch (error) {
       console.error('Error linking students:', error);
-      alert('Failed to link students');
+      alert(error.response?.data?.message || 'Failed to link students');
     }
   };
 
-  const handleUnlinkStudent = async (parentId, studentId) => {
-    if (confirm('Remove this student from parent?')) {
-      try {
-        await unlinkStudentFromParent(parentId, studentId);
-        await loadData();
-        alert('Student unlinked successfully!');
-      } catch (error) {
-        console.error('Error unlinking student:', error);
-        alert('Failed to unlink student');
-      }
+  const closeLinkModal = () => {
+    setShowLinkModal(false);
+    setSelectedParent(null);
+    setAvailableStudentsForLinking([]);
+    setSelectedStudentsForLinking([]);
+  };
+
+  // ---------- Unlink modal ----------
+  const openUnlinkModal = (parent, student) => {
+    setUnlinkTarget({
+      parentId: parent._id,
+      studentId: student._id,
+      studentName: student.name,
+      parentDisplayName: parent.father_name || parent.mother_name || parent.email,
+    });
+    setUnlinkReason('');
+    setShowUnlinkModal(true);
+  };
+
+  const closeUnlinkModal = () => {
+    setShowUnlinkModal(false);
+    setUnlinkTarget(null);
+    setUnlinkReason('');
+    setIsUnlinking(false);
+  };
+
+  const handleConfirmUnlink = async () => {
+    if (!unlinkReason.trim()) {
+      alert('Please provide a reason for unlinking this student.');
+      return;
+    }
+    try {
+      setIsUnlinking(true);
+      await unlinkStudentFromParent(unlinkTarget.parentId, unlinkTarget.studentId, unlinkReason.trim());
+      await loadData();
+      alert('Student unlinked successfully!');
+      closeUnlinkModal();
+    } catch (error) {
+      console.error('Error unlinking student:', error);
+      alert(error.response?.data?.message || 'Failed to unlink student');
+      setIsUnlinking(false);
     }
   };
 
   const resetForm = () => {
     setFormData({
-      parent_name: '',
-      parent_role: 'Father',
+      father_name: '',
+      mother_name: '',
       mobile_number: '',
       email: '',
       address: '',
       student_ids: [],
       emergency_contact: '',
-      username: '',
+      contact_person_role: 'Father',
       password: '',
       status: 'Active',
       notes: '',
     });
-    setSelectedClassForForm('');
     setEditingParent(null);
     setShowModal(false);
-    setSelectedParent(null);
-    setShowLinkModal(false);
-    setSelectedClassForLinking('');
-    setSelectedStudentsForLinking([]);
   };
 
   const getFilteredParents = () => {
     const parentsArray = Array.isArray(parents) ? parents : [];
     let filtered = parentsArray;
-    
+
     if (searchTerm) {
-      filtered = filtered.filter(p =>
-        p?.parent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p?.mobile_number?.includes(searchTerm) ||
-        p?.username?.toLowerCase().includes(searchTerm.toLowerCase())
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter((p) =>
+        p?.father_name?.toLowerCase().includes(term) ||
+        p?.mother_name?.toLowerCase().includes(term) ||
+        p?.email?.toLowerCase().includes(term) ||
+        p?.mobile_number?.includes(searchTerm)
       );
     }
-    
+
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(p => p?.status === statusFilter);
+      filtered = filtered.filter((p) => p?.status === statusFilter);
     }
-    
+
     return filtered;
   };
 
@@ -344,28 +373,9 @@ export default function ParentRegistration() {
     }
   };
 
-  const getStudentsByClassForLinking = (classId) => {
-    if (!classId) return [];
-    const classStudents = students.filter(s => s.class_id === classId);
-    const linkedStudentIds = parentStudents[selectedParent?._id]?.map(s => s._id) || [];
-    return classStudents.filter(s => !linkedStudentIds.includes(s._id));
-  };
-
   const getClassName = (classId) => {
-    const classObj = classes.find(c => c.id === classId || c._id === classId);
+    const classObj = classes.find((c) => c.id === classId || c._id === classId);
     return classObj ? classObj.name : classId || 'Not Assigned';
-  };
-
-  const getClassDisplayName = (classId) => {
-    const classObj = classes.find(c => c.id === classId || c._id === classId);
-    if (classObj) {
-      return `${classObj.name} ${classObj.ageGroup ? `(${classObj.ageGroup})` : ''}`;
-    }
-    return classId || 'Not Assigned';
-  };
-
-  const getSelectedStudentsForForm = () => {
-    return formData.student_ids || [];
   };
 
   const filteredParents = getFilteredParents();
@@ -384,7 +394,7 @@ export default function ParentRegistration() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <div className="p-6 md:p-8">
-        {/* Header Section */}
+        {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -409,7 +419,7 @@ export default function ParentRegistration() {
           </div>
         </div>
 
-        {/* Stats Cards - Removed Sync stats */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100 shadow-lg">
             <div className="flex items-center justify-between mb-4">
@@ -456,14 +466,14 @@ export default function ParentRegistration() {
           </div>
         </div>
 
-        {/* Search and Filter - Removed Sync filter */}
+        {/* Search and Filter */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 shadow-lg border border-gray-200/50">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder="Search by name, email, phone, or username..."
+                placeholder="Search by father/mother name, email, or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -485,7 +495,7 @@ export default function ParentRegistration() {
           </div>
         </div>
 
-        {/* Parents Table - Removed Sync column */}
+        {/* Parents Table */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -494,7 +504,7 @@ export default function ParentRegistration() {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Parent</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Students</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Username</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact Role</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase">Actions</th>
                 </tr>
@@ -510,7 +520,7 @@ export default function ParentRegistration() {
                 ) : (
                   filteredParents.map((parent) => {
                     const studentList = parentStudents[parent._id] || [];
-                    
+
                     return (
                       <tr key={parent._id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all">
                         <td className="px-6 py-4">
@@ -519,8 +529,8 @@ export default function ParentRegistration() {
                               <User className="text-white" size={16} />
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-900">{parent.parent_name}</div>
-                              <div className="text-xs text-gray-500">{parent.parent_role}</div>
+                              <div className="font-semibold text-gray-900">Father: {parent.father_name}</div>
+                              <div className="text-xs text-gray-500">Mother: {parent.mother_name}</div>
                             </div>
                           </div>
                         </td>
@@ -531,15 +541,16 @@ export default function ParentRegistration() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
                             {studentList.length > 0 ? (
-                              studentList.map(student => (
-                                <span 
-                                  key={student._id} 
+                              studentList.map((student) => (
+                                <span
+                                  key={student._id}
                                   className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold flex items-center gap-1"
                                 >
                                   {student.name}
                                   <button
-                                    onClick={() => handleUnlinkStudent(parent._id, student._id)}
+                                    onClick={() => openUnlinkModal(parent, student)}
                                     className="hover:text-red-600"
+                                    title="Unlink student"
                                   >
                                     <X size={12} />
                                   </button>
@@ -557,7 +568,9 @@ export default function ParentRegistration() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <code className="text-sm text-gray-600">{parent.username}</code>
+                          <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
+                            {parent.contact_person_role}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <select
@@ -595,7 +608,7 @@ export default function ParentRegistration() {
           </div>
         </div>
 
-        {/* Parent Registration Modal WITH STUDENT ASSIGNMENT */}
+        {/* Parent Registration Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -611,96 +624,101 @@ export default function ParentRegistration() {
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Parent Name *</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={formData.parent_name} 
-                      onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="Enter parent name"
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Father's Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.father_name}
+                      onChange={(e) => setFormData({ ...formData, father_name: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter father's name"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Parent Role *</label>
-                    <select 
-                      required 
-                      value={formData.parent_role} 
-                      onChange={(e) => setFormData({ ...formData, parent_role: e.target.value })} 
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Mother's Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.mother_name}
+                      onChange={(e) => setFormData({ ...formData, mother_name: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      {PARENT_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
-                    </select>
+                      placeholder="Enter mother's name"
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number *</label>
-                    <input 
-                      type="tel" 
-                      required 
-                      value={formData.mobile_number} 
-                      onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    <input
+                      type="tel"
+                      required
+                      value={formData.mobile_number}
+                      onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="10-digit mobile number"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email ID *</label>
-                    <input 
-                      type="email" 
-                      required 
-                      value={formData.email} 
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    <input
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="email@example.com"
                     />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Use the same email that was entered on the student's admission form so the student can be linked below.
+                    </p>
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
-                    <textarea 
-                      required 
-                      value={formData.address} 
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })} 
-                      rows={2} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    <textarea
+                      required
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Full address"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Emergency Contact *</label>
-                    <input 
-                      type="tel" 
-                      required 
-                      value={formData.emergency_contact} 
-                      onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    <input
+                      type="tel"
+                      required
+                      value={formData.emergency_contact}
+                      onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Emergency contact number"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={formData.username} 
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="Login username"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person Role *</label>
+                    <select
+                      required
+                      value={formData.contact_person_role}
+                      onChange={(e) => setFormData({ ...formData, contact_person_role: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {CONTACT_PERSON_ROLES.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Password {!editingParent && '*'}</label>
                     <div className="relative">
-                      <input 
-                        type={showPassword ? 'text' : 'password'} 
-                        required={!editingParent} 
-                        value={formData.password} 
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })} 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10" 
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required={!editingParent}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
                         placeholder="Login password"
                       />
-                      <button 
-                        type="button" 
-                        onClick={() => setShowPassword(!showPassword)} 
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -709,9 +727,9 @@ export default function ParentRegistration() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                    <select 
-                      value={formData.status} 
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })} 
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="Active">Active</option>
@@ -721,7 +739,7 @@ export default function ParentRegistration() {
                   </div>
                 </div>
 
-                {/* STUDENT ASSIGNMENT SECTION IN FORM */}
+                {/* Assign Students */}
                 <div className="border-t border-gray-200 pt-4 mt-2">
                   <div className="flex items-center justify-between mb-3">
                     <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -729,81 +747,62 @@ export default function ParentRegistration() {
                       Assign Students
                     </label>
                     <span className="text-xs text-gray-500">
-                      {getSelectedStudentsForForm().length} student(s) selected
+                      {formData.student_ids.length} student(s) selected
                     </span>
                   </div>
 
-                  <div className="mb-3">
-                    <select
-                      value={selectedClassForForm}
-                      onChange={(e) => setSelectedClassForForm(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    >
-                      <option value="">-- Filter by class --</option>
-                      {classes.map((cls) => {
-                        const classId = cls.id || cls._id;
-                        const className = cls.name || cls.className;
-                        const studentCount = students.filter(s => s.class_id === classId).length;
-                        return (
-                          <option key={classId} value={classId}>
-                            {className} ({studentCount} students)
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 bg-gray-50">
-                    {students.length === 0 ? (
-                      <p className="text-center text-gray-500 py-2 text-sm">
-                        No students available. Please add students first.
+                  {!formData.email ? (
+                    <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-3">
+                      Enter the parent's email above to see students registered with that email.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Only students registered with <strong>{formData.email}</strong> and not already linked to another parent are shown.
                       </p>
-                    ) : (
-                      getStudentsByClassForForm(selectedClassForForm).map((student) => {
-                        const isSelected = formData.student_ids?.includes(student._id) || false;
-                        return (
-                          <label
-                            key={student._id}
-                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-blue-50 border border-blue-300'
-                                : 'hover:bg-gray-100 border border-transparent'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleStudentToggleInForm(student._id)}
-                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                            />
-                            <div className="flex-1 flex items-center justify-between">
-                              <div>
-                                <p className="font-medium text-gray-800 text-sm">{student.name}</p>
-                                <p className="text-xs text-gray-500">
-                                  {getClassName(student.class_id)} | Section: {student.section || 'A'}
-                                </p>
-                              </div>
-                              {student.rollNumber && (
-                                <span className="text-xs text-gray-400">Roll: {student.rollNumber}</span>
-                              )}
-                            </div>
-                          </label>
-                        );
-                      })
-                    )}
-                    {selectedClassForForm && getStudentsByClassForForm(selectedClassForForm).length === 0 && (
-                      <p className="text-center text-gray-500 py-2 text-sm">
-                        No students in this class.
-                      </p>
-                    )}
-                  </div>
+                      <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 bg-gray-50">
+                        {getAssignableStudentsForForm().length === 0 ? (
+                          <p className="text-center text-gray-500 py-2 text-sm">
+                            No matching, unlinked students found for this email.
+                          </p>
+                        ) : (
+                          getAssignableStudentsForForm().map((student) => {
+                            const isSelected = formData.student_ids?.includes(student._id) || false;
+                            return (
+                              <label
+                                key={student._id}
+                                className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'bg-blue-50 border border-blue-300'
+                                    : 'hover:bg-gray-100 border border-transparent'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleStudentToggleInForm(student._id)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-800 text-sm">{student.name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {getClassName(student.class_id)} | Section: {student.section || 'A'}
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  )}
 
-                  {getSelectedStudentsForForm().length > 0 && (
+                  {formData.student_ids.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {getSelectedStudentsForForm().map(studentId => {
-                        const student = students.find(s => s._id === studentId);
+                      {formData.student_ids.map((studentId) => {
+                        const student = students.find((s) => s._id === studentId);
                         return student ? (
-                          <span 
+                          <span
                             key={studentId}
                             className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs"
                           >
@@ -824,25 +823,25 @@ export default function ParentRegistration() {
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                  <textarea 
-                    value={formData.notes} 
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
-                    rows={2} 
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={2}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Additional notes..."
                   />
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button 
-                    type="button" 
-                    onClick={resetForm} 
+                  <button
+                    type="button"
+                    onClick={resetForm}
                     className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
                   >
                     Cancel
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
                   >
                     {editingParent ? 'Update Parent' : 'Register Parent'}
@@ -859,90 +858,55 @@ export default function ParentRegistration() {
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Link Students to {selectedParent.parent_name}</h2>
-                  <p className="text-white/80 text-sm mt-1">Select a class, then choose students to assign</p>
+                  <h2 className="text-xl font-bold text-white">Link Students to {selectedParent.father_name}</h2>
+                  <p className="text-white/80 text-sm mt-1">
+                    Showing students registered with {selectedParent.email} that aren't linked to any parent yet
+                  </p>
                 </div>
-                <button onClick={resetForm} className="text-white hover:bg-white/20 rounded-lg p-1">
+                <button onClick={closeLinkModal} className="text-white hover:bg-white/20 rounded-lg p-1">
                   <X size={24} />
                 </button>
               </div>
 
               <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Step 1: Select Class
-                  </label>
-                  <select
-                    value={selectedClassForLinking}
-                    onChange={(e) => handleClassSelectForLinking(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  >
-                    <option value="">-- Select a class --</option>
-                    {classes.map((cls) => {
-                      const classId = cls.id || cls._id;
-                      const className = cls.name || cls.className;
-                      const ageGroup = cls.ageGroup || '';
-                      const studentsInClass = students.filter(s => s.class_id === classId).length;
-                      const linkedCount = parentStudents[selectedParent?._id]?.filter(s => s.class_id === classId).length || 0;
-                      const availableCount = studentsInClass - linkedCount;
-                      
-                      return (
-                        <option key={classId} value={classId}>
-                          {className} {ageGroup ? `(${ageGroup})` : ''} - {availableCount} available
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {selectedClassForLinking && (
-                    <p className="text-xs text-green-600 mt-1">
-                      Showing students from {getClassDisplayName(selectedClassForLinking)}
-                    </p>
-                  )}
-                </div>
-
-                {selectedClassForLinking && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Step 2: Select Students ({getStudentsByClassForLinking(selectedClassForLinking).length} available)
-                    </label>
-                    <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-xl p-3">
-                      {getStudentsByClassForLinking(selectedClassForLinking).length === 0 ? (
-                        <p className="text-center text-gray-500 py-4">
-                          No students available in this class to link.
-                          <br />
-                          <span className="text-xs">All students are already linked to this parent.</span>
-                        </p>
-                      ) : (
-                        getStudentsByClassForLinking(selectedClassForLinking).map((student) => (
-                          <label
-                            key={student._id}
-                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
-                              selectedStudentsForLinking.includes(student._id)
-                                ? 'bg-green-50 border-2 border-green-400'
-                                : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedStudentsForLinking.includes(student._id)}
-                              onChange={() => handleStudentToggleForLinking(student._id)}
-                              className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
-                            />
-                            <div className="flex-1">
-                              <p className="font-semibold text-gray-800">{student.name}</p>
-                              <p className="text-xs text-gray-500">
-                                Class: {getClassName(student.class_id)} | 
-                                Section: {student.section || 'A'} | 
-                                Roll: {student.rollNumber || 'N/A'}
-                              </p>
-                            </div>
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                              <Users className="text-white" size={14} />
-                            </div>
-                          </label>
-                        ))
-                      )}
-                    </div>
+                {loadingAvailableStudents ? (
+                  <p className="text-center text-gray-500 py-6">Loading available students...</p>
+                ) : availableStudentsForLinking.length === 0 ? (
+                  <p className="text-center text-gray-500 py-6">
+                    No students available to link.
+                    <br />
+                    <span className="text-xs">
+                      Make sure a student has been registered with the email <strong>{selectedParent.email}</strong> and isn't already linked to another parent.
+                    </span>
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto border border-gray-200 rounded-xl p-3">
+                    {availableStudentsForLinking.map((student) => (
+                      <label
+                        key={student._id}
+                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                          selectedStudentsForLinking.includes(student._id)
+                            ? 'bg-green-50 border-2 border-green-400'
+                            : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentsForLinking.includes(student._id)}
+                          onChange={() => handleStudentToggleForLinking(student._id)}
+                          className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                        />
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-800">{student.name}</p>
+                          <p className="text-xs text-gray-500">
+                            Class: {getClassName(student.class_id)} | Section: {student.section || 'A'}
+                          </p>
+                        </div>
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                          <Users className="text-white" size={14} />
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 )}
 
@@ -962,7 +926,7 @@ export default function ParentRegistration() {
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button
-                    onClick={resetForm}
+                    onClick={closeLinkModal}
                     className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
                   >
                     Cancel
@@ -978,6 +942,55 @@ export default function ParentRegistration() {
                   >
                     <Link size={16} className="inline mr-2" />
                     Link {selectedStudentsForLinking.length} Student(s)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Unlink Reason Modal */}
+        {showUnlinkModal && unlinkTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Unlink size={18} /> Unlink Student
+                </h2>
+                <button onClick={closeUnlinkModal} className="text-white hover:bg-white/20 rounded-lg p-1">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-700">
+                  Remove <strong>{unlinkTarget.studentName}</strong> from <strong>{unlinkTarget.parentDisplayName}</strong>'s account?
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for unlinking <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={unlinkReason}
+                    onChange={(e) => setUnlinkReason(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Linked to the wrong parent by mistake, student transferred, etc."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={closeUnlinkModal}
+                    disabled={isUnlinking}
+                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmUnlink}
+                    disabled={isUnlinking || !unlinkReason.trim()}
+                    className="px-5 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUnlinking ? 'Unlinking...' : 'Confirm Unlink'}
                   </button>
                 </div>
               </div>

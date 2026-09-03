@@ -257,7 +257,6 @@ export const getDashboardStats = async () => {
 };
 
 // ==================== PARENT API WITH ERROR HANDLING ====================
-// Parent API with sync support - FIXED with proper error handling
 
 export const getParents = async (params) => {
   try {
@@ -265,7 +264,6 @@ export const getParents = async (params) => {
     return response;
   } catch (error) {
     console.error('Error fetching parents:', error);
-    // Return empty array instead of throwing to prevent UI crash
     return { data: [] };
   }
 };
@@ -326,20 +324,20 @@ export const getParentStats = async () => {
     return response;
   } catch (error) {
     console.error('Error fetching parent stats:', error);
-    // Return default stats to prevent UI crash
-    return { 
-      data: { 
-        total: 0, 
-        active: 0, 
-        inactive: 0, 
-        suspended: 0, 
-        sync: { pending: 0, synced: 0, failed: 0 } 
-      } 
+    return {
+      data: {
+        total: 0,
+        active: 0,
+        inactive: 0,
+        suspended: 0,
+        sync: { pending: 0, synced: 0, failed: 0 },
+      },
     };
   }
 };
 
-// Parent-Student linking - FIXED with proper error handling
+// Parent-Student linking
+
 export const linkStudentToParent = async (parentId, studentId) => {
   try {
     const response = await api.post(`/parents/${parentId}/link-student`, { studentId });
@@ -350,9 +348,12 @@ export const linkStudentToParent = async (parentId, studentId) => {
   }
 };
 
-export const unlinkStudentFromParent = async (parentId, studentId) => {
+// Reason is now mandatory — sent via the DELETE request body (axios `data` config).
+export const unlinkStudentFromParent = async (parentId, studentId, reason) => {
   try {
-    const response = await api.delete(`/parents/${parentId}/link-student/${studentId}`);
+    const response = await api.delete(`/parents/${parentId}/link-student/${studentId}`, {
+      data: { reason },
+    });
     return response;
   } catch (error) {
     console.error('Error unlinking student:', error);
@@ -370,6 +371,17 @@ export const getParentStudents = async (parentId) => {
   }
 };
 
+// Returns students whose parent_email matches this parent's email AND
+// are not already linked to any parent — the only students that can be linked.
+export const getAvailableStudentsForParent = async (parentId) => {
+  try {
+    const response = await api.get(`/parents/${parentId}/available-students`);
+    return response;
+  } catch (error) {
+    console.error('Error fetching available students for parent:', error);
+    return { data: [] };
+  }
+};
 
 // ==================== FACULTY AUTH ====================
 export const getFacultyAuth = () => api.get('/faculty-auth');
@@ -493,5 +505,7 @@ export const getTeacherClasses = (teacherId) => {
 export const assignClassToTeacher = (teacherId, classId) => {
   return api.patch(`/staff/teachers/${teacherId}/assign-class`, { classId });
 };
+
+
 
 export default api;
