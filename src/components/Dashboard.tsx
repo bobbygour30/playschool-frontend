@@ -4,7 +4,7 @@ import {
   Sparkles, ChevronRight, LogOut, Settings, Bell, User,
   TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
   Truck, Briefcase, DollarSign, Heart,
-  BookMarked
+  BookMarked, CalendarDays
 } from 'lucide-react';
 import Overview from './Overview';
 import StudentDetails from './Students';
@@ -16,9 +16,10 @@ import ParentRegistration from './ParentRegistration';
 import FacultyRegistration from './FacultyRegistration';
 import LeaveManagement from './LeaveManagement';
 import ClassAssignment from './ClassAssignment';
+import HolidayLeaveManagement from './HolidayLeaveManagement';
 import Login from './Login';
 
-type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment';
+type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment' | 'holidayLeave';
 
 // Hardcoded credentials
 const VALID_CREDENTIALS = {
@@ -100,6 +101,7 @@ export default function Dashboard() {
     { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
     { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-teal-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
     { id: 'classAssignment' as Page, name: 'Class Assignment', icon: BookMarked, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
+    { id: 'holidayLeave' as Page, name: 'Holiday & Leave', icon: CalendarDays, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
     { id: 'leaves' as Page, name: 'Leave Management', icon: Calendar, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
     { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
     { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
@@ -128,6 +130,8 @@ export default function Dashboard() {
         return <FacultyRegistration />;
       case 'leaves':
         return <LeaveManagement />;
+      case 'holidayLeave':
+        return <HolidayLeaveManagement />;
       default:
         return <Overview onNavigate={handleNavigate} />;
     }

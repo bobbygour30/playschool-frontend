@@ -5,7 +5,7 @@ import {
   FileText, Eye, ChevronDown, ChevronRight, Printer,
   PieChart, Wallet, CreditCard, Banknote, Receipt,
   AlertCircle, CheckCircle, Clock, Upload, Building,
-  User, Phone, Mail, BookOpen, Award, Star, Home
+  User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw
 } from 'lucide-react';
 import { 
   getFees, getExpenses, getSalaries, getStudents, getStaff,
@@ -28,6 +28,7 @@ export default function Finance() {
   const [salaryPayments, setSalaryPayments] = useState([]);
   const [students, setStudents] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [formData, setFormData] = useState({
     student_id: '',
@@ -92,6 +93,35 @@ export default function Finance() {
     }
   };
 
+  // Function to sync all student fees from student profiles
+  const syncAllStudentFees = async () => {
+    if (!confirm('This will sync all student fee records from student profiles to the finance module. Continue?')) return;
+    
+    try {
+      setIsSyncing(true);
+      const response = await fetch('/api/students/sync-fees-to-finance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(result.message || 'Fee sync completed successfully!');
+        await loadData();
+      } else {
+        alert('Failed to sync fees: ' + (result.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error syncing fees:', error);
+      alert('Failed to sync fees. Please try again.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleFileUpload = (e, fieldName) => {
     const file = e.target.files[0];
     if (file) {
@@ -103,7 +133,7 @@ export default function Finance() {
     }
   };
 
-  // Fixed: Calculate total fee immediately with current values
+  // Calculate total fee immediately with current values
   const calculateTotalFee = () => {
     const admission = parseFloat(formData.admission_fee) || 0;
     const tuition = parseFloat(formData.tuition_fee) || 0;
@@ -113,13 +143,13 @@ export default function Finance() {
     return total;
   };
 
-  // Fixed: Update total amount in form data
+  // Update total amount in form data
   const updateTotalAmount = () => {
     const total = calculateTotalFee();
     setFormData(prev => ({ ...prev, total_amount: total.toString() }));
   };
 
-  // Fixed: Handle fee field changes with immediate total update
+  // Handle fee field changes with immediate total update
   const handleFeeFieldChange = (field, value) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
@@ -465,7 +495,24 @@ export default function Finance() {
                 Manage fees collection, expenses, and staff salaries
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={syncAllStudentFees}
+                disabled={isSyncing}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSyncing ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={18} />
+                    Sync Student Fees
+                  </>
+                )}
+              </button>
               <button className="px-4 py-2 bg-white rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2">
                 <Download size={18} />
                 Export Report
@@ -544,6 +591,9 @@ export default function Finance() {
             >
               <Receipt size={18} />
               Fee Collection
+              <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                {fees.length}
+              </span>
             </button>
             <button
               onClick={() => { setActiveTab('expenses'); setSearchTerm(''); }}
@@ -555,6 +605,9 @@ export default function Finance() {
             >
               <TrendingDown size={18} />
               Expenses
+              <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                {expenses.length}
+              </span>
             </button>
             <button
               onClick={() => { setActiveTab('salary'); setSearchTerm(''); }}
@@ -566,6 +619,9 @@ export default function Finance() {
             >
               <Users size={18} />
               Staff Salary
+              <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                {salaryPayments.length}
+              </span>
             </button>
           </div>
         </div>
@@ -619,6 +675,7 @@ export default function Finance() {
                       <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                         <Receipt className="mx-auto mb-3 text-gray-400" size={48} />
                         <p className="text-lg">No fee records found</p>
+                        <p className="text-sm text-gray-400 mt-1">Click "Sync Student Fees" to import from student profiles</p>
                       </td>
                     </tr>
                   ) : (
@@ -633,7 +690,7 @@ export default function Finance() {
                               </div>
                               <div>
                                 <div className="font-semibold text-gray-900">{fee.student_id?.name}</div>
-                                <div className="text-sm text-gray-500">Class: {fee.student_id?.class_id?.name || 'N/A'}</div>
+                                <div className="text-sm text-gray-500">Class: {fee.student_id?.class_id || 'N/A'}</div>
                               </div>
                             </div>
                           </td>
@@ -643,6 +700,9 @@ export default function Finance() {
                               {fee.tuition_fee > 0 && <div>Tuition: ₹{fee.tuition_fee}</div>}
                               {fee.transport_fee > 0 && <div>Transport: ₹{fee.transport_fee}</div>}
                               {fee.activity_fee > 0 && <div>Activity: ₹{fee.activity_fee}</div>}
+                              {fee.registration_fee > 0 && <div>Registration: ₹{fee.registration_fee}</div>}
+                              {fee.kit_fee > 0 && <div>Kit: ₹{fee.kit_fee}</div>}
+                              {fee.camera_fee > 0 && <div>Camera: ₹{fee.camera_fee}</div>}
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -840,6 +900,19 @@ export default function Finance() {
                 {/* Fee Form */}
                 {modalType === 'fee' && (
                   <>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+                      <p className="text-sm text-blue-700 flex items-center gap-2">
+                        <RefreshCw size={16} />
+                        <span>
+                          {editingItem ? (
+                            'This fee record was auto-synced from student registration. Updates will be reflected in student profile.'
+                          ) : (
+                            'Fees can be auto-synced from student registration. Select a student to pre-fill fee details.'
+                          )}
+                        </span>
+                      </p>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Select Student *</label>
                       <select
@@ -850,21 +923,37 @@ export default function Finance() {
                           setFormData({ 
                             ...formData, 
                             student_id: e.target.value,
-                            student_name: student?.name || ''
+                            student_name: student?.name || '',
+                            // Auto-fill fee details from student if available
+                            admission_fee: student?.admission_fee?.toString() || '',
+                            tuition_fee: student?.tuition_fee?.toString() || '',
+                            transport_fee: student?.cab_fee?.toString() || '',
+                            activity_fee: student?.activity_fee?.toString() || '',
                           });
+                          setTimeout(updateTotalAmount, 100);
                         }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       >
                         <option value="">Select Student</option>
                         {students.map((student) => (
                           <option key={student._id} value={student._id}>
-                            {student.name} - {student.class_id?.name || 'N/A'}
+                            {student.name} - {student.class_id || 'N/A'}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Registration Fee</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.registration_fee} 
+                          onChange={(e) => handleFeeFieldChange('registration_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Admission Fee</label>
                         <input 
@@ -902,6 +991,26 @@ export default function Finance() {
                           step="0.01" 
                           value={formData.activity_fee} 
                           onChange={(e) => handleFeeFieldChange('activity_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Kit Fee</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.kit_fee} 
+                          onChange={(e) => handleFeeFieldChange('kit_fee', e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Camera Fee</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.camera_fee} 
+                          onChange={(e) => handleFeeFieldChange('camera_fee', e.target.value)}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
                         />
                       </div>
