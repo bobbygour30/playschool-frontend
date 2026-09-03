@@ -824,25 +824,6 @@ export default function Overview({
             : '0%',
         trendUp: true,
       },
-
-      {
-        title: 'Vehicles',
-        value: stats.totalVehicles,
-        active: stats.activeVehicles,
-        subtext: `${stats.activeVehicles} active`,
-        icon: Bus,
-        gradient:
-          'from-purple-500 to-pink-500',
-        bgGradient:
-          'from-purple-50 via-white to-pink-50',
-        borderColor:
-          'border-purple-200',
-        trend:
-          stats.totalVehicles > 0
-            ? '+6%'
-            : '0%',
-        trendUp: true,
-      },
     ],
     [stats]
   );
@@ -1048,7 +1029,7 @@ export default function Overview({
           1. CORE STAT CARDS
       ====================================================== */}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <StatCard
             key={card.title}
