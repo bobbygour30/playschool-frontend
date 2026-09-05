@@ -510,6 +510,56 @@ export const assignClassToTeacher = (teacherId, classId) => {
   return api.patch(`/staff/teachers/${teacherId}/assign-class`, { classId });
 };
 
+const HOLIDAY_LEAVE_BASE = `${API_URL}/holiday-leave`;
+
+const holidayLeaveApi = axios.create({
+  baseURL: HOLIDAY_LEAVE_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Holiday API
+export const holidayApi = {
+  getHolidays: (params) => holidayLeaveApi.get('/holidays', { params }),
+  getHolidayByDate: (date) => holidayLeaveApi.get(`/holidays/${date}`),
+  createHoliday: (data) => holidayLeaveApi.post('/holidays', data),
+  updateHoliday: (date, data) => holidayLeaveApi.put(`/holidays/${date}`, data),
+  deleteHoliday: (date) => holidayLeaveApi.delete(`/holidays/${date}`),
+};
+
+// Leave API
+export const leaveApi = {
+  getLeaves: (params) => holidayLeaveApi.get('/leaves', { params }),
+  getLeave: (id) => holidayLeaveApi.get(`/leaves/${id}`),
+  createLeave: (data) => holidayLeaveApi.post('/leaves', data),
+  updateLeave: (id, data) => holidayLeaveApi.put(`/leaves/${id}`, data),
+  deleteLeave: (id) => holidayLeaveApi.delete(`/leaves/${id}`),
+  approveLeave: (id, data) => holidayLeaveApi.put(`/leaves/${id}/approve`, data),
+  rejectLeave: (id, data) => holidayLeaveApi.put(`/leaves/${id}/reject`, data),
+  cancelLeave: (id) => holidayLeaveApi.put(`/leaves/${id}/cancel`),
+};
+
+// Statistics API
+export const statsApi = {
+  getStats: (params) => holidayLeaveApi.get('/stats', { params }),
+  getUserSummary: (userType, userId) => 
+    holidayLeaveApi.get(`/users/${userType}/${userId}/summary`),
+};
+
+// Settings API
+export const settingsApi = {
+  getSettings: () => holidayLeaveApi.get('/settings'),
+  updateSettings: (data) => holidayLeaveApi.put('/settings', data),
+};
+
+// Helpers API
+export const helpersApi = {
+  getSubstituteTeachers: (params) => 
+    holidayLeaveApi.get('/substitute-teachers', { params }),
+  getFacultyOptions: () => holidayLeaveApi.get('/faculty-options'),
+  getStudentOptions: (params) => holidayLeaveApi.get('/student-options', { params }),
+};
 
 
 export default api;

@@ -15,136 +15,14 @@ import {
   Users as UsersIcon, GraduationCap as GraduationIcon,
   Briefcase as BriefcaseIcon
 } from 'lucide-react';
-
-// Mock data for holidays
-const MOCK_HOLIDAYS = {
-  '2026-01-01': { name: "New Year's Day", type: 'public', description: 'New Year celebration', color: '#FF6B6B' },
-  '2026-01-15': { name: 'Pongal', type: 'public', description: 'Harvest festival', color: '#FFA94D' },
-  '2026-01-26': { name: 'Republic Day', type: 'public', description: 'National holiday', color: '#FF6B6B' },
-  '2026-02-14': { name: 'Valentine\'s Day', type: 'optional', description: 'Day of love', color: '#FF6B9D' },
-  '2026-03-08': { name: 'Women\'s Day', type: 'optional', description: 'Celebrating women', color: '#DDA0DD' },
-  '2026-03-17': { name: 'Holi', type: 'public', description: 'Festival of colors', color: '#FF6B6B' },
-  '2026-04-14': { name: 'Tamil New Year', type: 'public', description: 'Puthandu celebration', color: '#FFA94D' },
-  '2026-05-01': { name: 'Labour Day', type: 'public', description: 'International Workers\' Day', color: '#FF6B6B' },
-  '2026-06-15': { name: 'Summer Break Start', type: 'academic', description: 'Summer vacation begins', color: '#4ECDC4' },
-  '2026-07-15': { name: 'Summer Break End', type: 'academic', description: 'School reopens', color: '#4ECDC4' },
-  '2026-08-15': { name: 'Independence Day', type: 'public', description: 'National holiday', color: '#FF6B6B' },
-  '2026-09-05': { name: 'Teachers\' Day', type: 'academic', description: 'Honoring teachers', color: '#A8E6CF' },
-  '2026-10-02': { name: 'Gandhi Jayanti', type: 'public', description: 'Gandhi\'s birthday', color: '#FF6B6B' },
-  '2026-10-24': { name: 'Diwali', type: 'public', description: 'Festival of lights', color: '#FFD93D' },
-  '2026-11-14': { name: 'Children\'s Day', type: 'academic', description: 'Celebrating children', color: '#A8E6CF' },
-  '2026-12-25': { name: 'Christmas Day', type: 'public', description: 'Christmas celebration', color: '#6BCB77' },
-};
-
-// Mock leave requests
-const MOCK_LEAVES = [
-  {
-    id: '1',
-    user_id: 'faculty-1',
-    user_name: 'Dr. Priya Sharma',
-    user_type: 'faculty',
-    department: 'Science',
-    leave_type: 'sick',
-    from_date: '2026-01-20',
-    to_date: '2026-01-22',
-    reason: 'Fever and body ache',
-    status: 'approved',
-    assigned_class: null,
-    substitute_teacher: 'Dr. Rajesh Kumar',
-    approved_by: 'Dr. Principal',
-    created_at: '2026-01-18',
-    updated_at: '2026-01-19'
-  },
-  {
-    id: '2',
-    user_id: 'faculty-2',
-    user_name: 'Ms. Ananya Reddy',
-    user_type: 'faculty',
-    department: 'Mathematics',
-    leave_type: 'casual',
-    from_date: '2026-02-10',
-    to_date: '2026-02-11',
-    reason: 'Family event',
-    status: 'pending',
-    assigned_class: 'kg-1',
-    substitute_teacher: null,
-    approved_by: null,
-    created_at: '2026-02-05',
-    updated_at: '2026-02-05'
-  },
-  {
-    id: '3',
-    user_id: 'student-1',
-    user_name: 'Arjun Kumar',
-    user_type: 'student',
-    class_name: 'Nursery',
-    section: 'A',
-    leave_type: 'casual',
-    from_date: '2026-02-15',
-    to_date: '2026-02-15',
-    reason: 'Family function',
-    status: 'approved',
-    assigned_class: 'nursery',
-    substitute_teacher: null,
-    approved_by: 'Ms. Ananya Reddy',
-    created_at: '2026-02-12',
-    updated_at: '2026-02-13'
-  },
-  {
-    id: '4',
-    user_id: 'student-2',
-    user_name: 'Sofia Khan',
-    user_type: 'student',
-    class_name: 'Pre-Nursery',
-    section: 'B',
-    leave_type: 'sick',
-    from_date: '2026-03-01',
-    to_date: '2026-03-03',
-    reason: 'Fever and cough',
-    status: 'pending',
-    assigned_class: 'pre-nursery',
-    substitute_teacher: null,
-    approved_by: null,
-    created_at: '2026-02-28',
-    updated_at: '2026-02-28'
-  },
-  {
-    id: '5',
-    user_id: 'faculty-3',
-    user_name: 'Mr. Suresh Kumar',
-    user_type: 'faculty',
-    department: 'Physical Education',
-    leave_type: 'earned',
-    from_date: '2026-03-20',
-    to_date: '2026-03-25',
-    reason: 'Personal vacation',
-    status: 'approved',
-    assigned_class: null,
-    substitute_teacher: 'Ms. Priya Singh',
-    approved_by: 'Dr. Principal',
-    created_at: '2026-03-10',
-    updated_at: '2026-03-12'
-  },
-];
-
-// Mock faculty list
-const MOCK_FACULTY = [
-  { id: 'faculty-1', name: 'Dr. Priya Sharma', department: 'Science', classes: ['Toddler', 'Pre-Nursery'] },
-  { id: 'faculty-2', name: 'Ms. Ananya Reddy', department: 'Mathematics', classes: ['Nursery', 'KG-1'] },
-  { id: 'faculty-3', name: 'Mr. Suresh Kumar', department: 'Physical Education', classes: ['Toddler', 'Pre-Nursery', 'Nursery'] },
-  { id: 'faculty-4', name: 'Dr. Rajesh Kumar', department: 'Science', classes: ['Nursery', 'KG-1'] },
-  { id: 'faculty-5', name: 'Ms. Priya Singh', department: 'English', classes: ['Pre-Nursery', 'Nursery'] },
-];
-
-// Mock students list
-const MOCK_STUDENTS = [
-  { id: 'student-1', name: 'Arjun Kumar', class: 'Nursery', section: 'A' },
-  { id: 'student-2', name: 'Sofia Khan', class: 'Pre-Nursery', section: 'B' },
-  { id: 'student-3', name: 'Rohan Sharma', class: 'KG-1', section: 'A' },
-  { id: 'student-4', name: 'Ishita Patel', class: 'Toddler', section: 'C' },
-  { id: 'student-5', name: 'Aarav Singh', class: 'Nursery', section: 'B' },
-  { id: 'student-6', name: 'Nisha Reddy', class: 'Pre-Nursery', section: 'A' },
-];
+import { 
+  holidayApi, 
+  leaveApi, 
+  statsApi, 
+  settingsApi, 
+  helpersApi 
+} from '../services/api';
+import axios from 'axios';
 
 const CLASSES = ['Toddler', 'Pre-Nursery', 'Nursery', 'KG-1'];
 const LEAVE_TYPES = ['sick', 'casual', 'earned', 'study', 'other'];
@@ -154,8 +32,8 @@ const HOLIDAY_TYPES = ['public', 'academic', 'optional', 'custom'];
 export default function HolidayLeaveManagement() {
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [activeTab, setActiveTab] = useState('calendar'); // calendar, leaves, settings
-  const [viewType, setViewType] = useState('faculty'); // faculty, student
+  const [activeTab, setActiveTab] = useState('calendar');
+  const [viewType, setViewType] = useState('faculty');
   const [selectedDate, setSelectedDate] = useState(null);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -164,11 +42,27 @@ export default function HolidayLeaveManagement() {
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [holidays, setHolidays] = useState(MOCK_HOLIDAYS);
-  const [leaves, setLeaves] = useState(MOCK_LEAVES);
+  const [holidays, setHolidays] = useState({});
+  const [leaves, setLeaves] = useState([]);
+  const [facultyList, setFacultyList] = useState([]);
+  const [studentList, setStudentList] = useState([]);
+  const [substituteTeachers, setSubstituteTeachers] = useState([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    faculty: 0,
+    student: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    today: 0,
+    holidays: 0,
+  });
   const [isLoading, setIsLoading] = useState(false);
-  const [calendarView, setCalendarView] = useState('month'); // month, week, list
+  const [loadingAction, setLoadingAction] = useState(null);
+  const [calendarView, setCalendarView] = useState('month');
   const [selectedLeaveType, setSelectedLeaveType] = useState('all');
+  const [settings, setSettings] = useState(null);
+  const [error, setError] = useState(null);
 
   // Holiday form state
   const [holidayForm, setHolidayForm] = useState({
@@ -191,13 +85,184 @@ export default function HolidayLeaveManagement() {
     to_date: '',
     reason: '',
     assigned_class: null,
-    substitute_teacher: '',
+    substitute_teacher_id: '',
+    substitute_teacher_name: '',
   });
 
   // Get current month/year
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
   const today = new Date();
+
+  // ==================== DATA FETCHING ====================
+
+  // Fetch holidays
+  const fetchHolidays = async (year, month) => {
+    try {
+      setIsLoading(true);
+      const response = await holidayApi.getHolidays({ year, month });
+      if (response.data.success) {
+        setHolidays(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching holidays:', error);
+      setError('Failed to fetch holidays');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch leaves
+  const fetchLeaves = async (params = {}) => {
+    try {
+      setIsLoading(true);
+      const queryParams = {
+        user_type: viewType === 'faculty' ? 'faculty' : 'student',
+        ...(selectedClass !== 'all' && { assigned_class: selectedClass }),
+        ...(selectedStatus !== 'all' && { status: selectedStatus }),
+        ...(selectedLeaveType !== 'all' && { leave_type: selectedLeaveType }),
+        ...(searchTerm && { search: searchTerm }),
+        ...params,
+      };
+      
+      const response = await leaveApi.getLeaves(queryParams);
+      if (response.data.success) {
+        setLeaves(Array.isArray(response.data.data) ? response.data.data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching leaves:', error);
+      setError('Failed to fetch leaves');
+      setLeaves([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch statistics
+  const fetchStats = async () => {
+    try {
+      const response = await statsApi.getStats({
+        user_type: viewType === 'faculty' ? 'faculty' : 'student',
+      });
+      if (response.data.success) {
+        setStats(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  // Fetch faculty list
+  const fetchFacultyList = async () => {
+    try {
+      const response = await helpersApi.getSubstituteTeachers();
+      if (response.data && response.data.success) {
+        const data = response.data.data;
+        setFacultyList(Array.isArray(data) ? data : []);
+      } else {
+        setFacultyList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching faculty:', error);
+      setFacultyList([]);
+    }
+  };
+
+  // Fetch student list
+  const fetchStudentList = async () => {
+    try {
+      // Try using helpersApi first if available
+      if (helpersApi.getStudentOptions) {
+        const response = await helpersApi.getStudentOptions();
+        if (response.data && response.data.success) {
+          const data = response.data.data;
+          setStudentList(Array.isArray(data) ? data : []);
+          return;
+        }
+      }
+      
+      // Fallback to direct API call
+      const response = await axios.get('/api/students', { 
+        params: { status: 'Active' } 
+      });
+      
+      // Handle different response formats
+      let students = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          students = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          students = response.data.data;
+        } else if (response.data.students && Array.isArray(response.data.students)) {
+          students = response.data.students;
+        }
+      }
+      setStudentList(students);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      setStudentList([]);
+    }
+  };
+
+  // Fetch substitute teachers
+  const fetchSubstituteTeachers = async (date) => {
+    try {
+      const response = await helpersApi.getSubstituteTeachers({ 
+        date: date || new Date().toISOString().split('T')[0] 
+      });
+      if (response.data.success) {
+        const data = response.data.data;
+        setSubstituteTeachers(Array.isArray(data) ? data : []);
+      } else {
+        setSubstituteTeachers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching substitute teachers:', error);
+      setSubstituteTeachers([]);
+    }
+  };
+
+  // Fetch settings
+  const fetchSettings = async () => {
+    try {
+      const response = await settingsApi.getSettings();
+      if (response.data.success) {
+        setSettings(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
+  // Load all data
+  const loadAllData = async () => {
+    await Promise.all([
+      fetchHolidays(currentYear, currentMonth + 1),
+      fetchLeaves(),
+      fetchStats(),
+      fetchFacultyList(),
+      fetchStudentList(),
+      fetchSettings(),
+    ]);
+  };
+
+  // Initial load
+  useEffect(() => {
+    loadAllData();
+    fetchSubstituteTeachers();
+  }, []);
+
+  // Refetch when filters change
+  useEffect(() => {
+    fetchLeaves();
+  }, [viewType, selectedClass, selectedStatus, selectedLeaveType, searchTerm]);
+
+  // Refetch holidays when month changes
+  useEffect(() => {
+    fetchHolidays(currentYear, currentMonth + 1);
+  }, [currentDate]);
+
+  // ==================== HELPER FUNCTIONS ====================
 
   // Get days in month
   const getDaysInMonth = (month, year) => {
@@ -281,6 +346,248 @@ export default function HolidayLeaveManagement() {
     return colors[type] || colors.custom;
   };
 
+  // ==================== HOLIDAY HANDLERS ====================
+
+  const handleAddHoliday = () => {
+    setEditingHoliday(null);
+    setHolidayForm({
+      date: selectedDate ? selectedDate.toISOString().split('T')[0] : '',
+      name: '',
+      type: 'public',
+      description: '',
+      color: '#FF6B6B',
+      for_faculty: true,
+      for_students: true,
+      affected_classes: [],
+    });
+    setShowHolidayModal(true);
+  };
+
+  const handleEditHoliday = (date, holiday) => {
+    setEditingHoliday({ date, ...holiday });
+    setHolidayForm({
+      date: date,
+      name: holiday.name,
+      type: holiday.type,
+      description: holiday.description || '',
+      color: holiday.color || '#FF6B6B',
+      for_faculty: holiday.for_faculty !== undefined ? holiday.for_faculty : true,
+      for_students: holiday.for_students !== undefined ? holiday.for_students : true,
+      affected_classes: holiday.affected_classes || [],
+    });
+    setShowHolidayModal(true);
+  };
+
+  const handleDeleteHoliday = async (date) => {
+    if (window.confirm('Are you sure you want to delete this holiday?')) {
+      try {
+        setLoadingAction('delete-holiday');
+        await holidayApi.deleteHoliday(date);
+        await fetchHolidays(currentYear, currentMonth + 1);
+        await fetchStats();
+        setError(null);
+      } catch (error) {
+        console.error('Error deleting holiday:', error);
+        setError('Failed to delete holiday');
+      } finally {
+        setLoadingAction(null);
+      }
+    }
+  };
+
+  const handleSaveHoliday = async () => {
+    const { date, name, type, description, color, for_faculty, for_students, affected_classes } = holidayForm;
+    if (!date || !name) {
+      alert('Please fill in all required fields.');
+      return;
+    }
+    
+    try {
+      setLoadingAction('save-holiday');
+      if (editingHoliday) {
+        await holidayApi.updateHoliday(editingHoliday.date, {
+          name,
+          type,
+          description,
+          color,
+          for_faculty,
+          for_students,
+          affected_classes,
+        });
+      } else {
+        await holidayApi.createHoliday({
+          date,
+          name,
+          type,
+          description,
+          color,
+          for_faculty,
+          for_students,
+          affected_classes,
+        });
+      }
+      await fetchHolidays(currentYear, currentMonth + 1);
+      await fetchStats();
+      setShowHolidayModal(false);
+      setError(null);
+    } catch (error) {
+      console.error('Error saving holiday:', error);
+      setError(error.response?.data?.message || 'Failed to save holiday');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // ==================== LEAVE HANDLERS ====================
+
+  const handleAddLeave = () => {
+    setEditingLeave(null);
+    setLeaveForm({
+      user_id: '',
+      user_type: viewType,
+      leave_type: 'casual',
+      from_date: '',
+      to_date: '',
+      reason: '',
+      assigned_class: null,
+      substitute_teacher_id: '',
+      substitute_teacher_name: '',
+    });
+    setShowLeaveModal(true);
+  };
+
+  const handleEditLeave = (leave) => {
+    setEditingLeave(leave);
+    setLeaveForm({
+      user_id: leave.user_id,
+      user_type: leave.user_type,
+      leave_type: leave.leave_type,
+      from_date: leave.from_date,
+      to_date: leave.to_date,
+      reason: leave.reason,
+      assigned_class: leave.assigned_class || null,
+      substitute_teacher_id: leave.substitute_teacher_id || '',
+      substitute_teacher_name: leave.substitute_teacher || '',
+    });
+    setShowLeaveModal(true);
+  };
+
+  const handleDeleteLeave = async (id) => {
+    if (window.confirm('Are you sure you want to delete this leave request?')) {
+      try {
+        setLoadingAction('delete-leave');
+        await leaveApi.deleteLeave(id);
+        await fetchLeaves();
+        await fetchStats();
+        setError(null);
+      } catch (error) {
+        console.error('Error deleting leave:', error);
+        setError('Failed to delete leave request');
+      } finally {
+        setLoadingAction(null);
+      }
+    }
+  };
+
+  const handleApproveLeave = async (id) => {
+    try {
+      setLoadingAction('approve-leave');
+      await leaveApi.approveLeave(id);
+      await fetchLeaves();
+      await fetchStats();
+      setError(null);
+    } catch (error) {
+      console.error('Error approving leave:', error);
+      setError('Failed to approve leave');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleRejectLeave = async (id) => {
+    try {
+      setLoadingAction('reject-leave');
+      await leaveApi.rejectLeave(id);
+      await fetchLeaves();
+      await fetchStats();
+      setError(null);
+    } catch (error) {
+      console.error('Error rejecting leave:', error);
+      setError('Failed to reject leave');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleSaveLeave = async () => {
+    const { user_id, user_type, leave_type, from_date, to_date, reason, assigned_class, substitute_teacher_id, substitute_teacher_name } = leaveForm;
+    if (!user_id || !from_date || !to_date || !reason) {
+      alert('Please fill in all required fields.');
+      return;
+    }
+    
+    if (new Date(to_date) < new Date(from_date)) {
+      alert('To date must be after from date.');
+      return;
+    }
+    
+    try {
+      setLoadingAction('save-leave');
+      const data = {
+        user_id,
+        user_type,
+        leave_type,
+        from_date,
+        to_date,
+        reason,
+        assigned_class: assigned_class || null,
+        substitute_teacher_id: substitute_teacher_id || null,
+        substitute_teacher_name: substitute_teacher_name || null,
+      };
+      
+      if (editingLeave) {
+        await leaveApi.updateLeave(editingLeave.id, data);
+      } else {
+        await leaveApi.createLeave(data);
+      }
+      
+      await fetchLeaves();
+      await fetchStats();
+      setShowLeaveModal(false);
+      setError(null);
+    } catch (error) {
+      console.error('Error saving leave:', error);
+      setError(error.response?.data?.message || 'Failed to save leave request');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // ==================== RENDER USER OPTIONS ====================
+
+  // Render user options for leave form - FIXED with proper array checking
+  const getUserOptions = () => {
+    if (leaveForm.user_type === 'faculty') {
+      // Ensure facultyList is an array before mapping
+      const list = Array.isArray(facultyList) ? facultyList : [];
+      return list.map(f => ({
+        id: f._id || f.id || f._id,
+        name: f.faculty_name || f.name || 'Unknown Faculty',
+        subtitle: f.department || f.assigned_class || 'Faculty',
+      }));
+    } else {
+      // Ensure studentList is an array before mapping
+      const list = Array.isArray(studentList) ? studentList : [];
+      return list.map(s => ({
+        id: s._id || s.id || s._id,
+        name: s.name || 'Unknown Student',
+        subtitle: `${s.class_id || s.class || 'No Class'} - Section ${s.section || 'A'}`,
+      }));
+    }
+  };
+
+  // ==================== RENDER FUNCTIONS ====================
+
   // Render calendar
   const renderCalendar = () => {
     const daysInMonth = getDaysInMonth(currentMonth, currentYear);
@@ -355,33 +662,32 @@ export default function HolidayLeaveManagement() {
 
   // Render leave list
   const renderLeaveList = () => {
-    const filtered = leaves.filter(leave => {
-      // Filter by view type (faculty/student)
-      if (viewType === 'faculty' && leave.user_type !== 'faculty') return false;
-      if (viewType === 'student' && leave.user_type !== 'student') return false;
-      
-      // Filter by class
-      if (selectedClass !== 'all' && leave.assigned_class !== selectedClass) return false;
-      
-      // Filter by status
-      if (selectedStatus !== 'all' && leave.status !== selectedStatus) return false;
-      
-      // Filter by leave type
-      if (selectedLeaveType !== 'all' && leave.leave_type !== selectedLeaveType) return false;
-      
-      // Search filter
-      if (searchTerm) {
-        const search = searchTerm.toLowerCase();
-        return leave.user_name?.toLowerCase().includes(search) ||
-               leave.reason?.toLowerCase().includes(search) ||
-               leave.department?.toLowerCase().includes(search) ||
-               leave.class_name?.toLowerCase().includes(search);
-      }
-      
-      return true;
-    });
+    if (isLoading) {
+      return (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+        </div>
+      );
+    }
 
-    return filtered.map(leave => (
+    if (!leaves || leaves.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <List className="w-10 h-10 text-gray-400" />
+          </div>
+          <p className="text-gray-500">No leave requests found</p>
+          <button
+            onClick={handleAddLeave}
+            className="mt-2 text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Create a new leave request
+          </button>
+        </div>
+      );
+    }
+
+    return leaves.map((leave) => (
       <div key={leave.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -424,7 +730,7 @@ export default function HolidayLeaveManagement() {
           <div>
             <span className="text-gray-500">Duration:</span>
             <span className="ml-2 text-gray-700 font-medium">
-              {Math.ceil((new Date(leave.to_date) - new Date(leave.from_date)) / (1000 * 60 * 60 * 24)) + 1} days
+              {leave.duration_days || Math.ceil((new Date(leave.to_date) - new Date(leave.from_date)) / (1000 * 60 * 60 * 24)) + 1} days
             </span>
           </div>
         </div>
@@ -453,12 +759,14 @@ export default function HolidayLeaveManagement() {
           <button 
             className="text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors"
             onClick={() => handleEditLeave(leave)}
+            disabled={loadingAction === 'save-leave'}
           >
             Edit
           </button>
           <button 
             className="text-xs text-red-600 hover:text-red-800 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
             onClick={() => handleDeleteLeave(leave.id)}
+            disabled={loadingAction === 'delete-leave'}
           >
             Delete
           </button>
@@ -467,12 +775,14 @@ export default function HolidayLeaveManagement() {
               <button 
                 className="text-xs text-green-600 hover:text-green-800 font-medium px-3 py-1 rounded-lg hover:bg-green-50 transition-colors"
                 onClick={() => handleApproveLeave(leave.id)}
+                disabled={loadingAction === 'approve-leave'}
               >
                 Approve
               </button>
               <button 
                 className="text-xs text-red-600 hover:text-red-800 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
                 onClick={() => handleRejectLeave(leave.id)}
+                disabled={loadingAction === 'reject-leave'}
               >
                 Reject
               </button>
@@ -483,202 +793,27 @@ export default function HolidayLeaveManagement() {
     ));
   };
 
-  // Holiday modal handlers
-  const handleAddHoliday = () => {
-    setEditingHoliday(null);
-    setHolidayForm({
-      date: selectedDate ? selectedDate.toISOString().split('T')[0] : '',
-      name: '',
-      type: 'public',
-      description: '',
-      color: '#FF6B6B',
-      for_faculty: true,
-      for_students: true,
-      affected_classes: [],
-    });
-    setShowHolidayModal(true);
-  };
-
-  const handleEditHoliday = (date, holiday) => {
-    setEditingHoliday({ date, ...holiday });
-    setHolidayForm({
-      date: date,
-      name: holiday.name,
-      type: holiday.type,
-      description: holiday.description || '',
-      color: holiday.color || '#FF6B6B',
-      for_faculty: true,
-      for_students: true,
-      affected_classes: [],
-    });
-    setShowHolidayModal(true);
-  };
-
-  const handleDeleteHoliday = (date) => {
-    if (confirm('Are you sure you want to delete this holiday?')) {
-      const newHolidays = { ...holidays };
-      delete newHolidays[date];
-      setHolidays(newHolidays);
-    }
-  };
-
-  const handleSaveHoliday = () => {
-    const { date, name, type, description, color } = holidayForm;
-    if (!date || !name) {
-      alert('Please fill in all required fields.');
-      return;
-    }
-    
-    const newHolidays = { ...holidays };
-    newHolidays[date] = { name, type, description, color };
-    setHolidays(newHolidays);
-    setShowHolidayModal(false);
-  };
-
-  // Leave modal handlers
-  const handleAddLeave = () => {
-    setEditingLeave(null);
-    setLeaveForm({
-      user_id: '',
-      user_type: viewType,
-      leave_type: 'casual',
-      from_date: '',
-      to_date: '',
-      reason: '',
-      assigned_class: null,
-      substitute_teacher: '',
-    });
-    setShowLeaveModal(true);
-  };
-
-  const handleEditLeave = (leave) => {
-    setEditingLeave(leave);
-    setLeaveForm({
-      user_id: leave.user_id,
-      user_type: leave.user_type,
-      leave_type: leave.leave_type,
-      from_date: leave.from_date,
-      to_date: leave.to_date,
-      reason: leave.reason,
-      assigned_class: leave.assigned_class || null,
-      substitute_teacher: leave.substitute_teacher || '',
-    });
-    setShowLeaveModal(true);
-  };
-
-  const handleDeleteLeave = (id) => {
-    if (confirm('Are you sure you want to delete this leave request?')) {
-      setLeaves(leaves.filter(l => l.id !== id));
-    }
-  };
-
-  const handleApproveLeave = (id) => {
-    setLeaves(leaves.map(l => 
-      l.id === id ? { ...l, status: 'approved', updated_at: new Date().toISOString().split('T')[0] } : l
-    ));
-  };
-
-  const handleRejectLeave = (id) => {
-    setLeaves(leaves.map(l => 
-      l.id === id ? { ...l, status: 'rejected', updated_at: new Date().toISOString().split('T')[0] } : l
-    ));
-  };
-
-  const handleSaveLeave = () => {
-    const { user_id, user_type, leave_type, from_date, to_date, reason, assigned_class, substitute_teacher } = leaveForm;
-    if (!user_id || !from_date || !to_date || !reason) {
-      alert('Please fill in all required fields.');
-      return;
-    }
-    
-    if (new Date(to_date) < new Date(from_date)) {
-      alert('To date must be after from date.');
-      return;
-    }
-    
-    const newLeave = {
-      id: editingLeave ? editingLeave.id : Date.now().toString(),
-      user_id,
-      user_type,
-      leave_type,
-      from_date,
-      to_date,
-      reason,
-      assigned_class: assigned_class || null,
-      substitute_teacher: substitute_teacher || null,
-      status: 'pending',
-      user_name: user_type === 'faculty' 
-        ? MOCK_FACULTY.find(f => f.id === user_id)?.name || 'Unknown'
-        : MOCK_STUDENTS.find(s => s.id === user_id)?.name || 'Unknown',
-      department: user_type === 'faculty' 
-        ? MOCK_FACULTY.find(f => f.id === user_id)?.department || ''
-        : undefined,
-      class_name: user_type === 'student'
-        ? MOCK_STUDENTS.find(s => s.id === user_id)?.class || ''
-        : undefined,
-      section: user_type === 'student'
-        ? MOCK_STUDENTS.find(s => s.id === user_id)?.section || ''
-        : undefined,
-      approved_by: null,
-      created_at: new Date().toISOString().split('T')[0],
-      updated_at: new Date().toISOString().split('T')[0],
-    };
-    
-    if (editingLeave) {
-      setLeaves(leaves.map(l => l.id === editingLeave.id ? { ...newLeave, status: l.status } : l));
-    } else {
-      setLeaves([...leaves, newLeave]);
-    }
-    
-    setShowLeaveModal(false);
-  };
-
-  // Statistics
-  const getStats = () => {
-    const facultyLeaves = leaves.filter(l => l.user_type === 'faculty');
-    const studentLeaves = leaves.filter(l => l.user_type === 'student');
-    const pendingLeaves = leaves.filter(l => l.status === 'pending');
-    const approvedLeaves = leaves.filter(l => l.status === 'approved');
-    const rejectedLeaves = leaves.filter(l => l.status === 'rejected');
-    const todayLeaves = leaves.filter(l => {
-      const todayStr = new Date().toISOString().split('T')[0];
-      return l.from_date <= todayStr && l.to_date >= todayStr;
-    });
-    
-    return {
-      total: leaves.length,
-      faculty: facultyLeaves.length,
-      student: studentLeaves.length,
-      pending: pendingLeaves.length,
-      approved: approvedLeaves.length,
-      rejected: rejectedLeaves.length,
-      today: todayLeaves.length,
-      holidays: Object.keys(holidays).length,
-    };
-  };
-
-  const stats = getStats();
-
-  // Render user options for leave form
-  const getUserOptions = () => {
-    if (leaveForm.user_type === 'faculty') {
-      return MOCK_FACULTY.map(f => ({
-        id: f.id,
-        name: f.name,
-        subtitle: f.department,
-      }));
-    } else {
-      return MOCK_STUDENTS.map(s => ({
-        id: s.id,
-        name: s.name,
-        subtitle: `${s.class} - Section ${s.section}`,
-      }));
-    }
-  };
+  // ==================== MAIN RENDER ====================
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              <span className="text-red-700">{error}</span>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-500 hover:text-red-700"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
@@ -700,15 +835,25 @@ export default function HolidayLeaveManagement() {
             <button
               onClick={handleAddLeave}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+              disabled={loadingAction === 'save-leave'}
             >
-              <Plus size={18} />
+              {loadingAction === 'save-leave' ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Plus size={18} />
+              )}
               <span>New Leave</span>
             </button>
             <button
               onClick={handleAddHoliday}
               className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+              disabled={loadingAction === 'save-holiday'}
             >
-              <Plus size={18} />
+              {loadingAction === 'save-holiday' ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Plus size={18} />
+              )}
               <span>Add Holiday</span>
             </button>
           </div>
@@ -718,27 +863,27 @@ export default function HolidayLeaveManagement() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all">
             <p className="text-xs text-gray-500">Total Leaves</p>
-            <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+            <p className="text-2xl font-bold text-gray-800">{stats.total || 0}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all">
             <p className="text-xs text-gray-500">Faculty</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.faculty}</p>
+            <p className="text-2xl font-bold text-purple-600">{stats.faculty || 0}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all">
             <p className="text-xs text-gray-500">Students</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.student}</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.student || 0}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all">
             <p className="text-xs text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <p className="text-2xl font-bold text-yellow-600">{stats.pending || 0}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all">
             <p className="text-xs text-gray-500">Today's Leave</p>
-            <p className="text-2xl font-bold text-orange-600">{stats.today}</p>
+            <p className="text-2xl font-bold text-orange-600">{stats.today || 0}</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all">
             <p className="text-xs text-gray-500">Holidays</p>
-            <p className="text-2xl font-bold text-red-600">{stats.holidays}</p>
+            <p className="text-2xl font-bold text-red-600">{stats.holidays || 0}</p>
           </div>
         </div>
 
@@ -917,20 +1062,6 @@ export default function HolidayLeaveManagement() {
               {/* Leave List */}
               <div className="space-y-3">
                 {renderLeaveList()}
-                {renderLeaveList().length === 0 && (
-                  <div className="text-center py-12">
-                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <List className="w-10 h-10 text-gray-400" />
-                    </div>
-                    <p className="text-gray-500">No leave requests found</p>
-                    <button
-                      onClick={handleAddLeave}
-                      className="mt-2 text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Create a new leave request
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -974,33 +1105,77 @@ export default function HolidayLeaveManagement() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm text-gray-600 mb-1">Term Start</label>
-                        <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" defaultValue="2026-01-01" />
+                        <input 
+                          type="date" 
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                          value={settings?.term_start ? new Date(settings.term_start).toISOString().split('T')[0] : ''}
+                          onChange={(e) => setSettings({ ...settings, term_start: e.target.value })}
+                        />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-600 mb-1">Term End</label>
-                        <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" defaultValue="2026-12-31" />
+                        <input 
+                          type="date" 
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                          value={settings?.term_end ? new Date(settings.term_end).toISOString().split('T')[0] : ''}
+                          onChange={(e) => setSettings({ ...settings, term_end: e.target.value })}
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Class Assignments */}
+                {/* Leave Limits */}
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Class Assignments</h4>
+                  <h4 className="font-medium text-gray-700 mb-2">Leave Limits</h4>
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {CLASSES.map(cls => (
-                        <div key={cls} className="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200">
-                          <span className="font-medium">{cls}</span>
-                          <span className="text-sm text-gray-500">View assignments</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {LEAVE_TYPES.map(type => (
+                        <div key={type} className="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200">
+                          <span className="font-medium">{getLeaveTypeLabel(type)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">Max Days:</span>
+                            <input 
+                              type="number" 
+                              className="w-16 px-2 py-1 border border-gray-300 rounded-lg text-sm"
+                              value={settings?.leave_limits?.[type]?.max_days || 0}
+                              onChange={(e) => {
+                                const newSettings = { ...settings };
+                                if (!newSettings.leave_limits) newSettings.leave_limits = {};
+                                if (!newSettings.leave_limits[type]) newSettings.leave_limits[type] = {};
+                                newSettings.leave_limits[type].max_days = parseInt(e.target.value) || 0;
+                                setSettings(newSettings);
+                              }}
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                <button className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all">
-                  Save Settings
+                <button 
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
+                  onClick={async () => {
+                    try {
+                      setLoadingAction('save-settings');
+                      await settingsApi.updateSettings(settings);
+                      setError(null);
+                      alert('Settings saved successfully!');
+                    } catch (error) {
+                      console.error('Error saving settings:', error);
+                      setError('Failed to save settings');
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                  disabled={loadingAction === 'save-settings'}
+                >
+                  {loadingAction === 'save-settings' ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    'Save Settings'
+                  )}
                 </button>
               </div>
             </div>
@@ -1084,8 +1259,10 @@ export default function HolidayLeaveManagement() {
               </button>
               <button
                 onClick={handleSaveHoliday}
-                className="px-5 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all"
+                className="px-5 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                disabled={loadingAction === 'save-holiday'}
               >
+                {loadingAction === 'save-holiday' && <Loader2 size={18} className="animate-spin" />}
                 {editingHoliday ? 'Update' : 'Add'} Holiday
               </button>
             </div>
@@ -1192,13 +1369,27 @@ export default function HolidayLeaveManagement() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Substitute Teacher</label>
-                <input
-                  type="text"
-                  value={leaveForm.substitute_teacher}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, substitute_teacher: e.target.value })}
+                <select
+                  value={leaveForm.substitute_teacher_id || ''}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const teachers = Array.isArray(substituteTeachers) ? substituteTeachers : [];
+                    const teacher = teachers.find(t => (t._id || t.id) === selectedId);
+                    setLeaveForm({ 
+                      ...leaveForm, 
+                      substitute_teacher_id: selectedId,
+                      substitute_teacher_name: teacher ? (teacher.faculty_name || teacher.name) : ''
+                    });
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter substitute teacher name"
-                />
+                >
+                  <option value="">Select substitute teacher</option>
+                  {(Array.isArray(substituteTeachers) ? substituteTeachers : []).map(teacher => (
+                    <option key={teacher._id || teacher.id} value={teacher._id || teacher.id}>
+                      {teacher.faculty_name || teacher.name} {teacher.assigned_class ? `(${teacher.assigned_class})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 pb-6">
@@ -1210,8 +1401,10 @@ export default function HolidayLeaveManagement() {
               </button>
               <button
                 onClick={handleSaveLeave}
-                className="px-5 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all"
+                className="px-5 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                disabled={loadingAction === 'save-leave'}
               >
+                {loadingAction === 'save-leave' && <Loader2 size={18} className="animate-spin" />}
                 {editingLeave ? 'Update' : 'Submit'} Request
               </button>
             </div>
