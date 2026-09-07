@@ -7,7 +7,8 @@ import {
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
   DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
   Dropbox, File, ArrowUpCircle, User, Hash, Clock, CalendarDays,
-  Info, ChevronDown, ChevronUp, Printer, Camera, Shield, UserCog
+  Info, ChevronDown, ChevronUp, Printer, Camera, Shield, UserCog,
+  FileSpreadsheet, Repeat
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors, promoteAllStudents } from '../services/api';
 
@@ -22,9 +23,19 @@ const CLASSES = [
 const SECTIONS = ['A', 'B', 'C', 'D'];
 const PAYMENT_MODES = ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Cheque'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt', 'Uncle', 'Sibling'];
+const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Other'];
 const TRANSPORT_TYPES = ['Walker', 'Cab', 'Bus'];
 const FEE_FREQUENCIES = ['Monthly', 'Quarterly', 'Annual'];
+const ENROLLMENT_TYPES = ['New Admission', 'Transfer', 'Returning'];
+const ACADEMIC_YEARS = (() => {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let i = 5; i >= 0; i--) {
+    const year = currentYear - i;
+    years.push(`${year}-${year + 1}`);
+  }
+  return years;
+})();
 
 // Helper to check if document is a URL (Cloudinary or other)
 const isDocumentUrl = (doc) => {
@@ -81,6 +92,8 @@ export default function StudentDetails() {
   const [isPromoting, setIsPromoting] = useState(false);
   const [promotionAcademicYear, setPromotionAcademicYear] = useState('');
   const [expandedFeeCard, setExpandedFeeCard] = useState(null);
+  const [isFormSticky, setIsFormSticky] = useState(false);
+  const [formRef, setFormRef] = useState(null);
   
   // Track document changes - which documents have been updated
   const [documentChanges, setDocumentChanges] = useState({
@@ -132,6 +145,11 @@ export default function StudentDetails() {
     emergency_name: '',
     emergency_relationship: '',
     emergency_phone: '',
+    // Enrollment Information
+    admission_date: new Date().toISOString().split('T')[0],
+    academic_year: ACADEMIC_YEARS[0],
+    enrollment_type: 'New Admission',
+    previous_class: '',
     // Document fields - store both file data and existing URLs
     birth_certificate: null,
     birth_certificate_url: null,
@@ -317,6 +335,22 @@ export default function StudentDetails() {
       return;
     }
     
+    // Validate enrollment info
+    if (!formData.admission_date) {
+      alert('Admission Date is required.');
+      return;
+    }
+    if (!formData.academic_year) {
+      alert('Academic Year is required.');
+      return;
+    }
+    
+    // Validate previous class if enrollment type is Transfer or Returning
+    if ((formData.enrollment_type === 'Transfer' || formData.enrollment_type === 'Returning') && !formData.previous_class) {
+      alert('Previous Class is required for Transfer or Returning students.');
+      return;
+    }
+    
     try {
       setIsSubmitting(true);
       
@@ -389,6 +423,11 @@ export default function StudentDetails() {
           relationship: formData.emergency_relationship || '',
           phone: formData.emergency_phone || '',
         },
+        // Enrollment Information
+        admission_date: formData.admission_date,
+        academic_year: formData.academic_year,
+        enrollment_type: formData.enrollment_type,
+        previous_class: formData.previous_class || '',
         documents: documents,
       };
       
@@ -447,7 +486,7 @@ export default function StudentDetails() {
   };
 
   const handleEdit = (student) => {
-    console.log('Editing student:', student); // Debug log
+    console.log('Editing student:', student);
     
     setEditingStudent(student);
     setDocumentChanges({
@@ -535,6 +574,11 @@ export default function StudentDetails() {
       emergency_name: emergencyContact.name || '',
       emergency_relationship: emergencyContact.relationship || '',
       emergency_phone: emergencyContact.phone || '',
+      // Enrollment Information
+      admission_date: student.admission_date ? student.admission_date.split('T')[0] : new Date().toISOString().split('T')[0],
+      academic_year: student.academic_year || ACADEMIC_YEARS[0],
+      enrollment_type: student.enrollment_type || 'New Admission',
+      previous_class: student.previous_class || '',
       // Document fields - store existing URLs
       birth_certificate: null,
       birth_certificate_url: student.documents?.birth_certificate || null,
@@ -590,6 +634,10 @@ export default function StudentDetails() {
       emergency_name: '',
       emergency_relationship: '',
       emergency_phone: '',
+      admission_date: new Date().toISOString().split('T')[0],
+      academic_year: ACADEMIC_YEARS[0],
+      enrollment_type: 'New Admission',
+      previous_class: '',
       birth_certificate: null,
       birth_certificate_url: null,
       aadhar_card: null,
@@ -612,6 +660,24 @@ export default function StudentDetails() {
     setShowModal(false);
     setIsSubmitting(false);
   };
+
+  // Handle scroll for sticky form footer
+  useEffect(() => {
+    if (showModal) {
+      const modalContent = document.querySelector('.modal-scroll-content');
+      if (modalContent) {
+        const handleScroll = () => {
+          const scrollTop = modalContent.scrollTop;
+          const scrollHeight = modalContent.scrollHeight;
+          const clientHeight = modalContent.clientHeight;
+          setIsFormSticky(scrollTop + clientHeight < scrollHeight - 100);
+        };
+        modalContent.addEventListener('scroll', handleScroll);
+        return () => modalContent.removeEventListener('scroll', handleScroll);
+      }
+    }
+    return () => {};
+  }, [showModal]);
 
   const getFilteredStudents = () => {
     let filtered = students;
@@ -831,14 +897,14 @@ export default function StudentDetails() {
                 Student Details
               </h1>
               <p className="text-gray-600 mt-2 flex items-center gap-2">
-                <Users size={18} className="text-purple-500" />
+                <Users size={18} className="text-purple-500 flex-shrink-0" />
                 Class-wise student management with complete documentation and fee tracking
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-shrink-0">
               <button
                 onClick={() => setShowPromoteModal(true)}
-                className="group relative px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
+                className="group relative px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105 whitespace-nowrap"
               >
                 <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
                 <div className="flex items-center gap-2 relative">
@@ -848,7 +914,7 @@ export default function StudentDetails() {
               </button>
               <button
                 onClick={() => setShowModal(true)}
-                className="group relative px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
+                className="group relative px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105 whitespace-nowrap"
               >
                 <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
                 <div className="flex items-center gap-2 relative">
@@ -865,7 +931,7 @@ export default function StudentDetails() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100 shadow-lg hover:shadow-xl transition-all duration-300">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <DollarSign className="text-white" size={20} />
                 </div>
                 <div>
@@ -876,7 +942,7 @@ export default function StudentDetails() {
             </div>
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 border border-green-100 shadow-lg hover:shadow-xl transition-all duration-300">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <CheckCircle className="text-white" size={20} />
                 </div>
                 <div>
@@ -887,7 +953,7 @@ export default function StudentDetails() {
             </div>
             <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-2xl p-5 border border-red-100 shadow-lg hover:shadow-xl transition-all duration-300">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <XCircle className="text-white" size={20} />
                 </div>
                 <div>
@@ -898,7 +964,7 @@ export default function StudentDetails() {
             </div>
             <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-100 shadow-lg hover:shadow-xl transition-all duration-300">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <Users className="text-white" size={20} />
                 </div>
                 <div>
@@ -916,7 +982,7 @@ export default function StudentDetails() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100 shadow-lg hover:shadow-xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
                 <Baby className="text-white" size={20} />
               </div>
               <div>
@@ -927,7 +993,7 @@ export default function StudentDetails() {
           </div>
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 border border-green-100 shadow-lg hover:shadow-xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
                 <School className="text-white" size={20} />
               </div>
               <div>
@@ -938,7 +1004,7 @@ export default function StudentDetails() {
           </div>
           <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-5 border border-orange-100 shadow-lg hover:shadow-xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center flex-shrink-0">
                 <GraduationCap className="text-white" size={20} />
               </div>
               <div>
@@ -949,7 +1015,7 @@ export default function StudentDetails() {
           </div>
           <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-100 shadow-lg hover:shadow-xl transition-all duration-300">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0">
                 <Star className="text-white" size={20} />
               </div>
               <div>
@@ -964,7 +1030,7 @@ export default function StudentDetails() {
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 shadow-lg border border-gray-200/50">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 flex-shrink-0" size={20} />
               <input
                 type="text"
                 placeholder="Search by student name, parent name, or email..."
@@ -973,9 +1039,9 @@ export default function StudentDetails() {
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               />
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-shrink-0">
               <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 flex-shrink-0" size={18} />
                 <select
                   value={selectedClass}
                   onChange={(e) => setSelectedClass(e.target.value)}
@@ -988,7 +1054,7 @@ export default function StudentDetails() {
                 </select>
               </div>
               <div className="relative">
-                <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 flex-shrink-0" size={18} />
                 <select
                   value={selectedSection}
                   onChange={(e) => setSelectedSection(e.target.value)}
@@ -1000,7 +1066,7 @@ export default function StudentDetails() {
                   ))}
                 </select>
               </div>
-              <button className="px-4 py-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl hover:shadow-md transition-all">
+              <button className="px-4 py-3 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl hover:shadow-md transition-all flex-shrink-0">
                 <Download size={20} className="text-gray-600" />
               </button>
             </div>
@@ -1024,7 +1090,7 @@ export default function StudentDetails() {
             <div key={classSection.id} className="mb-8">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0">
                     <Icon className="text-white" size={24} />
                   </div>
                   <div>
@@ -1032,7 +1098,7 @@ export default function StudentDetails() {
                     <p className="text-sm text-gray-500">{classSection.ageGroup}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">
                     {filteredClassStudents.length} Students
                   </span>
@@ -1048,23 +1114,23 @@ export default function StudentDetails() {
                     {/* Card Header - Updated with new layout */}
                     <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3">
                             {student.documents?.student_photo ? (
                               <img 
                                 src={student.documents.student_photo} 
                                 alt={student.name}
-                                className="w-12 h-12 rounded-full object-cover border-2 border-white/50"
+                                className="w-12 h-12 rounded-full object-cover border-2 border-white/50 flex-shrink-0"
                               />
                             ) : (
-                              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                                 <User size={24} className="text-white" />
                               </div>
                             )}
-                            <div>
-                              <h3 className="font-bold text-lg flex items-center gap-2">
-                                {student.name}
-                                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                            <div className="min-w-0">
+                              <h3 className="font-bold text-lg flex items-center gap-2 flex-wrap">
+                                <span className="truncate">{student.name}</span>
+                                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full whitespace-nowrap">
                                   ID: {student._id?.slice(-6) || 'N/A'}
                                 </span>
                               </h3>
@@ -1083,7 +1149,7 @@ export default function StudentDetails() {
                             </div>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${
                           student.status === 'Active' ? 'bg-green-500' : 'bg-gray-500'
                         }`}>
                           {student.status}
@@ -1094,8 +1160,8 @@ export default function StudentDetails() {
                     <div className="p-4 space-y-3">
                       {/* Teacher Info */}
                       <div className="bg-gray-50 rounded-lg p-2 flex items-center gap-2">
-                        <UserCheck size={14} className="text-purple-500" />
-                        <p className="text-sm font-semibold text-gray-800">
+                        <UserCheck size={14} className="text-purple-500 flex-shrink-0" />
+                        <p className="text-sm font-semibold text-gray-800 truncate">
                           Teacher: {getTeacherName(student.assigned_teacher_id)}
                         </p>
                       </div>
@@ -1103,19 +1169,19 @@ export default function StudentDetails() {
                       {/* Parent Information */}
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                          <Users size={12} />
+                          <Users size={12} className="flex-shrink-0" />
                           Parent Information
                         </p>
-                        <p className="text-sm font-medium text-gray-800">{student.parent_name}</p>
+                        <p className="text-sm font-medium text-gray-800 truncate">{student.parent_name}</p>
                         <p className="text-xs text-gray-500">{student.parent_relationship}</p>
                         <div className="flex items-center gap-2 text-xs text-gray-600 mt-1 flex-wrap">
-                          <Mail size={10} /> {student.parent_email}
-                          <Phone size={10} className="ml-1" /> {student.parent_phone}
+                          <Mail size={10} className="flex-shrink-0" /> <span className="truncate">{student.parent_email}</span>
+                          <Phone size={10} className="ml-1 flex-shrink-0" /> {student.parent_phone}
                         </div>
                         {/* Blood Group - Below Parent Info */}
                         {student.blood_group && (
                           <div className="mt-1 flex items-center gap-1">
-                            <Heart size={12} className="text-red-500" />
+                            <Heart size={12} className="text-red-500 flex-shrink-0" />
                             <span className="text-xs font-medium text-gray-700">
                               Blood Group: <span className="text-red-600">{student.blood_group}</span>
                             </span>
@@ -1127,13 +1193,13 @@ export default function StudentDetails() {
                       {student.emergency_contact && (
                         <div className="bg-red-50 rounded-lg p-2 border border-red-100">
                           <p className="text-xs text-red-600 font-medium flex items-center gap-1">
-                            <AlertCircle size={12} />
+                            <AlertCircle size={12} className="flex-shrink-0" />
                             Emergency Contact
                           </p>
                           <div className="grid grid-cols-2 gap-1 text-xs mt-1">
-                            <span className="text-gray-600">Name: {student.emergency_contact.name || 'N/A'}</span>
-                            <span className="text-gray-600">Relation: {student.emergency_contact.relationship || 'N/A'}</span>
-                            <span className="text-gray-600 col-span-2">Phone: {student.emergency_contact.phone || 'N/A'}</span>
+                            <span className="text-gray-600 truncate">Name: {student.emergency_contact.name || 'N/A'}</span>
+                            <span className="text-gray-600 truncate">Relation: {student.emergency_contact.relationship || 'N/A'}</span>
+                            <span className="text-gray-600 col-span-2 truncate">Phone: {student.emergency_contact.phone || 'N/A'}</span>
                           </div>
                         </div>
                       )}
@@ -1142,13 +1208,13 @@ export default function StudentDetails() {
                       {student.transport_type === 'Walker' && student.authorized_pickup && (
                         <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
                           <p className="text-xs text-blue-600 font-medium flex items-center gap-1">
-                            <Shield size={12} />
+                            <Shield size={12} className="flex-shrink-0" />
                             Authorized Pickup
                           </p>
                           <div className="grid grid-cols-2 gap-1 text-xs mt-1">
-                            <span className="text-gray-600">Name: {student.authorized_pickup.name || 'N/A'}</span>
-                            <span className="text-gray-600">Relation: {student.authorized_pickup.relationship || 'N/A'}</span>
-                            <span className="text-gray-600 col-span-2">Phone: {student.authorized_pickup.phone || 'N/A'}</span>
+                            <span className="text-gray-600 truncate">Name: {student.authorized_pickup.name || 'N/A'}</span>
+                            <span className="text-gray-600 truncate">Relation: {student.authorized_pickup.relationship || 'N/A'}</span>
+                            <span className="text-gray-600 col-span-2 truncate">Phone: {student.authorized_pickup.phone || 'N/A'}</span>
                           </div>
                         </div>
                       )}
@@ -1157,12 +1223,12 @@ export default function StudentDetails() {
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500 flex items-center gap-1">
-                            <DollarSign size={12} />
+                            <DollarSign size={12} className="flex-shrink-0" />
                             Fee Summary ({student.fee_frequency || 'Monthly'})
                           </p>
                           <button
                             onClick={() => toggleFeeDetails(student._id)}
-                            className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"
+                            className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1 flex-shrink-0"
                           >
                             {expandedFeeCard === student._id ? (
                               <>Hide Details <ChevronUp size={14} /></>
@@ -1227,11 +1293,11 @@ export default function StudentDetails() {
 
                       {/* Transport and Actions */}
                       <div className="flex items-center justify-between pt-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           {(student.transport_type === 'Cab' || student.transport_type === 'Bus') ? (
                             <>
                               <Truck size={14} className="text-cyan-600 flex-shrink-0" />
-                              <span className="text-sm text-gray-700 truncate max-w-[140px]">
+                              <span className="text-sm text-gray-700 truncate">
                                 {student.transport_type}: {getVehicleNumber(student.vehicle_id)}
                               </span>
                             </>
@@ -1385,7 +1451,8 @@ export default function StudentDetails() {
         {/* Add/Edit Student Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
+              {/* Modal Header - Sticky */}
               <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-xl font-bold text-white">
                   {editingStudent ? 'Edit Student' : 'Add New Student'}
@@ -1403,7 +1470,7 @@ export default function StudentDetails() {
                 {/* Basic Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Users size={18} className="text-purple-600" />
+                    <Users size={18} className="text-purple-600 flex-shrink-0" />
                     Basic Information
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1507,7 +1574,7 @@ export default function StudentDetails() {
                 {/* Staff Assignment */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <UserCheck size={18} className="text-purple-600" />
+                    <UserCheck size={18} className="text-purple-600 flex-shrink-0" />
                     Staff Assignment
                   </h3>
                   <div>
@@ -1539,7 +1606,7 @@ export default function StudentDetails() {
                 {/* Parent Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Users size={18} className="text-purple-600" />
+                    <Users size={18} className="text-purple-600 flex-shrink-0" />
                     Parent Information
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1638,10 +1705,88 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
+                {/* Enrollment Information - NEW SECTION */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <FileSpreadsheet size={18} className="text-green-600 flex-shrink-0" />
+                    Enrollment Information
+                    <span className="text-xs text-red-500 ml-2">*</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Admission Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.admission_date}
+                        onChange={(e) => setFormData({ ...formData, admission_date: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Academic Year <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.academic_year}
+                        onChange={(e) => setFormData({ ...formData, academic_year: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        {ACADEMIC_YEARS.map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Enrollment Type <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.enrollment_type}
+                        onChange={(e) => setFormData({ ...formData, enrollment_type: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        {ENROLLMENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Previous Class
+                        <span className="text-xs text-gray-400 ml-1">(If applicable)</span>
+                      </label>
+                      <select
+                        value={formData.previous_class}
+                        onChange={(e) => setFormData({ ...formData, previous_class: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select Previous Class</option>
+                        {CLASSES.map(cls => (
+                          <option key={cls.id} value={cls.id}>{cls.name}</option>
+                        ))}
+                      </select>
+                      {(formData.enrollment_type === 'Transfer' || formData.enrollment_type === 'Returning') && !formData.previous_class && (
+                        <p className="text-xs text-red-500 mt-1">
+                          ⚠️ Previous class is required for {formData.enrollment_type} students.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Fee and Charges */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <DollarSign size={18} className="text-purple-600" />
+                    <DollarSign size={18} className="text-purple-600 flex-shrink-0" />
                     Fee & Charges
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1850,7 +1995,7 @@ export default function StudentDetails() {
                 {/* Transport Details */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Truck size={18} className="text-purple-600" />
+                    <Truck size={18} className="text-purple-600 flex-shrink-0" />
                     Transport Details
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1961,7 +2106,7 @@ export default function StudentDetails() {
                 {formData.transport_type === 'Walker' && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                      <Shield size={18} className="text-blue-600" />
+                      <Shield size={18} className="text-blue-600 flex-shrink-0" />
                       Authorized Pickup Person
                       <span className="text-xs text-gray-400 ml-2">(Only for Walker)</span>
                     </h3>
@@ -2022,7 +2167,7 @@ export default function StudentDetails() {
                 {/* Emergency Contact Section */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <AlertCircle size={18} className="text-red-600" />
+                    <AlertCircle size={18} className="text-red-600 flex-shrink-0" />
                     Emergency Contact
                     <span className="text-xs text-red-500 ml-2">*</span>
                   </h3>
@@ -2085,7 +2230,7 @@ export default function StudentDetails() {
                 {/* Documents Upload */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Upload size={18} className="text-purple-600" />
+                    <Upload size={18} className="text-purple-600 flex-shrink-0" />
                     Documents Upload
                     <span className="text-xs text-red-500 ml-2">(* Mandatory)</span>
                     {editingStudent && (
@@ -2107,33 +2252,38 @@ export default function StudentDetails() {
                   </p>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 sticky bottom-0 bg-white py-3 border-t">
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    disabled={isSubmitting}
-                    className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 size={20} className="animate-spin" />
+                {/* Form Footer - Sticky */}
+                <div className={`sticky bottom-0 bg-white py-4 -mx-6 px-6 border-t transition-shadow ${
+                  isFormSticky ? 'shadow-lg' : ''
+                }`}>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      disabled={isSubmitting}
+                      className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 size={20} className="animate-spin" />
+                          <span>
+                            {editingStudent ? 'Updating Student...' : 'Creating Student...'}
+                          </span>
+                        </>
+                      ) : (
                         <span>
-                          {editingStudent ? 'Updating Student...' : 'Creating Student...'}
+                          {editingStudent ? 'Update Student' : 'Add Student'}
                         </span>
-                      </>
-                    ) : (
-                      <span>
-                        {editingStudent ? 'Update Student' : 'Add Student'}
-                      </span>
-                    )}
-                  </button>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

@@ -5,7 +5,8 @@ import {
   FileText, Eye, ChevronDown, ChevronRight, Printer,
   PieChart, Wallet, CreditCard, Banknote, Receipt,
   AlertCircle, CheckCircle, Clock, Upload, Building,
-  User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw
+  User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
+  History
 } from 'lucide-react';
 import { 
   getFees, getExpenses, getSalaries, getStudents, getStaff,
@@ -29,6 +30,12 @@ export default function Finance() {
   const [students, setStudents] = useState([]);
   const [staff, setStaff] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedFeeForPayment, setSelectedFeeForPayment] = useState(null);
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [selectedFeeForHistory, setSelectedFeeForHistory] = useState(null);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   
   const [formData, setFormData] = useState({
     student_id: '',
@@ -63,6 +70,18 @@ export default function Finance() {
     payment_date_salary: '',
     remarks: '',
     salary_slip: null,
+  });
+
+  // Payment form data
+  const [paymentFormData, setPaymentFormData] = useState({
+    student_id: '',
+    fee_id: '',
+    amount_paid: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_type: 'full',
+    payment_method: 'Cash',
+    transaction_no: '',
+    notes: '',
   });
 
   useEffect(() => {
@@ -122,6 +141,28 @@ export default function Finance() {
     }
   };
 
+  // Fetch payment history for a fee
+  const fetchPaymentHistory = async (feeId) => {
+    try {
+      setLoadingHistory(true);
+      const response = await fetch(`/api/fees/${feeId}/payments`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setPaymentHistory(result.data.payment_history || []);
+        setSelectedFeeForHistory(feeId);
+        setShowPaymentHistory(true);
+      } else {
+        alert('Failed to fetch payment history');
+      }
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
+      alert('Failed to fetch payment history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   const handleFileUpload = (e, fieldName) => {
     const file = e.target.files[0];
     if (file) {
@@ -170,6 +211,52 @@ export default function Finance() {
     const deductions = parseFloat(formData.deductions) || 0;
     const net = basic + allowance - deductions;
     setFormData(prev => ({ ...prev, net_salary: net.toString() }));
+  };
+
+  // Handle payment record submission
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate amount
+    if (!paymentFormData.amount_paid || parseFloat(paymentFormData.amount_paid) <= 0) {
+      alert('Please enter a valid payment amount');
+      return;
+    }
+
+    try {
+      const paymentData = {
+        student_id: paymentFormData.student_id,
+        fee_id: paymentFormData.fee_id,
+        amount_paid: parseFloat(paymentFormData.amount_paid) || 0,
+        payment_date: paymentFormData.payment_date,
+        payment_type: paymentFormData.payment_type,
+        payment_method: paymentFormData.payment_method,
+        transaction_no: paymentFormData.transaction_no,
+        notes: paymentFormData.notes,
+      };
+
+      // Call API to record payment
+      const response = await fetch('/api/fees/record-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(paymentData),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Payment recorded successfully!');
+        resetPaymentForm();
+        await loadData(); // Refresh data to show updated status
+      } else {
+        alert('Failed to record payment: ' + (result.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      alert('Failed to record payment. Please try again.');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -424,6 +511,21 @@ export default function Finance() {
     setShowModal(false);
   };
 
+  const resetPaymentForm = () => {
+    setPaymentFormData({
+      student_id: '',
+      fee_id: '',
+      amount_paid: '',
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_type: 'full',
+      payment_method: 'Cash',
+      transaction_no: '',
+      notes: '',
+    });
+    setSelectedFeeForPayment(null);
+    setShowPaymentModal(false);
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Paid':
@@ -433,6 +535,8 @@ export default function Finance() {
         return { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: <Clock size={12} /> };
       case 'Overdue':
         return { bg: 'bg-red-100', text: 'text-red-700', icon: <AlertCircle size={12} /> };
+      case 'Partial':
+        return { bg: 'bg-blue-100', text: 'text-blue-700', icon: <Clock size={12} /> };
       default:
         return { bg: 'bg-gray-100', text: 'text-gray-700', icon: null };
     }
@@ -453,6 +557,13 @@ export default function Finance() {
     .reduce((sum, s) => sum + (s.net_salary || 0), 0);
   
   const netBalance = totalFeesCollected - totalExpenses - totalSalaryPaid;
+
+  // Get fee records for a specific student
+  const getStudentFees = (studentId) => {
+    return fees.filter(f => 
+      f.student_id?._id === studentId || f.student_id === studentId
+    );
+  };
 
   const filteredFees = fees.filter(f => 
     f.student_id?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -521,7 +632,7 @@ export default function Finance() {
               <span className="text-2xl font-bold text-orange-600">₹{pendingFees.toLocaleString()}</span>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Pending Fees</h3>
-            <p className="text-2xl font-bold text-gray-800">{fees.filter(f => f.status === 'Pending').length} Students</p>
+            <p className="text-2xl font-bold text-gray-800">{fees.filter(f => f.status === 'Pending' || f.status === 'Partial').length} Students</p>
             <p className="text-xs text-gray-500 mt-2">Needs follow-up</p>
           </div>
 
@@ -613,17 +724,38 @@ export default function Finance() {
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
               />
             </div>
-            <button
-              onClick={() => {
-                setModalType(activeTab === 'fees' ? 'fee' : activeTab === 'expenses' ? 'expense' : 'salary');
-                setEditingItem(null);
-                setShowModal(true);
-              }}
-              className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
-            >
-              <Plus size={20} />
-              Add {activeTab === 'fees' ? 'Fee Record' : activeTab === 'expenses' ? 'Expense' : 'Salary Payment'}
-            </button>
+            <div className="flex gap-2 flex-wrap">
+              {activeTab === 'fees' && (
+                <>
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    <DollarSign size={20} />
+                    Record Payment
+                  </button>
+                  <button
+                    onClick={syncAllStudentFees}
+                    disabled={isSyncing}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+                    {isSyncing ? 'Syncing...' : 'Sync Student Fees'}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => {
+                  setModalType(activeTab === 'fees' ? 'fee' : activeTab === 'expenses' ? 'expense' : 'salary');
+                  setEditingItem(null);
+                  setShowModal(true);
+                }}
+                className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                <Plus size={20} />
+                Add {activeTab === 'fees' ? 'Fee Record' : activeTab === 'expenses' ? 'Expense' : 'Salary Payment'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -636,17 +768,18 @@ export default function Finance() {
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Student</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fee Breakdown</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Remaining</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Due Date</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment Method</th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredFees.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
                         <Receipt className="mx-auto mb-3 text-gray-400" size={48} />
                         <p className="text-lg">No fee records found</p>
                         <p className="text-sm text-gray-400 mt-1">Click "Sync Student Fees" to import from student profiles</p>
@@ -655,6 +788,7 @@ export default function Finance() {
                   ) : (
                     filteredFees.map((fee) => {
                       const statusStyle = getStatusColor(fee.status);
+                      const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
                       return (
                         <tr key={fee._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
                           <td className="px-6 py-4">
@@ -674,13 +808,18 @@ export default function Finance() {
                               {fee.tuition_fee > 0 && <div>Tuition: ₹{fee.tuition_fee}</div>}
                               {fee.transport_fee > 0 && <div>Transport: ₹{fee.transport_fee}</div>}
                               {fee.activity_fee > 0 && <div>Activity: ₹{fee.activity_fee}</div>}
-                              {fee.registration_fee > 0 && <div>Registration: ₹{fee.registration_fee}</div>}
-                              {fee.kit_fee > 0 && <div>Kit: ₹{fee.kit_fee}</div>}
-                              {fee.camera_fee > 0 && <div>Camera: ₹{fee.camera_fee}</div>}
                             </div>
                           </td>
                           <td className="px-6 py-4">
                             <span className="font-bold text-gray-900">₹{fee.total_amount?.toLocaleString()}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-semibold text-green-600">₹{(fee.paid_amount || 0).toLocaleString()}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              ₹{remaining.toLocaleString()}
+                            </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">
                             {new Date(fee.due_date).toLocaleDateString()}
@@ -691,16 +830,38 @@ export default function Finance() {
                               {fee.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {fee.payment_method || '-'}
-                          </td>
                           <td className="px-6 py-4 text-right">
-                            <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
-                              <Edit size={18} />
-                            </button>
-                            <button onClick={() => handleDelete(fee._id, 'fee')} className="text-red-600 hover:text-red-800 transition-colors">
-                              <Trash2 size={18} />
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button 
+                                onClick={() => {
+                                  setSelectedFeeForPayment(fee);
+                                  setPaymentFormData({
+                                    ...paymentFormData,
+                                    student_id: fee.student_id?._id || fee.student_id || '',
+                                    fee_id: fee._id,
+                                    amount_paid: remaining > 0 ? remaining : fee.total_amount || 0,
+                                  });
+                                  setShowPaymentModal(true);
+                                }} 
+                                className="text-green-600 hover:text-green-800 p-1 transition-colors"
+                                title="Record Payment"
+                              >
+                                <DollarSign size={18} />
+                              </button>
+                              <button 
+                                onClick={() => fetchPaymentHistory(fee._id)} 
+                                className="text-purple-600 hover:text-purple-800 p-1 transition-colors"
+                                title="View Payment History"
+                              >
+                                <History size={18} />
+                              </button>
+                              <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 p-1 transition-colors">
+                                <Edit size={18} />
+                              </button>
+                              <button onClick={() => handleDelete(fee._id, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -708,6 +869,77 @@ export default function Finance() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Payment History Modal */}
+        {showPaymentHistory && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <History size={24} />
+                  Payment History
+                </h2>
+                <button onClick={() => setShowPaymentHistory(false)} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-6">
+                {loadingHistory ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+                    <p className="mt-4 text-gray-500">Loading payment history...</p>
+                  </div>
+                ) : paymentHistory.length === 0 ? (
+                  <div className="text-center py-8">
+                    <DollarSign className="mx-auto text-gray-400" size={48} />
+                    <p className="text-lg text-gray-500 mt-2">No payments recorded yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {paymentHistory.map((payment, index) => (
+                      <div key={index} className="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                              <DollarSign className="text-green-600" size={20} />
+                            </div>
+                            <div>
+                              <div className="font-semibold text-gray-900">₹{payment.amount.toLocaleString()}</div>
+                              <div className="text-sm text-gray-500">
+                                {new Date(payment.recorded_at).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              payment.payment_type === 'full' ? 'bg-green-100 text-green-700' :
+                              payment.payment_type === 'partial' ? 'bg-blue-100 text-blue-700' :
+                              'bg-purple-100 text-purple-700'
+                            }`}>
+                              {payment.payment_type.charAt(0).toUpperCase() + payment.payment_type.slice(1)}
+                            </span>
+                            <div className="text-sm text-gray-500 mt-1">{payment.payment_method}</div>
+                          </div>
+                        </div>
+                        {payment.transaction_id && (
+                          <div className="mt-2 text-sm text-gray-600">
+                            Transaction: {payment.transaction_id}
+                          </div>
+                        )}
+                        {payment.notes && (
+                          <div className="mt-1 text-sm text-gray-500">
+                            Notes: {payment.notes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -856,6 +1088,178 @@ export default function Finance() {
           </div>
         )}
 
+        {/* Payment Record Modal */}
+        {showPaymentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <DollarSign size={24} />
+                  Record Payment
+                </h2>
+                <button onClick={resetPaymentForm} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handlePaymentSubmit} className="p-6 space-y-4">
+                {selectedFeeForPayment && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+                    <p className="text-sm text-blue-700">
+                      Recording payment for: <strong>{selectedFeeForPayment.student_id?.name}</strong>
+                      <br />
+                      Total Amount: ₹{selectedFeeForPayment.total_amount} | 
+                      Paid: ₹{selectedFeeForPayment.paid_amount || 0} | 
+                      Remaining: ₹{(selectedFeeForPayment.total_amount || 0) - (selectedFeeForPayment.paid_amount || 0)}
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
+                    <select
+                      required
+                      value={paymentFormData.student_id}
+                      onChange={(e) => {
+                        setPaymentFormData({
+                          ...paymentFormData,
+                          student_id: e.target.value,
+                          fee_id: '',
+                        });
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="">Select Student</option>
+                      {students.map((student) => (
+                        <option key={student._id} value={student._id}>
+                          {student.name} - {student.class_id || 'N/A'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Fee Record/Invoice *</label>
+                    <select
+                      required
+                      value={paymentFormData.fee_id}
+                      onChange={(e) => {
+                        const fee = fees.find(f => f._id === e.target.value);
+                        const remaining = fee ? (fee.total_amount || 0) - (fee.paid_amount || 0) : 0;
+                        setPaymentFormData({
+                          ...paymentFormData,
+                          fee_id: e.target.value,
+                          amount_paid: remaining > 0 ? remaining : 0,
+                        });
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="">Select Fee Record</option>
+                      {getStudentFees(paymentFormData.student_id).map((fee) => {
+                        const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
+                        return (
+                          <option key={fee._id} value={fee._id}>
+                            {new Date(fee.due_date).toLocaleDateString()} - ₹{fee.total_amount} 
+                            {remaining > 0 ? ` (Remaining: ₹${remaining})` : ' (Fully Paid)'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Amount Paid *</label>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      min="0.01"
+                      value={paymentFormData.amount_paid}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, amount_paid: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Enter amount"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={paymentFormData.payment_date}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, payment_date: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type *</label>
+                    <select
+                      required
+                      value={paymentFormData.payment_type}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, payment_type: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="full">Full Payment</option>
+                      <option value="partial">Partial Payment</option>
+                      <option value="advance">Advance Payment</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method *</label>
+                    <select
+                      required
+                      value={paymentFormData.payment_method}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, payment_method: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Card">Card</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="UPI">UPI</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Transaction/Receipt No.</label>
+                    <input
+                      type="text"
+                      value={paymentFormData.transaction_no}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, transaction_no: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Enter reference number"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                    <textarea
+                      value={paymentFormData.notes}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, notes: e.target.value })}
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Additional notes about the payment..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={resetPaymentForm} className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all">
+                    Cancel
+                  </button>
+                  <button type="submit" className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2">
+                    <DollarSign size={18} />
+                    Save Payment
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Modal for Add/Edit */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -898,7 +1302,6 @@ export default function Finance() {
                             ...formData, 
                             student_id: e.target.value,
                             student_name: student?.name || '',
-                            // Auto-fill fee details from student if available
                             admission_fee: student?.admission_fee?.toString() || '',
                             tuition_fee: student?.tuition_fee?.toString() || '',
                             transport_fee: student?.cab_fee?.toString() || '',
@@ -918,16 +1321,6 @@ export default function Finance() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Registration Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.registration_fee} 
-                          onChange={(e) => handleFeeFieldChange('registration_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                        />
-                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Admission Fee</label>
                         <input 
@@ -969,26 +1362,6 @@ export default function Finance() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Kit Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.kit_fee} 
-                          onChange={(e) => handleFeeFieldChange('kit_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Camera Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.camera_fee} 
-                          onChange={(e) => handleFeeFieldChange('camera_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                        />
-                      </div>
-                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount *</label>
                         <input 
                           type="number" 
@@ -1020,6 +1393,7 @@ export default function Finance() {
                           <option value="Pending">Pending</option>
                           <option value="Paid">Paid</option>
                           <option value="Overdue">Overdue</option>
+                          <option value="Partial">Partial</option>
                         </select>
                       </div>
                       <div>
@@ -1033,6 +1407,7 @@ export default function Finance() {
                           <option value="Card">Card</option>
                           <option value="Bank Transfer">Bank Transfer</option>
                           <option value="Cheque">Cheque</option>
+                          <option value="UPI">UPI</option>
                         </select>
                       </div>
                       <div>

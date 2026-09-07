@@ -561,5 +561,35 @@ export const helpersApi = {
   getStudentOptions: (params) => holidayLeaveApi.get('/student-options', { params }),
 };
 
+// Record a payment against a fee
+export const recordPayment = async (paymentData) => {
+  const response = await fetch('/api/fees/record-payment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(paymentData),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to record payment');
+  }
+  
+  return response.json();
+};
+
+// Get payment history for a fee
+export const getPaymentHistory = async (feeId) => {
+  const response = await fetch(`/api/fees/${feeId}/payments`);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to fetch payment history');
+  }
+  
+  return response.json();
+};
+
 
 export default api;
