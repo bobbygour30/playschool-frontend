@@ -771,7 +771,7 @@ export default function Overview({
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 space-y-5 animate-pulse">
+      <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 space-y-5 animate-pulse">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
@@ -796,7 +796,7 @@ export default function Overview({
 
   if (error) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center p-4 md:p-6">
+      <div className="flex min-h-[400px] items-center justify-center px-4 md:px-6 py-4 md:py-6">
         <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-xl">
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
             <AlertCircle className="text-red-500" size={34} />
@@ -836,7 +836,7 @@ export default function Overview({
   // ---------- Dashboard ----------
 
   return (
-    <div className="space-y-4 md:space-y-5 p-4 md:p-6">
+    <div className="px-4 md:px-6 pb-4 md:pb-6 pt-2 space-y-4 md:space-y-5">
       {/* ======================================================
           1. CORE STAT CARDS
       ====================================================== */}

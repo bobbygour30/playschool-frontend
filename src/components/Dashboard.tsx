@@ -327,7 +327,7 @@ export default function Dashboard() {
         </div>
 
         {/* Page Content */}
-        <div className="">
+        <div className="relative z-0">
           {renderPage()}
         </div>
       </main>
