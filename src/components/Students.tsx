@@ -7,7 +7,7 @@ import {
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
   DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
   Dropbox, File, ArrowUpCircle, User, Hash, Clock, CalendarDays,
-  Info, ChevronDown, ChevronUp, Printer
+  Info, ChevronDown, ChevronUp, Printer, Camera, Shield, UserCog
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors, promoteAllStudents } from '../services/api';
 
@@ -22,8 +22,9 @@ const CLASSES = [
 const SECTIONS = ['A', 'B', 'C', 'D'];
 const PAYMENT_MODES = ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Cheque'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian'];
+const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt', 'Uncle', 'Sibling'];
 const TRANSPORT_TYPES = ['Walker', 'Cab', 'Bus'];
+const FEE_FREQUENCIES = ['Monthly', 'Quarterly', 'Annual'];
 
 // Helper to check if document is a URL (Cloudinary or other)
 const isDocumentUrl = (doc) => {
@@ -87,6 +88,7 @@ export default function StudentDetails() {
     aadhar_card: false,
     parent_aadhar_front: false,
     parent_aadhar_back: false,
+    student_photo: false,
   });
 
   const [formData, setFormData] = useState({
@@ -103,14 +105,13 @@ export default function StudentDetails() {
     parent_phone: '',
     parent_aadhar: '',
     address: '',
-    emergency_contact: '',
     medical_info: '',
     enrollment_date: new Date().toISOString().split('T')[0],
     transport_type: 'Walker',
     vehicle_id: '',
     vendor_id: '',
     status: 'Active',
-    // New fee fields
+    // Fee fields
     registration_fee: '',
     admission_fee: '',
     tuition_fee: '',
@@ -118,9 +119,19 @@ export default function StudentDetails() {
     kit_fee: '',
     cab_fee: '',
     camera_fee: '',
+    fee_frequency: 'Monthly',
+    discount: '',
     fee_paid: false,
     payment_date: '',
     payment_mode: 'Cash',
+    // Authorized Pickup
+    authorized_pickup_name: '',
+    authorized_pickup_relationship: '',
+    authorized_pickup_phone: '',
+    // Emergency Contact
+    emergency_name: '',
+    emergency_relationship: '',
+    emergency_phone: '',
     // Document fields - store both file data and existing URLs
     birth_certificate: null,
     birth_certificate_url: null,
@@ -130,6 +141,8 @@ export default function StudentDetails() {
     parent_aadhar_front_url: null,
     parent_aadhar_back: null,
     parent_aadhar_back_url: null,
+    student_photo: null,
+    student_photo_url: null,
   });
 
   useEffect(() => {
@@ -247,7 +260,9 @@ export default function StudentDetails() {
     const kit = parseFloat(data.kit_fee) || 0;
     const cab = parseFloat(data.cab_fee) || 0;
     const cam = parseFloat(data.camera_fee) || 0;
-    return reg + adm + tui + act + kit + cab + cam;
+    const discount = parseFloat(data.discount) || 0;
+    const subtotal = reg + adm + tui + act + kit + cab + cam;
+    return Math.max(0, subtotal - discount);
   };
 
   const handleSubmit = async (e) => {
@@ -260,16 +275,29 @@ export default function StudentDetails() {
       alert('Parent Phone must be exactly 10 digits.');
       return;
     }
-    if (formData.emergency_contact.length !== 10) {
-      alert('Emergency Contact must be exactly 10 digits.');
+    if (formData.emergency_phone.length !== 10) {
+      alert('Emergency Contact Phone must be exactly 10 digits.');
       return;
     }
     
+    // Validate authorized pickup phone if walker
+    if (formData.transport_type === 'Walker' && formData.authorized_pickup_phone) {
+      if (formData.authorized_pickup_phone.length !== 10) {
+        alert('Authorized Pickup Phone must be exactly 10 digits.');
+        return;
+      }
+    }
+    
     // Validate mandatory documents
+    const hasStudentPhoto = formData.student_photo || formData.student_photo_url;
     const hasBirthCert = formData.birth_certificate || formData.birth_certificate_url;
     const hasParentAadharFront = formData.parent_aadhar_front || formData.parent_aadhar_front_url;
     const hasParentAadharBack = formData.parent_aadhar_back || formData.parent_aadhar_back_url;
     
+    if (!hasStudentPhoto) {
+      alert('Student Photo is mandatory. Please upload.');
+      return;
+    }
     if (!hasBirthCert) {
       alert('Birth Certificate is mandatory. Please upload.');
       return;
@@ -309,7 +337,15 @@ export default function StudentDetails() {
         aadhar_card: documentChanges.aadhar_card ? formData.aadhar_card : formData.aadhar_card_url,
         parent_aadhar_front: documentChanges.parent_aadhar_front ? formData.parent_aadhar_front : formData.parent_aadhar_front_url,
         parent_aadhar_back: documentChanges.parent_aadhar_back ? formData.parent_aadhar_back : formData.parent_aadhar_back_url,
+        student_photo: documentChanges.student_photo ? formData.student_photo : formData.student_photo_url,
       };
+      
+      // Prepare authorized pickup data
+      const authorizedPickup = formData.transport_type === 'Walker' ? {
+        name: formData.authorized_pickup_name || '',
+        relationship: formData.authorized_pickup_relationship || '',
+        phone: formData.authorized_pickup_phone || '',
+      } : null;
       
       const studentData = {
         name: formData.name,
@@ -325,7 +361,6 @@ export default function StudentDetails() {
         parent_phone: formData.parent_phone,
         parent_aadhar: formData.parent_aadhar,
         address: formData.address,
-        emergency_contact: formData.emergency_contact,
         medical_info: formData.medical_info || '',
         enrollment_date: formData.enrollment_date,
         transport_type: formData.transport_type,
@@ -340,10 +375,20 @@ export default function StudentDetails() {
         kit_fee: parseFloat(formData.kit_fee) || 0,
         cab_fee: parseFloat(formData.cab_fee) || 0,
         camera_fee: parseFloat(formData.camera_fee) || 0,
+        fee_frequency: formData.fee_frequency,
+        discount: parseFloat(formData.discount) || 0,
         total_amount: totalAmount,
         fee_paid: formData.fee_paid,
         payment_date: formData.fee_paid ? formData.payment_date : null,
         payment_mode: formData.payment_mode,
+        // Authorized Pickup
+        authorized_pickup: authorizedPickup,
+        // Emergency Contact
+        emergency_contact: {
+          name: formData.emergency_name || '',
+          relationship: formData.emergency_relationship || '',
+          phone: formData.emergency_phone || '',
+        },
         documents: documents,
       };
       
@@ -410,6 +455,7 @@ export default function StudentDetails() {
       aadhar_card: false,
       parent_aadhar_front: false,
       parent_aadhar_back: false,
+      student_photo: false,
     });
     
     // Find vendor ID from the student data
@@ -443,6 +489,12 @@ export default function StudentDetails() {
       }
     }
     
+    // Get authorized pickup data
+    const authorizedPickup = student.authorized_pickup || {};
+    
+    // Get emergency contact data
+    const emergencyContact = student.emergency_contact || {};
+    
     setFormData({
       name: student.name || '',
       date_of_birth: student.date_of_birth ? student.date_of_birth.split('T')[0] : '',
@@ -457,12 +509,11 @@ export default function StudentDetails() {
       parent_phone: student.parent_phone || '',
       parent_aadhar: student.parent_aadhar || '',
       address: student.address || '',
-      emergency_contact: student.emergency_contact || '',
       medical_info: student.medical_info || '',
       enrollment_date: student.enrollment_date ? student.enrollment_date.split('T')[0] : new Date().toISOString().split('T')[0],
       transport_type: student.transport_type || 'Walker',
       vehicle_id: vehicleId,
-      vendor_id: vendorId, // Set the vendor ID for the dropdown
+      vendor_id: vendorId,
       status: student.status || 'Active',
       registration_fee: student.registration_fee || '',
       admission_fee: student.admission_fee || '',
@@ -471,9 +522,19 @@ export default function StudentDetails() {
       kit_fee: student.kit_fee || '',
       cab_fee: student.cab_fee || '',
       camera_fee: student.camera_fee || '',
+      fee_frequency: student.fee_frequency || 'Monthly',
+      discount: student.discount || '',
       fee_paid: student.fee_paid || false,
       payment_date: student.payment_date ? student.payment_date.split('T')[0] : '',
       payment_mode: student.payment_mode || 'Cash',
+      // Authorized Pickup
+      authorized_pickup_name: authorizedPickup.name || '',
+      authorized_pickup_relationship: authorizedPickup.relationship || '',
+      authorized_pickup_phone: authorizedPickup.phone || '',
+      // Emergency Contact
+      emergency_name: emergencyContact.name || '',
+      emergency_relationship: emergencyContact.relationship || '',
+      emergency_phone: emergencyContact.phone || '',
       // Document fields - store existing URLs
       birth_certificate: null,
       birth_certificate_url: student.documents?.birth_certificate || null,
@@ -483,6 +544,8 @@ export default function StudentDetails() {
       parent_aadhar_front_url: student.documents?.parent_aadhar_front || null,
       parent_aadhar_back: null,
       parent_aadhar_back_url: student.documents?.parent_aadhar_back || null,
+      student_photo: null,
+      student_photo_url: student.documents?.student_photo || null,
     });
     
     setShowModal(true);
@@ -503,7 +566,6 @@ export default function StudentDetails() {
       parent_phone: '',
       parent_aadhar: '',
       address: '',
-      emergency_contact: '',
       medical_info: '',
       enrollment_date: new Date().toISOString().split('T')[0],
       transport_type: 'Walker',
@@ -517,9 +579,17 @@ export default function StudentDetails() {
       kit_fee: '',
       cab_fee: '',
       camera_fee: '',
+      fee_frequency: 'Monthly',
+      discount: '',
       fee_paid: false,
       payment_date: '',
       payment_mode: 'Cash',
+      authorized_pickup_name: '',
+      authorized_pickup_relationship: '',
+      authorized_pickup_phone: '',
+      emergency_name: '',
+      emergency_relationship: '',
+      emergency_phone: '',
       birth_certificate: null,
       birth_certificate_url: null,
       aadhar_card: null,
@@ -528,12 +598,15 @@ export default function StudentDetails() {
       parent_aadhar_front_url: null,
       parent_aadhar_back: null,
       parent_aadhar_back_url: null,
+      student_photo: null,
+      student_photo_url: null,
     });
     setDocumentChanges({
       birth_certificate: false,
       aadhar_card: false,
       parent_aadhar_front: false,
       parent_aadhar_back: false,
+      student_photo: false,
     });
     setEditingStudent(null);
     setShowModal(false);
@@ -623,7 +696,9 @@ export default function StudentDetails() {
     const kit = student.kit_fee || 0;
     const cab = student.cab_fee || 0;
     const cam = student.camera_fee || 0;
-    return reg + adm + tui + act + kit + cab + cam;
+    const discount = student.discount || 0;
+    const subtotal = reg + adm + tui + act + kit + cab + cam;
+    return Math.max(0, subtotal - discount);
   };
 
   const getFeeBreakdown = (student) => {
@@ -635,6 +710,8 @@ export default function StudentDetails() {
       kit: student.kit_fee || 0,
       cab: student.cab_fee || 0,
       camera: student.camera_fee || 0,
+      discount: student.discount || 0,
+      frequency: student.fee_frequency || 'Monthly',
       total: getTotalFee(student)
     };
   };
@@ -972,23 +1049,38 @@ export default function StudentDetails() {
                     <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-bold text-lg flex items-center gap-2">
-                            {student.name}
-                            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                              ID: {student._id?.slice(-6) || 'N/A'}
-                            </span>
-                          </h3>
-                          <div className="mt-1 space-y-0.5">
-                            <p className="text-xs text-white/90 flex items-center gap-2">
-                              <span className="capitalize">{student.gender}</span>
-                              <span className="opacity-50">•</span>
-                              <span>{calculateAge(student.date_of_birth)}</span>
-                            </p>
-                            <p className="text-xs text-white/90 flex items-center gap-2">
-                              <span>{getClassName(student.class_id)}</span>
-                              <span className="opacity-50">•</span>
-                              <span>Section {student.section || 'A'}</span>
-                            </p>
+                          <div className="flex items-center gap-3">
+                            {student.documents?.student_photo ? (
+                              <img 
+                                src={student.documents.student_photo} 
+                                alt={student.name}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-white/50"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                                <User size={24} className="text-white" />
+                              </div>
+                            )}
+                            <div>
+                              <h3 className="font-bold text-lg flex items-center gap-2">
+                                {student.name}
+                                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                                  ID: {student._id?.slice(-6) || 'N/A'}
+                                </span>
+                              </h3>
+                              <div className="mt-0.5 space-y-0.5">
+                                <p className="text-xs text-white/90 flex items-center gap-2">
+                                  <span className="capitalize">{student.gender}</span>
+                                  <span className="opacity-50">•</span>
+                                  <span>{calculateAge(student.date_of_birth)}</span>
+                                </p>
+                                <p className="text-xs text-white/90 flex items-center gap-2">
+                                  <span>{getClassName(student.class_id)}</span>
+                                  <span className="opacity-50">•</span>
+                                  <span>Section {student.section || 'A'}</span>
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -1031,12 +1123,42 @@ export default function StudentDetails() {
                         )}
                       </div>
 
+                      {/* Emergency Contact */}
+                      {student.emergency_contact && (
+                        <div className="bg-red-50 rounded-lg p-2 border border-red-100">
+                          <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                            <AlertCircle size={12} />
+                            Emergency Contact
+                          </p>
+                          <div className="grid grid-cols-2 gap-1 text-xs mt-1">
+                            <span className="text-gray-600">Name: {student.emergency_contact.name || 'N/A'}</span>
+                            <span className="text-gray-600">Relation: {student.emergency_contact.relationship || 'N/A'}</span>
+                            <span className="text-gray-600 col-span-2">Phone: {student.emergency_contact.phone || 'N/A'}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Authorized Pickup - Only for Walker */}
+                      {student.transport_type === 'Walker' && student.authorized_pickup && (
+                        <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                          <p className="text-xs text-blue-600 font-medium flex items-center gap-1">
+                            <Shield size={12} />
+                            Authorized Pickup
+                          </p>
+                          <div className="grid grid-cols-2 gap-1 text-xs mt-1">
+                            <span className="text-gray-600">Name: {student.authorized_pickup.name || 'N/A'}</span>
+                            <span className="text-gray-600">Relation: {student.authorized_pickup.relationship || 'N/A'}</span>
+                            <span className="text-gray-600 col-span-2">Phone: {student.authorized_pickup.phone || 'N/A'}</span>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Fee Information - Simplified */}
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500 flex items-center gap-1">
                             <DollarSign size={12} />
-                            Fee Summary
+                            Fee Summary ({student.fee_frequency || 'Monthly'})
                           </p>
                           <button
                             onClick={() => toggleFeeDetails(student._id)}
@@ -1089,6 +1211,10 @@ export default function StudentDetails() {
                               <span className="text-gray-600">Kit: ₹{student.kit_fee || 0}</span>
                               <span className="text-gray-600">Cab: ₹{student.cab_fee || 0}</span>
                               <span className="text-gray-600">Camera: ₹{student.camera_fee || 0}</span>
+                              {student.discount > 0 && (
+                                <span className="text-red-600">Discount: -₹{student.discount}</span>
+                              )}
+                              <span className="text-gray-600">Frequency: {student.fee_frequency || 'Monthly'}</span>
                             </div>
                             {student.fee_paid && student.payment_date && (
                               <p className="text-xs text-gray-500 mt-1">
@@ -1136,11 +1262,14 @@ export default function StudentDetails() {
 
                       {/* Documents indicator */}
                       {student.documents && (
-                        <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                        <div className="flex items-center gap-2 pt-2 border-t border-gray-200 flex-wrap">
                           <FolderOpen size={12} className="text-gray-400 flex-shrink-0" />
                           <span className="text-xs text-gray-500">
-                            Documents: {Object.values(student.documents).filter(d => d).length} uploaded
+                            Docs: {Object.values(student.documents).filter(d => d).length} uploaded
                           </span>
+                          {student.documents.student_photo && (
+                            <span className="text-xs text-green-600">📸 Photo ✓</span>
+                          )}
                           {student.documents.birth_certificate && (
                             <a 
                               href={student.documents.birth_certificate} 
@@ -1253,7 +1382,7 @@ export default function StudentDetails() {
           </div>
         )}
 
-        {/* Add/Edit Student Modal - Keep existing code */}
+        {/* Add/Edit Student Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1632,6 +1761,38 @@ export default function StudentDetails() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fee Frequency <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.fee_frequency}
+                        onChange={(e) => setFormData({ ...formData, fee_frequency: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        {FEE_FREQUENCIES.map(freq => (
+                          <option key={freq} value={freq}>{freq}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Discount (₹)
+                        <span className="text-xs text-gray-400 ml-1">(If applicable)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.discount}
+                        onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        placeholder="Enter discount amount"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Total Amount (₹)
                       </label>
                       <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-700 font-semibold">
@@ -1766,27 +1927,6 @@ export default function StudentDetails() {
                     )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Emergency Contact <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        inputMode="numeric"
-                        maxLength={10}
-                        pattern="\d{10}"
-                        title="Enter exactly 10 digits"
-                        value={formData.emergency_contact}
-                        onChange={(e) => setFormData({ ...formData, emergency_contact: handleDigitInput(e.target.value) })}
-                        disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="10-digit emergency contact"
-                      />
-                      {formData.emergency_contact && formData.emergency_contact.length !== 10 && (
-                        <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Status <span className="text-red-500">*</span>
                       </label>
                       <select
@@ -1817,17 +1957,143 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
+                {/* Authorized Pickup Section - Only for Walker */}
+                {formData.transport_type === 'Walker' && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <Shield size={18} className="text-blue-600" />
+                      Authorized Pickup Person
+                      <span className="text-xs text-gray-400 ml-2">(Only for Walker)</span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Full Name
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.authorized_pickup_name}
+                          onChange={(e) => setFormData({ ...formData, authorized_pickup_name: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          placeholder="Enter authorized person name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Relationship
+                        </label>
+                        <select
+                          value={formData.authorized_pickup_relationship}
+                          onChange={(e) => setFormData({ ...formData, authorized_pickup_relationship: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                          <option value="">Select Relationship</option>
+                          {RELATIONSHIP_TYPES.map(rel => (
+                            <option key={rel} value={rel}>{rel}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Mobile Number
+                        </label>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          pattern="\d{10}"
+                          title="Enter exactly 10 digits"
+                          value={formData.authorized_pickup_phone}
+                          onChange={(e) => setFormData({ ...formData, authorized_pickup_phone: handleDigitInput(e.target.value) })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          placeholder="10-digit phone number"
+                        />
+                        {formData.authorized_pickup_phone && formData.authorized_pickup_phone.length !== 10 && (
+                          <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Emergency Contact Section */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <AlertCircle size={18} className="text-red-600" />
+                    Emergency Contact
+                    <span className="text-xs text-red-500 ml-2">*</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.emergency_name}
+                        onChange={(e) => setFormData({ ...formData, emergency_name: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="Enter emergency contact name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Relationship <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.emergency_relationship}
+                        onChange={(e) => setFormData({ ...formData, emergency_relationship: e.target.value })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select Relationship</option>
+                        {RELATIONSHIP_TYPES.map(rel => (
+                          <option key={rel} value={rel}>{rel}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        inputMode="numeric"
+                        maxLength={10}
+                        pattern="\d{10}"
+                        title="Enter exactly 10 digits"
+                        value={formData.emergency_phone}
+                        onChange={(e) => setFormData({ ...formData, emergency_phone: handleDigitInput(e.target.value) })}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        placeholder="10-digit phone number"
+                      />
+                      {formData.emergency_phone && formData.emergency_phone.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Documents Upload */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Upload size={18} className="text-purple-600" />
                     Documents Upload
-                    <span className="text-xs text-gray-400 ml-2">(* Mandatory)</span>
+                    <span className="text-xs text-red-500 ml-2">(* Mandatory)</span>
                     {editingStudent && (
                       <span className="text-xs text-blue-600 ml-2">(Upload new to replace existing)</span>
                     )}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {renderDocumentUpload('Student Photo', 'student_photo', true)}
                     {renderDocumentUpload('Birth Certificate', 'birth_certificate', true)}
                     {renderDocumentUpload('Student Aadhar Card', 'aadhar_card', false)}
                     {renderDocumentUpload('Parent Aadhar (Front)', 'parent_aadhar_front', true)}
