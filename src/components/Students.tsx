@@ -6,7 +6,8 @@ import {
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
   DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
-  Dropbox, File, ArrowUpCircle
+  Dropbox, File, ArrowUpCircle, User, Hash, Clock, CalendarDays,
+  Info, ChevronDown, ChevronUp, Printer
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors, promoteAllStudents } from '../services/api';
 
@@ -44,6 +45,23 @@ const getFileNameFromUrl = (url) => {
   }
 };
 
+// Helper to calculate age
+const calculateAge = (dateOfBirth) => {
+  if (!dateOfBirth) return 'N/A';
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let years = today.getFullYear() - birthDate.getFullYear();
+  let months = today.getMonth() - birthDate.getMonth();
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  if (years === 0) {
+    return `${months} mos`;
+  }
+  return `${years} yrs ${months} mos`;
+};
+
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -61,6 +79,7 @@ export default function StudentDetails() {
   const [showPromoteModal, setShowPromoteModal] = useState(false);
   const [isPromoting, setIsPromoting] = useState(false);
   const [promotionAcademicYear, setPromotionAcademicYear] = useState('');
+  const [expandedFeeCard, setExpandedFeeCard] = useState(null);
   
   // Track document changes - which documents have been updated
   const [documentChanges, setDocumentChanges] = useState({
@@ -607,6 +626,23 @@ export default function StudentDetails() {
     return reg + adm + tui + act + kit + cab + cam;
   };
 
+  const getFeeBreakdown = (student) => {
+    return {
+      registration: student.registration_fee || 0,
+      admission: student.admission_fee || 0,
+      tuition: student.tuition_fee || 0,
+      activity: student.activity_fee || 0,
+      kit: student.kit_fee || 0,
+      cab: student.cab_fee || 0,
+      camera: student.camera_fee || 0,
+      total: getTotalFee(student)
+    };
+  };
+
+  const toggleFeeDetails = (studentId) => {
+    setExpandedFeeCard(expandedFeeCard === studentId ? null : studentId);
+  };
+
   const stats = {
     total: students.length,
     toddler: students.filter(s => s.class_id === 'toddler').length,
@@ -911,7 +947,7 @@ export default function StudentDetails() {
             <div key={classSection.id} className="mb-8">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center`}>
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
                     <Icon className="text-white" size={24} />
                   </div>
                   <div>
@@ -932,24 +968,26 @@ export default function StudentDetails() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredClassStudents.map((student) => (
                   <div key={student._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
+                    {/* Card Header - Updated with new layout */}
                     <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                            <Users className="text-white" size={24} />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg">{student.name}</h3>
-                            <p className="text-xs text-white/80 flex items-center gap-2">
-                              {student.gender} • {new Date(student.date_of_birth).toLocaleDateString()}
-                              {student.blood_group && (
-                                <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
-                                  {student.blood_group}
-                                </span>
-                              )}
-                              <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
-                                Section {student.section || 'A'}
-                              </span>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg flex items-center gap-2">
+                            {student.name}
+                            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                              ID: {student._id?.slice(-6) || 'N/A'}
+                            </span>
+                          </h3>
+                          <div className="mt-1 space-y-0.5">
+                            <p className="text-xs text-white/90 flex items-center gap-2">
+                              <span className="capitalize">{student.gender}</span>
+                              <span className="opacity-50">•</span>
+                              <span>{calculateAge(student.date_of_birth)}</span>
+                            </p>
+                            <p className="text-xs text-white/90 flex items-center gap-2">
+                              <span>{getClassName(student.class_id)}</span>
+                              <span className="opacity-50">•</span>
+                              <span>Section {student.section || 'A'}</span>
                             </p>
                           </div>
                         </div>
@@ -962,78 +1000,123 @@ export default function StudentDetails() {
                     </div>
 
                     <div className="p-4 space-y-3">
-                      <div className="bg-gray-50 rounded-lg p-2">
-                        <p className="text-xs text-gray-500">Assigned Teacher</p>
-                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                          <UserCheck size={12} />
-                          {getTeacherName(student.assigned_teacher_id)}
+                      {/* Teacher Info */}
+                      <div className="bg-gray-50 rounded-lg p-2 flex items-center gap-2">
+                        <UserCheck size={14} className="text-purple-500" />
+                        <p className="text-sm font-semibold text-gray-800">
+                          Teacher: {getTeacherName(student.assigned_teacher_id)}
                         </p>
                       </div>
 
+                      {/* Parent Information */}
                       <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-xs text-gray-500 mb-1">Parent Information</p>
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                          <Users size={12} />
+                          Parent Information
+                        </p>
                         <p className="text-sm font-medium text-gray-800">{student.parent_name}</p>
-                        {student.parent_relationship && (
-                          <p className="text-xs text-gray-500">Relationship: {student.parent_relationship}</p>
-                        )}
-                        <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                        <p className="text-xs text-gray-500">{student.parent_relationship}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-600 mt-1 flex-wrap">
                           <Mail size={10} /> {student.parent_email}
-                          <Phone size={10} className="ml-2" /> {student.parent_phone}
+                          <Phone size={10} className="ml-1" /> {student.parent_phone}
                         </div>
+                        {/* Blood Group - Below Parent Info */}
+                        {student.blood_group && (
+                          <div className="mt-1 flex items-center gap-1">
+                            <Heart size={12} className="text-red-500" />
+                            <span className="text-xs font-medium text-gray-700">
+                              Blood Group: <span className="text-red-600">{student.blood_group}</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Fee Information */}
+                      {/* Fee Information - Simplified */}
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
-                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                          <DollarSign size={10} />
-                          Fee Breakdown
-                        </p>
-                        <div className="grid grid-cols-2 gap-1 text-xs">
-                          <span className="text-gray-600">Registration: ₹{student.registration_fee || 0}</span>
-                          <span className="text-gray-600">Admission: ₹{student.admission_fee || 0}</span>
-                          <span className="text-gray-600">Tuition: ₹{student.tuition_fee || 0}</span>
-                          <span className="text-gray-600">Activity: ₹{student.activity_fee || 0}</span>
-                          <span className="text-gray-600">Kit: ₹{student.kit_fee || 0}</span>
-                          <span className="text-gray-600">Cab: ₹{student.cab_fee || 0}</span>
-                          <span className="text-gray-600">Camera: ₹{student.camera_fee || 0}</span>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <DollarSign size={12} />
+                            Fee Summary
+                          </p>
+                          <button
+                            onClick={() => toggleFeeDetails(student._id)}
+                            className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"
+                          >
+                            {expandedFeeCard === student._id ? (
+                              <>Hide Details <ChevronUp size={14} /></>
+                            ) : (
+                              <>View Details <ChevronDown size={14} /></>
+                            )}
+                          </button>
                         </div>
-                        <div className="flex items-center justify-between mt-1 pt-1 border-t border-blue-200">
-                          <span className="text-xs font-semibold text-purple-600">Total: ₹{getTotalFee(student)}</span>
+                        
+                        <div className="grid grid-cols-3 gap-2 mt-1">
+                          <div className="text-center">
+                            <p className="text-[10px] text-gray-500">Total</p>
+                            <p className="text-sm font-bold text-purple-600">₹{getTotalFee(student)}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[10px] text-gray-500">Paid</p>
+                            <p className="text-sm font-bold text-green-600">
+                              {student.fee_paid ? `₹${getTotalFee(student)}` : '₹0'}
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[10px] text-gray-500">Due</p>
+                            <p className="text-sm font-bold text-red-600">
+                              {student.fee_paid ? '₹0' : `₹${getTotalFee(student)}`}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-center mt-1">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                             student.fee_paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                           }`}>
-                            {student.fee_paid ? 'Paid' : 'Unpaid'}
+                            {student.fee_paid ? 'Paid ✓' : 'Unpaid'}
                           </span>
                         </div>
-                        {student.fee_paid && student.payment_date && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Paid on: {new Date(student.payment_date).toLocaleDateString()} • {student.payment_mode}
-                          </p>
+
+                        {/* Expanded Fee Details */}
+                        {expandedFeeCard === student._id && (
+                          <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
+                            <p className="text-xs font-semibold text-gray-700 mb-1">Full Breakdown:</p>
+                            <div className="grid grid-cols-2 gap-1 text-xs">
+                              <span className="text-gray-600">Registration: ₹{student.registration_fee || 0}</span>
+                              <span className="text-gray-600">Admission: ₹{student.admission_fee || 0}</span>
+                              <span className="text-gray-600">Tuition: ₹{student.tuition_fee || 0}</span>
+                              <span className="text-gray-600">Activity: ₹{student.activity_fee || 0}</span>
+                              <span className="text-gray-600">Kit: ₹{student.kit_fee || 0}</span>
+                              <span className="text-gray-600">Cab: ₹{student.cab_fee || 0}</span>
+                              <span className="text-gray-600">Camera: ₹{student.camera_fee || 0}</span>
+                            </div>
+                            {student.fee_paid && student.payment_date && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Paid on: {new Date(student.payment_date).toLocaleDateString()} • {student.payment_mode}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      {/* Transport and Actions */}
+                      <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-2">
                           {(student.transport_type === 'Cab' || student.transport_type === 'Bus') ? (
                             <>
-                              <Truck size={14} className="text-cyan-600" />
-                              <span className="text-sm text-gray-700">
+                              <Truck size={14} className="text-cyan-600 flex-shrink-0" />
+                              <span className="text-sm text-gray-700 truncate max-w-[140px]">
                                 {student.transport_type}: {getVehicleNumber(student.vehicle_id)}
-                                {student.vendor_id && (
-                                  <span className="text-xs text-gray-500 ml-1">
-                                    ({getVendorName(student.vendor_id)})
-                                  </span>
-                                )}
                               </span>
                             </>
                           ) : (
                             <>
-                              <Users size={14} className="text-green-600" />
+                              <Users size={14} className="text-green-600 flex-shrink-0" />
                               <span className="text-sm text-gray-700">Walker</span>
                             </>
                           )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <button
                             onClick={() => handleEdit(student)}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -1054,7 +1137,7 @@ export default function StudentDetails() {
                       {/* Documents indicator */}
                       {student.documents && (
                         <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
-                          <FolderOpen size={12} className="text-gray-400" />
+                          <FolderOpen size={12} className="text-gray-400 flex-shrink-0" />
                           <span className="text-xs text-gray-500">
                             Documents: {Object.values(student.documents).filter(d => d).length} uploaded
                           </span>
@@ -1170,11 +1253,11 @@ export default function StudentDetails() {
           </div>
         )}
 
-        {/* Add/Edit Student Modal */}
+        {/* Add/Edit Student Modal - Keep existing code */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between">
+              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-xl font-bold text-white">
                   {editingStudent ? 'Edit Student' : 'Add New Student'}
                 </h2>
@@ -1603,7 +1686,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Transport Details - UPDATED to show selected vendor */}
+                {/* Transport Details */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Truck size={18} className="text-purple-600" />
@@ -1658,7 +1741,6 @@ export default function StudentDetails() {
                         >
                           <option value="">Select Vendor/Vehicle</option>
                           {vendors.map((vendor) => {
-                            // Check if this vendor is the currently selected one
                             const isSelected = vendor._id === formData.vendor_id;
                             return (
                               <option key={vendor._id} value={vendor._id}>
@@ -1759,7 +1841,7 @@ export default function StudentDetails() {
                   </p>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4">
+                <div className="flex justify-end gap-3 pt-4 sticky bottom-0 bg-white py-3 border-t">
                   <button
                     type="button"
                     onClick={resetForm}
