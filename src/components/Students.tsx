@@ -57,9 +57,9 @@ const calculateAge = (dateOfBirth) => {
     months += 12;
   }
   if (years === 0) {
-    return `${months} mos`;
+    return `${months} mon`;
   }
-  return `${years} yrs ${months} mos`;
+  return `${years} yrs ${months} mon`;
 };
 
 export default function StudentDetails() {
