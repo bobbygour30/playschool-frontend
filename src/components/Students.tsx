@@ -8,7 +8,8 @@ import {
   DollarSign, CreditCard, Receipt, CheckCircle, XCircle, Loader2,
   Dropbox, File, ArrowUpCircle, User, Hash, Clock, CalendarDays,
   Info, ChevronDown, ChevronUp, Printer, Camera, Shield, UserCog,
-  FileSpreadsheet, Repeat
+  FileSpreadsheet, Repeat, RefreshCw, Calendar as CalendarIcon,
+  Wallet, Banknote, TrendingDown
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors, promoteAllStudents } from '../services/api';
 
@@ -26,6 +27,7 @@ const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const RELATIONSHIP_TYPES = ['Mother', 'Father', 'Guardian', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Other'];
 const TRANSPORT_TYPES = ['Walker', 'Cab', 'Bus'];
 const FEE_FREQUENCIES = ['Monthly', 'Quarterly', 'Annual'];
+const FEE_PLANS = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 const ENROLLMENT_TYPES = ['New Admission', 'Transfer', 'Returning'];
 const ACADEMIC_YEARS = (() => {
   const currentYear = new Date().getFullYear();
@@ -93,7 +95,6 @@ export default function StudentDetails() {
   const [promotionAcademicYear, setPromotionAcademicYear] = useState('');
   const [expandedFeeCard, setExpandedFeeCard] = useState(null);
   const [isFormSticky, setIsFormSticky] = useState(false);
-  const [formRef, setFormRef] = useState(null);
   
   // Track document changes - which documents have been updated
   const [documentChanges, setDocumentChanges] = useState({
@@ -150,6 +151,19 @@ export default function StudentDetails() {
     academic_year: ACADEMIC_YEARS[0],
     enrollment_type: 'New Admission',
     previous_class: '',
+    // Recurring Fees
+    recurring_tuition_fee: '',
+    recurring_activity_fee: '',
+    recurring_transport_fee: '',
+    recurring_start_month: new Date().toISOString().slice(0, 7),
+    recurring_end_month: '',
+    recurring_fee_plan: 'Monthly',
+    recurring_auto_generate: true,
+    // Initial Payment
+    initial_payment_amount: '',
+    initial_payment_date: new Date().toISOString().split('T')[0],
+    initial_payment_method: 'Cash',
+    initial_payment_transaction: '',
     // Document fields - store both file data and existing URLs
     birth_certificate: null,
     birth_certificate_url: null,
@@ -186,7 +200,6 @@ export default function StudentDetails() {
       setVehicles((vehiclesRes.data || []).filter(v => v.status === 'Active'));
       
       const allVendors = vendorsRes.data || [];
-      // Filter vendors that have vehicle_number and are active
       const activeVendorsWithVehicles = allVendors.filter(v => 
         v.status === 'Active' && 
         v.vehicle_number && 
@@ -243,31 +256,15 @@ export default function StudentDetails() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        // Mark this document as changed
         setDocumentChanges(prev => ({ ...prev, [fieldName]: true }));
         setFormData(prev => ({ 
           ...prev, 
           [fieldName]: reader.result,
-          // Clear the URL since we're uploading a new file
           [`${fieldName}_url`]: null
         }));
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  // Helper to get document display value
-  const getDocumentDisplay = (fieldName) => {
-    const fileData = formData[fieldName];
-    const urlData = formData[`${fieldName}_url`];
-    
-    if (fileData && documentChanges[fieldName]) {
-      return { type: 'new', data: fileData };
-    }
-    if (urlData) {
-      return { type: 'existing', data: urlData };
-    }
-    return null;
   };
 
   const calculateTotalFee = (data) => {
@@ -281,6 +278,13 @@ export default function StudentDetails() {
     const discount = parseFloat(data.discount) || 0;
     const subtotal = reg + adm + tui + act + kit + cab + cam;
     return Math.max(0, subtotal - discount);
+  };
+
+  const calculateRecurringTotal = (data) => {
+    const tuition = parseFloat(data.recurring_tuition_fee) || 0;
+    const activity = parseFloat(data.recurring_activity_fee) || 0;
+    const transport = parseFloat(data.recurring_transport_fee) || 0;
+    return tuition + activity + transport;
   };
 
   const handleSubmit = async (e) => {
@@ -351,10 +355,18 @@ export default function StudentDetails() {
       return;
     }
     
+    // Validate recurring fees if initial payment is made
+    const recurringTotal = calculateRecurringTotal(formData);
+    if (formData.fee_paid && recurringTotal === 0 && !formData.initial_payment_amount) {
+      alert('Please set up recurring fees or initial payment amount.');
+      return;
+    }
+    
     try {
       setIsSubmitting(true);
       
       const totalAmount = calculateTotalFee(formData);
+      const recurringTotalVal = calculateRecurringTotal(formData);
       
       // Find the selected vendor to get vehicle_id
       let vehicleId = null;
@@ -380,6 +392,11 @@ export default function StudentDetails() {
         relationship: formData.authorized_pickup_relationship || '',
         phone: formData.authorized_pickup_phone || '',
       } : null;
+      
+      // Determine initial payment details
+      const initialPaymentAmount = formData.fee_paid 
+        ? (parseFloat(formData.initial_payment_amount) || recurringTotalVal || totalAmount)
+        : 0;
       
       const studentData = {
         name: formData.name,
@@ -429,6 +446,26 @@ export default function StudentDetails() {
         enrollment_type: formData.enrollment_type,
         previous_class: formData.previous_class || '',
         documents: documents,
+        // Recurring Fees
+        recurring_fees: {
+          tuition_fee: parseFloat(formData.recurring_tuition_fee) || 0,
+          activity_fee: parseFloat(formData.recurring_activity_fee) || 0,
+          transport_fee: parseFloat(formData.recurring_transport_fee) || 0,
+          total_monthly: recurringTotalVal,
+          start_month: formData.recurring_start_month || new Date().toISOString().slice(0, 7),
+          end_month: formData.recurring_end_month || null,
+          fee_plan: formData.recurring_fee_plan || 'Monthly',
+          auto_generate: formData.recurring_auto_generate,
+          last_generated_month: null,
+          initial_payment: {
+            amount: initialPaymentAmount,
+            paid: formData.fee_paid,
+            payment_date: formData.fee_paid ? (formData.initial_payment_date || formData.payment_date || new Date().toISOString().split('T')[0]) : null,
+            payment_method: formData.fee_paid ? (formData.initial_payment_method || formData.payment_mode || 'Cash') : 'Cash',
+            invoice_id: null,
+            transaction_id: formData.initial_payment_transaction || '',
+          },
+        },
       };
       
       if (editingStudent) {
@@ -436,7 +473,11 @@ export default function StudentDetails() {
         alert('Student updated successfully!');
       } else {
         await createStudent(studentData);
-        alert('Student added successfully!');
+        if (formData.fee_paid && initialPaymentAmount > 0) {
+          alert('Student added successfully! Initial fee invoice and payment record created.');
+        } else {
+          alert('Student added successfully!');
+        }
       }
       
       await loadData();
@@ -499,13 +540,10 @@ export default function StudentDetails() {
     
     // Find vendor ID from the student data
     let vendorId = student.vendor_id || '';
-    
-    // If vendor_id is an object with _id, extract it
     if (vendorId && typeof vendorId === 'object' && vendorId._id) {
       vendorId = vendorId._id;
     }
     
-    // If vendor_id is not set but vehicle_id is, try to find vendor by vehicle_id
     if (!vendorId && student.vehicle_id) {
       const vehicleId = typeof student.vehicle_id === 'object' ? student.vehicle_id._id : student.vehicle_id;
       const foundVendor = vendors.find(v => v.vehicle_id === vehicleId || v._id === vehicleId);
@@ -514,13 +552,11 @@ export default function StudentDetails() {
       }
     }
     
-    // Also find vehicle_id from vendor if available
     let vehicleId = student.vehicle_id || '';
     if (vehicleId && typeof vehicleId === 'object' && vehicleId._id) {
       vehicleId = vehicleId._id;
     }
     
-    // If we have a vendor selected, try to get vehicle_id from vendor
     if (vendorId) {
       const selectedVendor = vendors.find(v => v._id === vendorId);
       if (selectedVendor && selectedVendor.vehicle_id) {
@@ -528,11 +564,10 @@ export default function StudentDetails() {
       }
     }
     
-    // Get authorized pickup data
     const authorizedPickup = student.authorized_pickup || {};
-    
-    // Get emergency contact data
     const emergencyContact = student.emergency_contact || {};
+    const recurringFees = student.recurring_fees || {};
+    const initialPayment = recurringFees.initial_payment || {};
     
     setFormData({
       name: student.name || '',
@@ -566,20 +601,30 @@ export default function StudentDetails() {
       fee_paid: student.fee_paid || false,
       payment_date: student.payment_date ? student.payment_date.split('T')[0] : '',
       payment_mode: student.payment_mode || 'Cash',
-      // Authorized Pickup
       authorized_pickup_name: authorizedPickup.name || '',
       authorized_pickup_relationship: authorizedPickup.relationship || '',
       authorized_pickup_phone: authorizedPickup.phone || '',
-      // Emergency Contact
       emergency_name: emergencyContact.name || '',
       emergency_relationship: emergencyContact.relationship || '',
       emergency_phone: emergencyContact.phone || '',
-      // Enrollment Information
       admission_date: student.admission_date ? student.admission_date.split('T')[0] : new Date().toISOString().split('T')[0],
       academic_year: student.academic_year || ACADEMIC_YEARS[0],
       enrollment_type: student.enrollment_type || 'New Admission',
       previous_class: student.previous_class || '',
-      // Document fields - store existing URLs
+      // Recurring Fees
+      recurring_tuition_fee: recurringFees.tuition_fee || '',
+      recurring_activity_fee: recurringFees.activity_fee || '',
+      recurring_transport_fee: recurringFees.transport_fee || '',
+      recurring_start_month: recurringFees.start_month || new Date().toISOString().slice(0, 7),
+      recurring_end_month: recurringFees.end_month || '',
+      recurring_fee_plan: recurringFees.fee_plan || 'Monthly',
+      recurring_auto_generate: recurringFees.auto_generate !== undefined ? recurringFees.auto_generate : true,
+      // Initial Payment
+      initial_payment_amount: initialPayment.amount || '',
+      initial_payment_date: initialPayment.payment_date ? new Date(initialPayment.payment_date).toISOString().split('T')[0] : '',
+      initial_payment_method: initialPayment.payment_method || 'Cash',
+      initial_payment_transaction: initialPayment.transaction_id || '',
+      // Document fields
       birth_certificate: null,
       birth_certificate_url: student.documents?.birth_certificate || null,
       aadhar_card: null,
@@ -638,6 +683,17 @@ export default function StudentDetails() {
       academic_year: ACADEMIC_YEARS[0],
       enrollment_type: 'New Admission',
       previous_class: '',
+      recurring_tuition_fee: '',
+      recurring_activity_fee: '',
+      recurring_transport_fee: '',
+      recurring_start_month: new Date().toISOString().slice(0, 7),
+      recurring_end_month: '',
+      recurring_fee_plan: 'Monthly',
+      recurring_auto_generate: true,
+      initial_payment_amount: '',
+      initial_payment_date: new Date().toISOString().split('T')[0],
+      initial_payment_method: 'Cash',
+      initial_payment_transaction: '',
       birth_certificate: null,
       birth_certificate_url: null,
       aadhar_card: null,
@@ -724,7 +780,6 @@ export default function StudentDetails() {
 
   const getVehicleNumber = (vehicleId) => {
     if (!vehicleId) return 'N/A';
-    // Handle object case
     if (typeof vehicleId === 'object' && vehicleId._id) {
       vehicleId = vehicleId._id;
     }
@@ -739,7 +794,6 @@ export default function StudentDetails() {
 
   const getVendorName = (vendorId) => {
     if (!vendorId) return 'N/A';
-    // Handle object case
     if (typeof vendorId === 'object' && vendorId._id) {
       vendorId = vendorId._id;
     }
@@ -767,19 +821,9 @@ export default function StudentDetails() {
     return Math.max(0, subtotal - discount);
   };
 
-  const getFeeBreakdown = (student) => {
-    return {
-      registration: student.registration_fee || 0,
-      admission: student.admission_fee || 0,
-      tuition: student.tuition_fee || 0,
-      activity: student.activity_fee || 0,
-      kit: student.kit_fee || 0,
-      cab: student.cab_fee || 0,
-      camera: student.camera_fee || 0,
-      discount: student.discount || 0,
-      frequency: student.fee_frequency || 'Monthly',
-      total: getTotalFee(student)
-    };
+  const getRecurringTotal = (student) => {
+    const rf = student.recurring_fees || {};
+    return (rf.tuition_fee || 0) + (rf.activity_fee || 0) + (rf.transport_fee || 0);
   };
 
   const toggleFeeDetails = (studentId) => {
@@ -1111,7 +1155,7 @@ export default function StudentDetails() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredClassStudents.map((student) => (
                   <div key={student._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
-                    {/* Card Header - Updated with new layout */}
+                    {/* Card Header */}
                     <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
@@ -1178,7 +1222,6 @@ export default function StudentDetails() {
                           <Mail size={10} className="flex-shrink-0" /> <span className="truncate">{student.parent_email}</span>
                           <Phone size={10} className="ml-1 flex-shrink-0" /> {student.parent_phone}
                         </div>
-                        {/* Blood Group - Below Parent Info */}
                         {student.blood_group && (
                           <div className="mt-1 flex items-center gap-1">
                             <Heart size={12} className="text-red-500 flex-shrink-0" />
@@ -1219,7 +1262,22 @@ export default function StudentDetails() {
                         </div>
                       )}
 
-                      {/* Fee Information - Simplified */}
+                      {/* Recurring Fee Badge */}
+                      {student.recurring_fees && getRecurringTotal(student) > 0 && (
+                        <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
+                          <p className="text-xs text-purple-600 font-medium flex items-center gap-1">
+                            <Repeat size={12} className="flex-shrink-0" />
+                            Recurring Fee: ₹{getRecurringTotal(student)}/month
+                          </p>
+                          {student.recurring_fees.fee_plan && (
+                            <span className="text-xs text-gray-500 ml-1">
+                              ({student.recurring_fees.fee_plan})
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Fee Information */}
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500 flex items-center gap-1">
@@ -1282,6 +1340,29 @@ export default function StudentDetails() {
                               )}
                               <span className="text-gray-600">Frequency: {student.fee_frequency || 'Monthly'}</span>
                             </div>
+                            {student.recurring_fees && getRecurringTotal(student) > 0 && (
+                              <div className="mt-1 pt-1 border-t border-blue-200">
+                                <p className="text-xs font-semibold text-purple-600">Recurring (Monthly):</p>
+                                <div className="grid grid-cols-2 gap-1 text-xs">
+                                  <span className="text-gray-600">Tuition: ₹{student.recurring_fees.tuition_fee || 0}</span>
+                                  <span className="text-gray-600">Activity: ₹{student.recurring_fees.activity_fee || 0}</span>
+                                  <span className="text-gray-600">Transport: ₹{student.recurring_fees.transport_fee || 0}</span>
+                                  <span className="text-gray-600 font-semibold">Total: ₹{getRecurringTotal(student)}</span>
+                                </div>
+                                {student.recurring_fees.start_month && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Start: {student.recurring_fees.start_month}
+                                    {student.recurring_fees.end_month && ` - End: ${student.recurring_fees.end_month}`}
+                                  </p>
+                                )}
+                                {student.recurring_fees.initial_payment?.paid && (
+                                  <p className="text-xs text-green-600 mt-1">
+                                    Initial Payment: ₹{student.recurring_fees.initial_payment.amount} 
+                                    ({student.recurring_fees.initial_payment.payment_method})
+                                  </p>
+                                )}
+                              </div>
+                            )}
                             {student.fee_paid && student.payment_date && (
                               <p className="text-xs text-gray-500 mt-1">
                                 Paid on: {new Date(student.payment_date).toLocaleDateString()} • {student.payment_mode}
@@ -1451,7 +1532,7 @@ export default function StudentDetails() {
         {/* Add/Edit Student Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
+            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
               {/* Modal Header - Sticky */}
               <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-xl font-bold text-white">
@@ -1705,7 +1786,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Enrollment Information - NEW SECTION */}
+                {/* Enrollment Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <FileSpreadsheet size={18} className="text-green-600 flex-shrink-0" />
@@ -1950,7 +2031,17 @@ export default function StudentDetails() {
                       </label>
                       <select
                         value={formData.fee_paid ? 'paid' : 'unpaid'}
-                        onChange={(e) => setFormData({ ...formData, fee_paid: e.target.value === 'paid' })}
+                        onChange={(e) => {
+                          const isPaid = e.target.value === 'paid';
+                          const recurringTotal = calculateRecurringTotal(formData);
+                          setFormData({ 
+                            ...formData, 
+                            fee_paid: isPaid,
+                            initial_payment_amount: isPaid ? (recurringTotal || calculateTotalFee(formData)) : '',
+                            initial_payment_date: isPaid ? new Date().toISOString().split('T')[0] : '',
+                            initial_payment_method: isPaid ? 'Cash' : 'Cash',
+                          });
+                        }}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
@@ -1988,6 +2079,197 @@ export default function StudentDetails() {
                           </select>
                         </div>
                       </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recurring Fees Section */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Repeat size={18} className="text-blue-600 flex-shrink-0" />
+                    Recurring Fees
+                    <span className="text-xs text-gray-400 ml-2">(Monthly recurring charges)</span>
+                  </h3>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Monthly Tuition Fee (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.recurring_tuition_fee}
+                          onChange={(e) => setFormData({ ...formData, recurring_tuition_fee: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="Enter monthly tuition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Monthly Activity Fee (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.recurring_activity_fee}
+                          onChange={(e) => setFormData({ ...formData, recurring_activity_fee: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="Enter monthly activity"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Monthly Transport Fee (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.recurring_transport_fee}
+                          onChange={(e) => setFormData({ ...formData, recurring_transport_fee: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="Enter monthly transport"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Monthly Total
+                        </label>
+                        <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-700 font-semibold">
+                          ₹{calculateRecurringTotal(formData)}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Fee Plan
+                        </label>
+                        <select
+                          value={formData.recurring_fee_plan}
+                          onChange={(e) => setFormData({ ...formData, recurring_fee_plan: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                          {FEE_PLANS.map(plan => (
+                            <option key={plan} value={plan}>{plan}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Start Month
+                        </label>
+                        <input
+                          type="month"
+                          value={formData.recurring_start_month}
+                          onChange={(e) => setFormData({ ...formData, recurring_start_month: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          End Month <span className="text-xs text-gray-400">(Optional)</span>
+                        </label>
+                        <input
+                          type="month"
+                          value={formData.recurring_end_month}
+                          onChange={(e) => setFormData({ ...formData, recurring_end_month: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="autoGenerate"
+                          checked={formData.recurring_auto_generate}
+                          onChange={(e) => setFormData({ ...formData, recurring_auto_generate: e.target.checked })}
+                          disabled={isSubmitting}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="autoGenerate" className="text-sm font-medium text-gray-700">
+                          Auto-generate monthly invoices
+                        </label>
+                      </div>
+                    </div>
+                    
+                    {/* Initial Payment Section - Shows when Fee is marked as Paid */}
+                    {formData.fee_paid && (
+                      <div className="mt-4 pt-4 border-t border-blue-200">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                          <CreditCard size={16} className="text-green-600" />
+                          Initial Payment Details
+                          <span className="text-xs text-gray-400">(First month's fee)</span>
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Initial Payment Amount (₹) <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              required={formData.fee_paid}
+                              value={formData.initial_payment_amount || calculateRecurringTotal(formData) || calculateTotalFee(formData)}
+                              onChange={(e) => setFormData({ ...formData, initial_payment_amount: e.target.value })}
+                              disabled={isSubmitting}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              placeholder="Enter initial payment"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Payment Date
+                            </label>
+                            <input
+                              type="date"
+                              value={formData.initial_payment_date || formData.payment_date || new Date().toISOString().split('T')[0]}
+                              onChange={(e) => setFormData({ ...formData, initial_payment_date: e.target.value })}
+                              disabled={isSubmitting}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Payment Method
+                            </label>
+                            <select
+                              value={formData.initial_payment_method || formData.payment_mode || 'Cash'}
+                              onChange={(e) => setFormData({ ...formData, initial_payment_method: e.target.value })}
+                              disabled={isSubmitting}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            >
+                              {PAYMENT_MODES.map(mode => (
+                                <option key={mode} value={mode}>{mode}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="md:col-span-3">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Transaction/Receipt No. <span className="text-xs text-gray-400">(Optional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.initial_payment_transaction || ''}
+                              onChange={(e) => setFormData({ ...formData, initial_payment_transaction: e.target.value })}
+                              disabled={isSubmitting}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              placeholder="Enter transaction reference number"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-blue-600 mt-2 flex items-center gap-1">
+                          <Info size={12} className="flex-shrink-0" />
+                          This payment will create an initial invoice and payment record in the finance module with the student's name.
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>

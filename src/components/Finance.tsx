@@ -6,7 +6,7 @@ import {
   PieChart, Wallet, CreditCard, Banknote, Receipt,
   AlertCircle, CheckCircle, Clock, Upload, Building,
   User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
-  History
+  History, CalendarDays, ReceiptText, FileSpreadsheet
 } from 'lucide-react';
 import { 
   getFees, getExpenses, getSalaries, getStudents, getStaff,
@@ -32,10 +32,13 @@ export default function Finance() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedFeeForPayment, setSelectedFeeForPayment] = useState(null);
-  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
-  const [selectedFeeForHistory, setSelectedFeeForHistory] = useState(null);
+  const [showFeeDetails, setShowFeeDetails] = useState(false);
+  const [selectedFeeForDetails, setSelectedFeeForDetails] = useState(null);
+  const [feeDetails, setFeeDetails] = useState(null);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [relatedInvoices, setRelatedInvoices] = useState([]);
+  const [generatingRecurring, setGeneratingRecurring] = useState(false);
   
   const [formData, setFormData] = useState({
     student_id: '',
@@ -70,6 +73,13 @@ export default function Finance() {
     payment_date_salary: '',
     remarks: '',
     salary_slip: null,
+    // Recurring fees fields
+    recurring_tuition_fee: '',
+    recurring_activity_fee: '',
+    recurring_transport_fee: '',
+    recurring_start_month: '',
+    recurring_end_month: '',
+    fee_plan: 'Monthly',
   });
 
   // Payment form data
@@ -82,11 +92,24 @@ export default function Finance() {
     payment_method: 'Cash',
     transaction_no: '',
     notes: '',
+    is_advance: false,
+    advance_allocation: [],
+    advance_month: '',
+    advance_amount_allocation: '',
+    generate_future_invoices: false,
   });
 
   useEffect(() => {
     loadData();
   }, [selectedMonth]);
+
+  // Helper to safely extract array from API response
+  const extractArray = (res) => {
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.data)) return res.data;
+    if (res && res.data && Array.isArray(res.data.data)) return res.data.data;
+    return [];
+  };
 
   const loadData = async () => {
     try {
@@ -99,14 +122,20 @@ export default function Finance() {
         getStaff(),
       ]);
       
-      setFees(feesRes.data || []);
-      setExpenses(expensesRes.data || []);
-      setSalaryPayments(salaryRes.data || []);
-      setStudents(studentsRes.data || []);
-      setStaff(staffRes.data || []);
+      setFees(extractArray(feesRes));
+      setExpenses(extractArray(expensesRes));
+      setSalaryPayments(extractArray(salaryRes));
+      setStudents(extractArray(studentsRes));
+      setStaff(extractArray(staffRes));
     } catch (error) {
       console.error('Error loading finance data:', error);
       alert('Failed to load financial data');
+      // Keep previous data or empty arrays
+      setFees(prev => Array.isArray(prev) ? prev : []);
+      setExpenses(prev => Array.isArray(prev) ? prev : []);
+      setSalaryPayments(prev => Array.isArray(prev) ? prev : []);
+      setStudents(prev => Array.isArray(prev) ? prev : []);
+      setStaff(prev => Array.isArray(prev) ? prev : []);
     } finally {
       setLoading(false);
     }
@@ -141,23 +170,58 @@ export default function Finance() {
     }
   };
 
-  // Fetch payment history for a fee
-  const fetchPaymentHistory = async (feeId) => {
+  // Generate recurring fees for all students
+  const generateRecurringFees = async () => {
+    const month = prompt('Enter month (YYYY-MM) for recurring fee generation:', new Date().toISOString().slice(0, 7));
+    if (!month) return;
+    
+    if (!confirm(`Generate recurring fees for ${month}? This will create invoices for all students with recurring fees configured.`)) return;
+    
     try {
-      setLoadingHistory(true);
-      const response = await fetch(`/api/fees/${feeId}/payments`);
+      setGeneratingRecurring(true);
+      const response = await fetch('/api/fees/bulk-generate-recurring', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ month }),
+      });
+      
       const result = await response.json();
       
       if (result.success) {
-        setPaymentHistory(result.data.payment_history || []);
-        setSelectedFeeForHistory(feeId);
-        setShowPaymentHistory(true);
+        alert(`Generated ${result.generated} invoices for ${month}`);
+        await loadData();
       } else {
-        alert('Failed to fetch payment history');
+        alert('Failed to generate recurring fees: ' + (result.message || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error fetching payment history:', error);
-      alert('Failed to fetch payment history');
+      console.error('Error generating recurring fees:', error);
+      alert('Failed to generate recurring fees. Please try again.');
+    } finally {
+      setGeneratingRecurring(false);
+    }
+  };
+
+  // Fetch fee details with payment history
+  const fetchFeeDetails = async (feeId) => {
+    try {
+      setLoadingHistory(true);
+      const response = await fetch(`/api/fees/${feeId}`);
+      const result = await response.json();
+      
+      if (result) {
+        setFeeDetails(result);
+        setPaymentHistory(Array.isArray(result.payment_history) ? result.payment_history : []);
+        setRelatedInvoices(Array.isArray(result.related_invoices) ? result.related_invoices : []);
+        setSelectedFeeForDetails(feeId);
+        setShowFeeDetails(true);
+      } else {
+        alert('Failed to fetch fee details');
+      }
+    } catch (error) {
+      console.error('Error fetching fee details:', error);
+      alert('Failed to fetch fee details');
     } finally {
       setLoadingHistory(false);
     }
@@ -194,7 +258,6 @@ export default function Finance() {
   const handleFeeFieldChange = (field, value) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
-      // Calculate total with updated values
       const admission = parseFloat(field === 'admission_fee' ? value : newData.admission_fee) || 0;
       const tuition = parseFloat(field === 'tuition_fee' ? value : newData.tuition_fee) || 0;
       const transport = parseFloat(field === 'transport_fee' ? value : newData.transport_fee) || 0;
@@ -213,11 +276,18 @@ export default function Finance() {
     setFormData(prev => ({ ...prev, net_salary: net.toString() }));
   };
 
-  // Handle payment record submission
+  // Calculate recurring total
+  const calculateRecurringTotal = () => {
+    const tuition = parseFloat(formData.recurring_tuition_fee) || 0;
+    const activity = parseFloat(formData.recurring_activity_fee) || 0;
+    const transport = parseFloat(formData.recurring_transport_fee) || 0;
+    return tuition + activity + transport;
+  };
+
+  // Handle payment record submission with advance support
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate amount
     if (!paymentFormData.amount_paid || parseFloat(paymentFormData.amount_paid) <= 0) {
       alert('Please enter a valid payment amount');
       return;
@@ -229,13 +299,14 @@ export default function Finance() {
         fee_id: paymentFormData.fee_id,
         amount_paid: parseFloat(paymentFormData.amount_paid) || 0,
         payment_date: paymentFormData.payment_date,
-        payment_type: paymentFormData.payment_type,
+        payment_type: paymentFormData.is_advance ? 'advance' : paymentFormData.payment_type,
         payment_method: paymentFormData.payment_method,
         transaction_no: paymentFormData.transaction_no,
         notes: paymentFormData.notes,
+        advance_allocation: paymentFormData.advance_allocation || [],
+        generate_future_invoices: paymentFormData.generate_future_invoices || false,
       };
 
-      // Call API to record payment
       const response = await fetch('/api/fees/record-payment', {
         method: 'POST',
         headers: {
@@ -249,7 +320,7 @@ export default function Finance() {
       if (result.success) {
         alert('Payment recorded successfully!');
         resetPaymentForm();
-        await loadData(); // Refresh data to show updated status
+        await loadData();
       } else {
         alert('Failed to record payment: ' + (result.message || 'Unknown error'));
       }
@@ -277,6 +348,19 @@ export default function Finance() {
           payment_method: formData.payment_method,
           transaction_id: formData.transaction_id,
           notes: formData.notes,
+          fee_period: {
+            month: formData.due_date?.slice(0, 7) || new Date().toISOString().slice(0, 7),
+            start_date: formData.due_date ? new Date(formData.due_date) : new Date(),
+            end_date: formData.due_date ? new Date(new Date(formData.due_date).setMonth(new Date(formData.due_date).getMonth() + 1)) : new Date(),
+          },
+          fee_plan: formData.fee_plan || 'Monthly',
+          recurring_fees: {
+            tuition_fee: parseFloat(formData.recurring_tuition_fee) || 0,
+            activity_fee: parseFloat(formData.recurring_activity_fee) || 0,
+            transport_fee: parseFloat(formData.recurring_transport_fee) || 0,
+            total_monthly: calculateRecurringTotal(),
+          },
+          is_recurring: true,
         };
         
         if (editingItem) {
@@ -392,6 +476,12 @@ export default function Finance() {
         receipt_doc: null,
         salary_slip: null,
         payment_date_salary: '',
+        recurring_tuition_fee: item.recurring_fees?.tuition_fee?.toString() || '',
+        recurring_activity_fee: item.recurring_fees?.activity_fee?.toString() || '',
+        recurring_transport_fee: item.recurring_fees?.transport_fee?.toString() || '',
+        recurring_start_month: item.fee_period?.start_date?.split('T')[0] || '',
+        recurring_end_month: item.fee_period?.end_date?.split('T')[0] || '',
+        fee_plan: item.fee_plan || 'Monthly',
       });
     } 
     else if (type === 'expense') {
@@ -428,10 +518,16 @@ export default function Finance() {
         remarks: '',
         salary_slip: null,
         payment_date_salary: '',
+        recurring_tuition_fee: '',
+        recurring_activity_fee: '',
+        recurring_transport_fee: '',
+        recurring_start_month: '',
+        recurring_end_month: '',
+        fee_plan: '',
       });
     }
     else if (type === 'salary') {
-      const staffMember = staff.find(s => s._id === item.staff_id?._id || s._id === item.staff_id);
+      const staffMember = (Array.isArray(staff) ? staff : []).find(s => s._id === item.staff_id?._id || s._id === item.staff_id);
       setFormData({
         staff_id: item.staff_id?._id || item.staff_id || '',
         staff_name: staffMember?.name || '',
@@ -466,6 +562,12 @@ export default function Finance() {
         notes: '',
         receipt_doc: null,
         payment_date_salary: '',
+        recurring_tuition_fee: '',
+        recurring_activity_fee: '',
+        recurring_transport_fee: '',
+        recurring_start_month: '',
+        recurring_end_month: '',
+        fee_plan: '',
       });
     }
     
@@ -506,6 +608,12 @@ export default function Finance() {
       payment_date_salary: '',
       remarks: '',
       salary_slip: null,
+      recurring_tuition_fee: '',
+      recurring_activity_fee: '',
+      recurring_transport_fee: '',
+      recurring_start_month: '',
+      recurring_end_month: '',
+      fee_plan: 'Monthly',
     });
     setEditingItem(null);
     setShowModal(false);
@@ -521,6 +629,11 @@ export default function Finance() {
       payment_method: 'Cash',
       transaction_no: '',
       notes: '',
+      is_advance: false,
+      advance_allocation: [],
+      advance_month: '',
+      advance_amount_allocation: '',
+      generate_future_invoices: false,
     });
     setSelectedFeeForPayment(null);
     setShowPaymentModal(false);
@@ -537,22 +650,31 @@ export default function Finance() {
         return { bg: 'bg-red-100', text: 'text-red-700', icon: <AlertCircle size={12} /> };
       case 'Partial':
         return { bg: 'bg-blue-100', text: 'text-blue-700', icon: <Clock size={12} /> };
+      case 'Advance':
+        return { bg: 'bg-purple-100', text: 'text-purple-700', icon: <TrendingUp size={12} /> };
       default:
         return { bg: 'bg-gray-100', text: 'text-gray-700', icon: null };
     }
   };
 
-  const totalFeesCollected = fees
+  // Safe arrays
+  const safeFees = Array.isArray(fees) ? fees : [];
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  const safeSalaryPayments = Array.isArray(salaryPayments) ? salaryPayments : [];
+  const safeStudents = Array.isArray(students) ? students : [];
+  const safeStaff = Array.isArray(staff) ? staff : [];
+
+  const totalFeesCollected = safeFees
     .filter(f => f.status === 'Paid')
     .reduce((sum, f) => sum + (f.total_amount || 0), 0);
   
-  const pendingFees = fees
+  const pendingFees = safeFees
     .filter(f => f.status === 'Pending' || f.status === 'Overdue')
     .reduce((sum, f) => sum + (f.total_amount || 0), 0);
   
-  const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalExpenses = safeExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   
-  const totalSalaryPaid = salaryPayments
+  const totalSalaryPaid = safeSalaryPayments
     .filter(s => s.status === 'Completed')
     .reduce((sum, s) => sum + (s.net_salary || 0), 0);
   
@@ -560,23 +682,24 @@ export default function Finance() {
 
   // Get fee records for a specific student
   const getStudentFees = (studentId) => {
-    return fees.filter(f => 
+    return safeFees.filter(f => 
       f.student_id?._id === studentId || f.student_id === studentId
     );
   };
 
-  const filteredFees = fees.filter(f => 
+  const filteredFees = safeFees.filter(f => 
     f.student_id?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    f.student_id?.parent_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    f.student_id?.parent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    f.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  const filteredExpenses = expenses.filter(e => 
+  const filteredExpenses = safeExpenses.filter(e => 
     e.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     e.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     e.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  const filteredSalary = salaryPayments.filter(s => 
+  const filteredSalary = safeSalaryPayments.filter(s => 
     s.staff_id?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -606,7 +729,6 @@ export default function Finance() {
                 Manage fees collection, expenses, and staff salaries
               </p>
             </div>
-            
           </div>
         </div>
 
@@ -632,7 +754,7 @@ export default function Finance() {
               <span className="text-2xl font-bold text-orange-600">₹{pendingFees.toLocaleString()}</span>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Pending Fees</h3>
-            <p className="text-2xl font-bold text-gray-800">{fees.filter(f => f.status === 'Pending' || f.status === 'Partial').length} Students</p>
+            <p className="text-2xl font-bold text-gray-800">{safeFees.filter(f => f.status === 'Pending' || f.status === 'Partial').length} Students</p>
             <p className="text-xs text-gray-500 mt-2">Needs follow-up</p>
           </div>
 
@@ -644,7 +766,7 @@ export default function Finance() {
               <span className="text-2xl font-bold text-red-600">₹{totalExpenses.toLocaleString()}</span>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Total Expenses</h3>
-            <p className="text-2xl font-bold text-gray-800">{expenses.length} Transactions</p>
+            <p className="text-2xl font-bold text-gray-800">{safeExpenses.length} Transactions</p>
             <p className="text-xs text-gray-500 mt-2">This month</p>
           </div>
 
@@ -665,7 +787,7 @@ export default function Finance() {
 
         {/* Tab Navigation */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-2 mb-8 shadow-lg">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => { setActiveTab('fees'); setSearchTerm(''); }}
               className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
@@ -677,7 +799,7 @@ export default function Finance() {
               <Receipt size={18} />
               Fee Collection
               <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                {fees.length}
+                {safeFees.length}
               </span>
             </button>
             <button
@@ -691,7 +813,7 @@ export default function Finance() {
               <TrendingDown size={18} />
               Expenses
               <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                {expenses.length}
+                {safeExpenses.length}
               </span>
             </button>
             <button
@@ -705,7 +827,7 @@ export default function Finance() {
               <Users size={18} />
               Staff Salary
               <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                {salaryPayments.length}
+                {safeSalaryPayments.length}
               </span>
             </button>
           </div>
@@ -718,7 +840,7 @@ export default function Finance() {
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder={`Search by ${activeTab === 'fees' ? 'student name' : activeTab === 'expenses' ? 'category or vendor' : 'staff name'}...`}
+                placeholder={`Search by ${activeTab === 'fees' ? 'student name or invoice' : activeTab === 'expenses' ? 'category or vendor' : 'staff name'}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
@@ -733,6 +855,14 @@ export default function Finance() {
                   >
                     <DollarSign size={20} />
                     Record Payment
+                  </button>
+                  <button
+                    onClick={generateRecurringFees}
+                    disabled={generatingRecurring}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CalendarDays size={20} className={generatingRecurring ? 'animate-spin' : ''} />
+                    {generatingRecurring ? 'Generating...' : 'Generate Recurring Fees'}
                   </button>
                   <button
                     onClick={syncAllStudentFees}
@@ -767,11 +897,11 @@ export default function Finance() {
                 <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Student</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fee Breakdown</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Remaining</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Due Date</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice #</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fee Period</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance/Due</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -789,6 +919,10 @@ export default function Finance() {
                     filteredFees.map((fee) => {
                       const statusStyle = getStatusColor(fee.status);
                       const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
+                      const isOverdue = new Date(fee.due_date) < new Date() && fee.status !== 'Paid';
+                      const displayStatus = isOverdue && fee.status === 'Pending' ? 'Overdue' : fee.status;
+                      const statusStyleFinal = getStatusColor(displayStatus);
+                      
                       return (
                         <tr key={fee._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
                           <td className="px-6 py-4">
@@ -803,31 +937,36 @@ export default function Finance() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="space-y-1 text-sm">
-                              {fee.admission_fee > 0 && <div>Admission: ₹{fee.admission_fee}</div>}
-                              {fee.tuition_fee > 0 && <div>Tuition: ₹{fee.tuition_fee}</div>}
-                              {fee.transport_fee > 0 && <div>Transport: ₹{fee.transport_fee}</div>}
-                              {fee.activity_fee > 0 && <div>Activity: ₹{fee.activity_fee}</div>}
+                            <span className="text-sm font-mono text-gray-600">{fee.invoice_number || 'N/A'}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-600">
+                              {fee.fee_period?.month || (fee.due_date ? new Date(fee.due_date).toISOString().slice(0, 7) : 'N/A')}
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="font-bold text-gray-900">₹{fee.total_amount?.toLocaleString()}</span>
+                            <span className="font-bold text-gray-900">₹{(fee.total_amount || 0).toLocaleString()}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className="font-semibold text-green-600">₹{(fee.paid_amount || 0).toLocaleString()}</span>
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              ₹{remaining.toLocaleString()}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {new Date(fee.due_date).toLocaleDateString()}
+                            <div>
+                              <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                ₹{remaining.toLocaleString()}
+                              </span>
+                              {fee.overdue_amount > 0 && (
+                                <span className="text-xs text-red-500 block">Overdue: ₹{fee.overdue_amount.toLocaleString()}</span>
+                              )}
+                              {fee.advance_amount > 0 && (
+                                <span className="text-xs text-purple-500 block">Advance: ₹{fee.advance_amount.toLocaleString()}</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
-                              {statusStyle.icon}
-                              {fee.status}
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusStyleFinal.bg} ${statusStyleFinal.text}`}>
+                              {statusStyleFinal.icon}
+                              {displayStatus}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
@@ -849,16 +988,16 @@ export default function Finance() {
                                 <DollarSign size={18} />
                               </button>
                               <button 
-                                onClick={() => fetchPaymentHistory(fee._id)} 
+                                onClick={() => fetchFeeDetails(fee._id)} 
                                 className="text-purple-600 hover:text-purple-800 p-1 transition-colors"
-                                title="View Payment History"
+                                title="View Details"
                               >
-                                <History size={18} />
+                                <Eye size={18} />
                               </button>
-                              <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 p-1 transition-colors">
+                              <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 p-1 transition-colors" title="Edit">
                                 <Edit size={18} />
                               </button>
-                              <button onClick={() => handleDelete(fee._id, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors">
+                              <button onClick={() => handleDelete(fee._id, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors" title="Delete">
                                 <Trash2 size={18} />
                               </button>
                             </div>
@@ -873,70 +1012,220 @@ export default function Finance() {
           </div>
         )}
 
-        {/* Payment History Modal */}
-        {showPaymentHistory && (
+        {/* Fee Details Modal with Fee Plan and Fee Account */}
+        {showFeeDetails && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between">
+            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <History size={24} />
-                  Payment History
+                  <FileText size={24} />
+                  Fee Details - {feeDetails?.student_id?.name || 'Student'}
                 </h2>
-                <button onClick={() => setShowPaymentHistory(false)} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
+                <button onClick={() => setShowFeeDetails(false)} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="p-6">
+              <div className="p-6 space-y-6">
                 {loadingHistory ? (
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-500">Loading payment history...</p>
+                    <p className="mt-4 text-gray-500">Loading fee details...</p>
                   </div>
-                ) : paymentHistory.length === 0 ? (
-                  <div className="text-center py-8">
-                    <DollarSign className="mx-auto text-gray-400" size={48} />
-                    <p className="text-lg text-gray-500 mt-2">No payments recorded yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {paymentHistory.map((payment, index) => (
-                      <div key={index} className="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                              <DollarSign className="text-green-600" size={20} />
-                            </div>
-                            <div>
-                              <div className="font-semibold text-gray-900">₹{payment.amount.toLocaleString()}</div>
-                              <div className="text-sm text-gray-500">
-                                {new Date(payment.recorded_at).toLocaleString()}
-                              </div>
-                            </div>
+                ) : feeDetails ? (
+                  <>
+                    {/* Fee Plan Section */}
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <CalendarDays size={20} className="text-purple-500" />
+                        Fee Plan
+                      </h3>
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Fee Plan Type</p>
+                            <p className="font-semibold">{feeDetails.fee_plan || 'Monthly'}</p>
                           </div>
-                          <div className="text-right">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              payment.payment_type === 'full' ? 'bg-green-100 text-green-700' :
-                              payment.payment_type === 'partial' ? 'bg-blue-100 text-blue-700' :
-                              'bg-purple-100 text-purple-700'
-                            }`}>
-                              {payment.payment_type.charAt(0).toUpperCase() + payment.payment_type.slice(1)}
-                            </span>
-                            <div className="text-sm text-gray-500 mt-1">{payment.payment_method}</div>
+                          <div>
+                            <p className="text-sm text-gray-500">Fee Period</p>
+                            <p className="font-semibold">{feeDetails.fee_period?.month || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Invoice Number</p>
+                            <p className="font-semibold font-mono">{feeDetails.invoice_number || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Invoice Date</p>
+                            <p className="font-semibold">{feeDetails.invoice_date ? new Date(feeDetails.invoice_date).toLocaleDateString() : 'N/A'}</p>
                           </div>
                         </div>
-                        {payment.transaction_id && (
-                          <div className="mt-2 text-sm text-gray-600">
-                            Transaction: {payment.transaction_id}
-                          </div>
-                        )}
-                        {payment.notes && (
-                          <div className="mt-1 text-sm text-gray-500">
-                            Notes: {payment.notes}
+                        {(feeDetails.recurring_fees?.tuition_fee > 0 || 
+                          feeDetails.recurring_fees?.activity_fee > 0 || 
+                          feeDetails.recurring_fees?.transport_fee > 0) && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-sm font-semibold text-gray-700 mb-2">Recurring Fees Breakdown</p>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                              {feeDetails.recurring_fees?.tuition_fee > 0 && (
+                                <div className="text-sm"><span className="text-gray-500">Tuition:</span> ₹{feeDetails.recurring_fees.tuition_fee.toLocaleString()}</div>
+                              )}
+                              {feeDetails.recurring_fees?.activity_fee > 0 && (
+                                <div className="text-sm"><span className="text-gray-500">Activity:</span> ₹{feeDetails.recurring_fees.activity_fee.toLocaleString()}</div>
+                              )}
+                              {feeDetails.recurring_fees?.transport_fee > 0 && (
+                                <div className="text-sm"><span className="text-gray-500">Transport:</span> ₹{feeDetails.recurring_fees.transport_fee.toLocaleString()}</div>
+                              )}
+                              <div className="text-sm font-semibold"><span className="text-gray-500">Monthly Total:</span> ₹{(feeDetails.recurring_fees?.total_monthly || 0).toLocaleString()}</div>
+                            </div>
                           </div>
                         )}
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Fee Account Section */}
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <Wallet size={20} className="text-blue-500" />
+                        Fee Account
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div className="bg-green-50 rounded-xl p-3 border border-green-200">
+                          <p className="text-sm text-gray-500">Total Charged</p>
+                          <p className="text-xl font-bold text-green-700">₹{(feeDetails.total_amount || 0).toLocaleString()}</p>
+                        </div>
+                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+                          <p className="text-sm text-gray-500">Total Paid</p>
+                          <p className="text-xl font-bold text-blue-700">₹{(feeDetails.paid_amount || 0).toLocaleString()}</p>
+                        </div>
+                        <div className="bg-red-50 rounded-xl p-3 border border-red-200">
+                          <p className="text-sm text-gray-500">Outstanding</p>
+                          <p className="text-xl font-bold text-red-700">₹{(feeDetails.remaining_amount || 0).toLocaleString()}</p>
+                        </div>
+                        <div className="bg-purple-50 rounded-xl p-3 border border-purple-200">
+                          <p className="text-sm text-gray-500">Advance</p>
+                          <p className="text-xl font-bold text-purple-700">₹{(feeDetails.advance_amount || 0).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Fee Breakdown */}
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 mb-4">
+                        <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                          <ReceiptText size={16} className="text-teal-500" />
+                          Fee Breakdown
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                          <div><span className="text-gray-500">Admission:</span> ₹{(feeDetails.admission_fee || 0).toLocaleString()}</div>
+                          <div><span className="text-gray-500">Tuition:</span> ₹{(feeDetails.tuition_fee || 0).toLocaleString()}</div>
+                          <div><span className="text-gray-500">Transport:</span> ₹{(feeDetails.transport_fee || 0).toLocaleString()}</div>
+                          <div><span className="text-gray-500">Activity:</span> ₹{(feeDetails.activity_fee || 0).toLocaleString()}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment History */}
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <History size={20} className="text-green-500" />
+                        Payment History
+                      </h3>
+                      {(Array.isArray(paymentHistory) ? paymentHistory : []).length === 0 ? (
+                        <div className="text-center py-6 bg-gray-50 rounded-xl border border-gray-200">
+                          <DollarSign className="mx-auto text-gray-400" size={48} />
+                          <p className="text-lg text-gray-500 mt-2">No payments recorded yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {(Array.isArray(paymentHistory) ? paymentHistory : []).map((payment, index) => (
+                            <div key={index} className="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <DollarSign className="text-green-600" size={20} />
+                                  </div>
+                                  <div>
+                                    <div className="font-semibold text-gray-900">₹{(payment.amount || 0).toLocaleString()}</div>
+                                    <div className="text-sm text-gray-500">
+                                      {payment.recorded_at ? new Date(payment.recorded_at).toLocaleString() : 'N/A'}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                    payment.payment_type === 'full' ? 'bg-green-100 text-green-700' :
+                                    payment.payment_type === 'partial' ? 'bg-blue-100 text-blue-700' :
+                                    payment.payment_type === 'advance' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {payment.payment_type?.charAt(0).toUpperCase() + payment.payment_type?.slice(1) || 'Full'}
+                                  </span>
+                                  <div className="text-sm text-gray-500 mt-1">{payment.payment_method}</div>
+                                </div>
+                              </div>
+                              {payment.transaction_id && (
+                                <div className="mt-2 text-sm text-gray-600">
+                                  Transaction: {payment.transaction_id}
+                                </div>
+                              )}
+                              {payment.invoice_number && (
+                                <div className="mt-1 text-sm text-gray-600">
+                                  Invoice: {payment.invoice_number}
+                                </div>
+                              )}
+                              {payment.notes && (
+                                <div className="mt-1 text-sm text-gray-500">
+                                  Notes: {payment.notes}
+                                </div>
+                              )}
+                              {payment.advance_allocation && payment.advance_allocation.length > 0 && (
+                                <div className="mt-2 text-sm text-gray-600">
+                                  <span className="font-semibold">Advance Allocated to:</span>
+                                  <ul className="list-disc list-inside ml-2">
+                                    {payment.advance_allocation.map((alloc, idx) => (
+                                      <li key={idx}>{alloc.month}: ₹{(alloc.amount || 0).toLocaleString()}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Related Invoices */}
+                    {(Array.isArray(relatedInvoices) ? relatedInvoices : []).length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                          <FileSpreadsheet size={20} className="text-teal-500" />
+                          Related Invoices
+                        </h3>
+                        <div className="space-y-2">
+                          {(Array.isArray(relatedInvoices) ? relatedInvoices : []).map((inv) => (
+                            <div key={inv._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors">
+                              <div>
+                                <span className="font-mono text-sm">{inv.invoice_number}</span>
+                                <span className="text-sm text-gray-500 ml-2">{inv.fee_period?.month || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="font-semibold">₹{(inv.total_amount || 0).toLocaleString()}</span>
+                                <span className={`px-2 py-1 rounded-full text-xs ${
+                                  inv.status === 'Paid' ? 'bg-green-100 text-green-700' : 
+                                  inv.status === 'Partial' ? 'bg-blue-100 text-blue-700' :
+                                  inv.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                  'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {inv.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <AlertCircle className="mx-auto text-red-400" size={48} />
+                    <p className="text-lg text-gray-500 mt-2">Failed to load fee details</p>
                   </div>
                 )}
               </div>
@@ -972,7 +1261,7 @@ export default function Finance() {
                     filteredExpenses.map((expense) => (
                       <tr key={expense._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
                         <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(expense.date).toLocaleDateString()}
+                          {expense.date ? new Date(expense.date).toLocaleDateString() : 'N/A'}
                         </td>
                         <td className="px-6 py-4">
                           <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
@@ -986,7 +1275,7 @@ export default function Finance() {
                           {expense.vendor_name || '-'}
                         </td>
                         <td className="px-6 py-4">
-                          <span className="font-semibold text-red-600">₹{expense.amount?.toLocaleString()}</span>
+                          <span className="font-semibold text-red-600">₹{(expense.amount || 0).toLocaleString()}</span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {expense.payment_mode}
@@ -1050,19 +1339,19 @@ export default function Finance() {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">
-                            {new Date(salary.month).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
+                            {salary.month ? new Date(salary.month).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'N/A'}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900">
-                            ₹{salary.basic_salary?.toLocaleString()}
+                            ₹{(salary.basic_salary || 0).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 text-sm text-green-600">
-                            +₹{salary.allowance?.toLocaleString()}
+                            +₹{(salary.allowance || 0).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 text-sm text-red-600">
-                            -₹{salary.deductions?.toLocaleString()}
+                            -₹{(salary.deductions || 0).toLocaleString()}
                           </td>
                           <td className="px-6 py-4">
-                            <span className="font-bold text-gray-900">₹{salary.net_salary?.toLocaleString()}</span>
+                            <span className="font-bold text-gray-900">₹{(salary.net_salary || 0).toLocaleString()}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
@@ -1088,7 +1377,7 @@ export default function Finance() {
           </div>
         )}
 
-        {/* Payment Record Modal */}
+        {/* Payment Record Modal with Advance Support */}
         {showPaymentModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1131,7 +1420,7 @@ export default function Finance() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     >
                       <option value="">Select Student</option>
-                      {students.map((student) => (
+                      {safeStudents.map((student) => (
                         <option key={student._id} value={student._id}>
                           {student.name} - {student.class_id || 'N/A'}
                         </option>
@@ -1145,7 +1434,7 @@ export default function Finance() {
                       required
                       value={paymentFormData.fee_id}
                       onChange={(e) => {
-                        const fee = fees.find(f => f._id === e.target.value);
+                        const fee = safeFees.find(f => f._id === e.target.value);
                         const remaining = fee ? (fee.total_amount || 0) - (fee.paid_amount || 0) : 0;
                         setPaymentFormData({
                           ...paymentFormData,
@@ -1160,7 +1449,7 @@ export default function Finance() {
                         const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
                         return (
                           <option key={fee._id} value={fee._id}>
-                            {new Date(fee.due_date).toLocaleDateString()} - ₹{fee.total_amount} 
+                            {fee.invoice_number || (fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A')} - ₹{fee.total_amount} 
                             {remaining > 0 ? ` (Remaining: ₹${remaining})` : ' (Fully Paid)'}
                           </option>
                         );
@@ -1244,15 +1533,119 @@ export default function Finance() {
                       placeholder="Additional notes about the payment..."
                     />
                   </div>
+
+                  {/* Advance Payment Section */}
+                  <div className="md:col-span-2">
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <input
+                          type="checkbox"
+                          id="isAdvancePayment"
+                          checked={paymentFormData.is_advance || false}
+                          onChange={(e) => {
+                            setPaymentFormData({
+                              ...paymentFormData,
+                              is_advance: e.target.checked,
+                              advance_allocation: [],
+                              payment_type: e.target.checked ? 'advance' : 'full',
+                            });
+                          }}
+                          className="rounded border-purple-300"
+                        />
+                        <label htmlFor="isAdvancePayment" className="text-sm font-medium text-purple-700">
+                          This is an Advance Payment (for future months)
+                        </label>
+                      </div>
+                      
+                      {paymentFormData.is_advance && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            Allocate advance amount to future months. Total allocation must equal the advance amount.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <input
+                              type="month"
+                              value={paymentFormData.advance_month || ''}
+                              onChange={(e) => setPaymentFormData({ ...paymentFormData, advance_month: e.target.value })}
+                              className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                            <input
+                              type="number"
+                              placeholder="Amount"
+                              value={paymentFormData.advance_amount_allocation || ''}
+                              onChange={(e) => setPaymentFormData({ ...paymentFormData, advance_amount_allocation: e.target.value })}
+                              className="flex-1 min-w-[120px] px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (paymentFormData.advance_month && paymentFormData.advance_amount_allocation) {
+                                  const allocations = [...(paymentFormData.advance_allocation || [])];
+                                  allocations.push({
+                                    month: paymentFormData.advance_month,
+                                    amount: parseFloat(paymentFormData.advance_amount_allocation),
+                                  });
+                                  setPaymentFormData({
+                                    ...paymentFormData,
+                                    advance_allocation: allocations,
+                                    advance_month: '',
+                                    advance_amount_allocation: '',
+                                  });
+                                }
+                              }}
+                              className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
+                            >
+                              Add
+                            </button>
+                          </div>
+                          {(paymentFormData.advance_allocation || []).length > 0 && (
+                            <div className="space-y-1">
+                              {(paymentFormData.advance_allocation || []).map((alloc, idx) => (
+                                <div key={idx} className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
+                                  <span className="text-sm">{alloc.month}</span>
+                                  <span className="text-sm font-semibold">₹{(alloc.amount || 0).toLocaleString()}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const allocations = (paymentFormData.advance_allocation || []).filter((_, i) => i !== idx);
+                                      setPaymentFormData({ ...paymentFormData, advance_allocation: allocations });
+                                    }}
+                                    className="text-red-500 hover:text-red-700 text-sm"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                              <div className="text-sm text-gray-600">
+                                Total Allocated: ₹{(paymentFormData.advance_allocation || []).reduce((sum, a) => sum + (a.amount || 0), 0).toLocaleString()}
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="generateFutureInvoices"
+                              checked={paymentFormData.generate_future_invoices || false}
+                              onChange={(e) => setPaymentFormData({ ...paymentFormData, generate_future_invoices: e.target.checked })}
+                              className="rounded border-purple-300"
+                            />
+                            <label htmlFor="generateFutureInvoices" className="text-sm text-gray-600">
+                              Generate future invoices for allocated months automatically
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4">
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button type="button" onClick={resetPaymentForm} className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all">
                     Cancel
                   </button>
                   <button type="submit" className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2">
                     <DollarSign size={18} />
-                    Save Payment
+                    Record Payment
                   </button>
                 </div>
               </form>
@@ -1263,7 +1656,7 @@ export default function Finance() {
         {/* Modal for Add/Edit */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-teal-500 to-cyan-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
                   {editingItem ? `Edit ${modalType === 'fee' ? 'Fee Record' : modalType === 'expense' ? 'Expense' : 'Salary Payment'}` : 
@@ -1297,7 +1690,7 @@ export default function Finance() {
                         required
                         value={formData.student_id}
                         onChange={(e) => {
-                          const student = students.find(s => s._id === e.target.value);
+                          const student = safeStudents.find(s => s._id === e.target.value);
                           setFormData({ 
                             ...formData, 
                             student_id: e.target.value,
@@ -1306,18 +1699,96 @@ export default function Finance() {
                             tuition_fee: student?.tuition_fee?.toString() || '',
                             transport_fee: student?.cab_fee?.toString() || '',
                             activity_fee: student?.activity_fee?.toString() || '',
+                            recurring_tuition_fee: student?.recurring_fees?.tuition_fee?.toString() || '',
+                            recurring_activity_fee: student?.recurring_fees?.activity_fee?.toString() || '',
+                            recurring_transport_fee: student?.recurring_fees?.transport_fee?.toString() || '',
                           });
                           setTimeout(updateTotalAmount, 100);
                         }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       >
                         <option value="">Select Student</option>
-                        {students.map((student) => (
+                        {safeStudents.map((student) => (
                           <option key={student._id} value={student._id}>
                             {student.name} - {student.class_id || 'N/A'}
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Recurring Fees Section */}
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                      <h4 className="font-semibold text-purple-700 mb-3 flex items-center gap-2">
+                        <CalendarDays size={16} />
+                        Recurring Fees Configuration
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Tuition Fee</label>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            value={formData.recurring_tuition_fee} 
+                            onChange={(e) => setFormData({ ...formData, recurring_tuition_fee: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Activity Fee</label>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            value={formData.recurring_activity_fee} 
+                            onChange={(e) => setFormData({ ...formData, recurring_activity_fee: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Transport Fee</label>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            value={formData.recurring_transport_fee} 
+                            onChange={(e) => setFormData({ ...formData, recurring_transport_fee: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Fee Plan</label>
+                          <select 
+                            value={formData.fee_plan} 
+                            onChange={(e) => setFormData({ ...formData, fee_plan: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          >
+                            <option value="Monthly">Monthly</option>
+                            <option value="Quarterly">Quarterly</option>
+                            <option value="Half-Yearly">Half-Yearly</option>
+                            <option value="Yearly">Yearly</option>
+                            <option value="One-Time">One-Time</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Start Month</label>
+                          <input 
+                            type="month" 
+                            value={formData.recurring_start_month} 
+                            onChange={(e) => setFormData({ ...formData, recurring_start_month: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">End Month</label>
+                          <input 
+                            type="month" 
+                            value={formData.recurring_end_month} 
+                            onChange={(e) => setFormData({ ...formData, recurring_end_month: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1394,6 +1865,7 @@ export default function Finance() {
                           <option value="Paid">Paid</option>
                           <option value="Overdue">Overdue</option>
                           <option value="Partial">Partial</option>
+                          <option value="Advance">Advance</option>
                         </select>
                       </div>
                       <div>
@@ -1549,7 +2021,7 @@ export default function Finance() {
                         required
                         value={formData.staff_id}
                         onChange={(e) => {
-                          const staffMember = staff.find(s => s._id === e.target.value);
+                          const staffMember = safeStaff.find(s => s._id === e.target.value);
                           setFormData({ 
                             ...formData, 
                             staff_id: e.target.value,
@@ -1561,7 +2033,7 @@ export default function Finance() {
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       >
                         <option value="">Select Staff</option>
-                        {staff.map((member) => (
+                        {safeStaff.map((member) => (
                           <option key={member._id} value={member._id}>
                             {member.name} - {member.designation}
                           </option>
@@ -1678,7 +2150,7 @@ export default function Finance() {
                   </>
                 )}
 
-                <div className="flex justify-end gap-3 pt-4">
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button type="button" onClick={resetForm} className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all">Cancel</button>
                   <button type="submit" className="px-6 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all">
                     {editingItem ? 'Update' : 'Add'} Record
