@@ -39,6 +39,45 @@ const ACADEMIC_YEARS = (() => {
   return years;
 })();
 
+// ==================== FEE STRUCTURES (must match backend) ====================
+const FEE_STRUCTURES = {
+  toddler: {
+    name: 'Toddler Fee Plan',
+    registration_fee: 5000,
+    admission_fee: 15000,
+    kit_fee: 2500,
+    camera_fee: 800,
+  },
+  'pre-nursery': {
+    name: 'Pre-Nursery Fee Plan',
+    registration_fee: 5500,
+    admission_fee: 18000,
+    kit_fee: 3000,
+    camera_fee: 1000,
+  },
+  nursery: {
+    name: 'Nursery Fee Plan',
+    registration_fee: 6000,
+    admission_fee: 20000,
+    kit_fee: 3500,
+    camera_fee: 1200,
+  },
+  'kg-1': {
+    name: 'KG-1 Fee Plan',
+    registration_fee: 7000,
+    admission_fee: 25000,
+    kit_fee: 4000,
+    camera_fee: 1500,
+  },
+  other: {
+    name: 'Other / Custom',
+    registration_fee: 0,
+    admission_fee: 0,
+    kit_fee: 0,
+    camera_fee: 0,
+  },
+};
+
 // Helper to check if document is a URL (Cloudinary or other)
 const isDocumentUrl = (doc) => {
   if (!doc) return false;
@@ -126,6 +165,7 @@ export default function StudentDetails() {
     vendor_id: '',
     status: 'Active',
     // Fee fields
+    fee_structure: '',                    // NEW
     registration_fee: '',
     admission_fee: '',
     tuition_fee: '',
@@ -249,6 +289,27 @@ export default function StudentDetails() {
     } else {
       setFormData(prev => ({ ...prev, assigned_teacher_id: '' }));
     }
+  };
+
+  // ==================== FEE STRUCTURE HANDLER ====================
+  const handleFeeStructureChange = (structureKey) => {
+    if (!structureKey || !FEE_STRUCTURES[structureKey]) {
+      setFormData(prev => ({
+        ...prev,
+        fee_structure: '',
+      }));
+      return;
+    }
+
+    const structure = FEE_STRUCTURES[structureKey];
+    setFormData(prev => ({
+      ...prev,
+      fee_structure: structureKey,
+      registration_fee: structure.registration_fee,
+      admission_fee: structure.admission_fee,
+      kit_fee: structure.kit_fee,
+      camera_fee: structure.camera_fee,
+    }));
   };
 
   const handleFileUpload = (e, fieldName) => {
@@ -419,6 +480,7 @@ export default function StudentDetails() {
         vendor_id: formData.transport_type !== 'Walker' ? formData.vendor_id : null,
         status: formData.status,
         // Fee fields
+        fee_structure: formData.fee_structure || null,   // NEW
         registration_fee: parseFloat(formData.registration_fee) || 0,
         admission_fee: parseFloat(formData.admission_fee) || 0,
         tuition_fee: parseFloat(formData.tuition_fee) || 0,
@@ -589,6 +651,8 @@ export default function StudentDetails() {
       vehicle_id: vehicleId,
       vendor_id: vendorId,
       status: student.status || 'Active',
+      // Fee structure
+      fee_structure: student.fee_structure || '',
       registration_fee: student.registration_fee || '',
       admission_fee: student.admission_fee || '',
       tuition_fee: student.tuition_fee || '',
@@ -661,6 +725,7 @@ export default function StudentDetails() {
       vehicle_id: '',
       vendor_id: '',
       status: 'Active',
+      fee_structure: '',
       registration_fee: '',
       admission_fee: '',
       tuition_fee: '',
@@ -1339,6 +1404,11 @@ export default function StudentDetails() {
                                 <span className="text-red-600">Discount: -₹{student.discount}</span>
                               )}
                               <span className="text-gray-600">Frequency: {student.fee_frequency || 'Monthly'}</span>
+                              {student.fee_structure && (
+                                <span className="text-purple-600 col-span-2">
+                                  Plan: {FEE_STRUCTURES[student.fee_structure]?.name || student.fee_structure}
+                                </span>
+                              )}
                             </div>
                             {student.recurring_fees && getRecurringTotal(student) > 0 && (
                               <div className="mt-1 pt-1 border-t border-blue-200">
@@ -1357,163 +1427,83 @@ export default function StudentDetails() {
                                 )}
                                 {student.recurring_fees.initial_payment?.paid && (
                                   <p className="text-xs text-green-600 mt-1">
-                                    Initial Payment: ₹{student.recurring_fees.initial_payment.amount} 
-                                    ({student.recurring_fees.initial_payment.payment_method})
+                                    Initial Payment: ₹{student.recurring_fees.initial_payment.amount} (Paid)
                                   </p>
                                 )}
                               </div>
-                            )}
-                            {student.fee_paid && student.payment_date && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                Paid on: {new Date(student.payment_date).toLocaleDateString()} • {student.payment_mode}
-                              </p>
                             )}
                           </div>
                         )}
                       </div>
 
-                      {/* Transport and Actions */}
-                      <div className="flex items-center justify-between pt-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {(student.transport_type === 'Cab' || student.transport_type === 'Bus') ? (
-                            <>
-                              <Truck size={14} className="text-cyan-600 flex-shrink-0" />
-                              <span className="text-sm text-gray-700 truncate">
-                                {student.transport_type}: {getVehicleNumber(student.vehicle_id)}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <Users size={14} className="text-green-600 flex-shrink-0" />
-                              <span className="text-sm text-gray-700">Walker</span>
-                            </>
-                          )}
-                        </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => handleEdit(student)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                            title="Edit Student"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(student._id)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            title="Delete Student"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => handleEdit(student)}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+                        >
+                          <Edit size={14} />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(student._id)}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
                       </div>
-
-                      {/* Documents indicator */}
-                      {student.documents && (
-                        <div className="flex items-center gap-2 pt-2 border-t border-gray-200 flex-wrap">
-                          <FolderOpen size={12} className="text-gray-400 flex-shrink-0" />
-                          <span className="text-xs text-gray-500">
-                            Docs: {Object.values(student.documents).filter(d => d).length} uploaded
-                          </span>
-                          {student.documents.student_photo && (
-                            <span className="text-xs text-green-600">📸 Photo ✓</span>
-                          )}
-                          {student.documents.birth_certificate && (
-                            <a 
-                              href={student.documents.birth_certificate} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-xs text-purple-600 hover:text-purple-800 underline"
-                            >
-                              View Birth Cert
-                            </a>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
-
-              {filteredClassStudents.length === 0 && selectedClass !== 'all' && (
-                <div className="bg-white rounded-2xl p-8 text-center">
-                  <Users className="mx-auto text-gray-400 mb-3" size={48} />
-                  <p className="text-gray-500">No students in {classSection.name}</p>
-                  <button
-                    onClick={() => {
-                      setFormData({ ...formData, class_id: classSection.id });
-                      setShowModal(true);
-                    }}
-                    className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all"
-                  >
-                    Add First Student
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
 
-        {/* Promote Students Modal */}
+        {/* Promote Modal */}
         {showPromoteModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl">
-              <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+              <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 rounded-t-2xl">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <ArrowUpCircle size={20} /> Promote Students to Next Class
+                  <ArrowUpCircle size={22} />
+                  Promote All Students
                 </h2>
-                <button
-                  onClick={() => !isPromoting && setShowPromoteModal(false)}
-                  disabled={isPromoting}
-                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
-                >
-                  <X size={24} />
-                </button>
               </div>
-
               <div className="p-6 space-y-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
-                  <AlertCircle className="text-amber-500 flex-shrink-0" size={20} />
-                  <p className="text-sm text-amber-800">
-                    This will move every <strong>Active</strong> student to the next class:
-                    Toddler → Pre-Nursery → Nursery → KG-1. Students currently in
-                    <strong> KG-1</strong> will be marked <strong>Graduated</strong>.
-                    This action affects all students at once and cannot be undone automatically.
-                  </p>
-                </div>
-
+                <p className="text-sm text-gray-600">
+                  This will promote all active students to the next class according to the progression:
+                  <br />
+                  <span className="font-medium text-gray-800">Toddler → Pre-Nursery → Nursery → KG-1 → Graduated</span>
+                </p>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Academic Year (for record-keeping)
+                    Academic Year (for record)
                   </label>
                   <input
                     type="text"
                     value={promotionAcademicYear}
                     onChange={(e) => setPromotionAcademicYear(e.target.value)}
-                    placeholder="e.g. 2026-2027"
-                    disabled={isPromoting}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-100"
+                    placeholder="e.g. 2025-2026"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   />
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm text-gray-600 bg-gray-50 rounded-xl p-3">
-                  <div>Toddler → <strong>Pre-Nursery</strong></div>
-                  <div>Nursery → <strong>KG-1</strong></div>
-                  <div>Pre-Nursery → <strong>Nursery</strong></div>
-                  <div>KG-1 → <strong>Graduated</strong></div>
-                </div>
-
                 <div className="flex justify-end gap-3 pt-2">
                   <button
-                    onClick={() => setShowPromoteModal(false)}
+                    onClick={() => {
+                      setShowPromoteModal(false);
+                      setPromotionAcademicYear('');
+                    }}
                     disabled={isPromoting}
-                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50"
+                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handlePromoteStudents}
                     disabled={isPromoting}
-                    className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-70 flex items-center gap-2"
+                    className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
                   >
                     {isPromoting ? (
                       <>
@@ -1864,12 +1854,44 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Fee and Charges */}
+                {/* ==================== FEE AND CHARGES (UPDATED) ==================== */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <DollarSign size={18} className="text-purple-600 flex-shrink-0" />
                     Fee & Charges
                   </h3>
+
+                  {/* Fee Structure Dropdown */}
+                  <div className="mb-5 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fee Structure <span className="text-red-500">*</span>
+                      <span className="text-xs text-gray-500 ml-2">(Select plan to auto-fill one-time fees)</span>
+                    </label>
+                    <select
+                      value={formData.fee_structure}
+                      onChange={(e) => handleFeeStructureChange(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-full px-4 py-2.5 border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed bg-white font-medium"
+                    >
+                      <option value="">-- Select Fee Structure --</option>
+                      <option value="toddler">Toddler Fee Plan</option>
+                      <option value="pre-nursery">Pre-Nursery Fee Plan</option>
+                      <option value="nursery">Nursery Fee Plan</option>
+                      <option value="kg-1">KG-1 Fee Plan</option>
+                      <option value="other">Other / Custom</option>
+                    </select>
+                    {formData.fee_structure && FEE_STRUCTURES[formData.fee_structure] && (
+                      <p className="text-xs text-indigo-600 mt-2 flex items-center gap-1">
+                        <Info size={12} />
+                        Auto-filled: Registration ₹{FEE_STRUCTURES[formData.fee_structure].registration_fee}, 
+                        Admission ₹{FEE_STRUCTURES[formData.fee_structure].admission_fee}, 
+                        Kit ₹{FEE_STRUCTURES[formData.fee_structure].kit_fee}, 
+                        Camera ₹{FEE_STRUCTURES[formData.fee_structure].camera_fee}
+                        {formData.fee_structure === 'other' && ' (Custom – enter values manually)'}
+                      </p>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1940,7 +1962,7 @@ export default function StudentDetails() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Kit Fee (₹)
-                        <span className="text-xs text-gray-400 ml-1">(Annual)</span>
+                        <span className="text-xs text-gray-400 ml-1">(One time)</span>
                       </label>
                       <input
                         type="number"
@@ -1972,7 +1994,7 @@ export default function StudentDetails() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Camera Fee (₹)
-                        <span className="text-xs text-gray-400 ml-1">(Monthly)</span>
+                        <span className="text-xs text-gray-400 ml-1">(One time)</span>
                       </label>
                       <input
                         type="number"
