@@ -1,5 +1,5 @@
 // components/StudentDetails.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
@@ -135,6 +135,14 @@ export default function StudentDetails() {
   const [expandedFeeCard, setExpandedFeeCard] = useState(null);
   const [isFormSticky, setIsFormSticky] = useState(false);
   
+  // Validation state
+  const [validationErrors, setValidationErrors] = useState({});
+  const [showValidationSummary, setShowValidationSummary] = useState(false);
+  
+  // Refs for scrolling to error fields
+  const formRef = useRef(null);
+  const fieldRefs = useRef({});
+
   // Track document changes - which documents have been updated
   const [documentChanges, setDocumentChanges] = useState({
     birth_certificate: false,
@@ -165,7 +173,7 @@ export default function StudentDetails() {
     vendor_id: '',
     status: 'Active',
     // Fee fields
-    fee_structure: '',                    // NEW
+    fee_structure: '',
     registration_fee: '',
     admission_fee: '',
     tuition_fee: '',
@@ -348,80 +356,262 @@ export default function StudentDetails() {
     return tuition + activity + transport;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (isSubmitting) return;
-    
-    // Validate phone numbers
-    if (formData.parent_phone.length !== 10) {
-      alert('Parent Phone must be exactly 10 digits.');
-      return;
+  // ==================== VALIDATION FUNCTION ====================
+  const validateForm = () => {
+    const errors = {};
+    let hasError = false;
+
+    // Basic Information
+    if (!formData.name.trim()) {
+      errors.name = 'Student Name is required';
+      hasError = true;
     }
-    if (formData.emergency_phone.length !== 10) {
-      alert('Emergency Contact Phone must be exactly 10 digits.');
-      return;
-    }
-    
-    // Validate authorized pickup phone if walker
-    if (formData.transport_type === 'Walker' && formData.authorized_pickup_phone) {
-      if (formData.authorized_pickup_phone.length !== 10) {
-        alert('Authorized Pickup Phone must be exactly 10 digits.');
-        return;
+
+    if (!formData.date_of_birth) {
+      errors.date_of_birth = 'Date of Birth is required';
+      hasError = true;
+    } else {
+      const birthDate = new Date(formData.date_of_birth);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 1) {
+        errors.date_of_birth = 'Student must be at least 1 year old';
+        hasError = true;
+      }
+      if (age > 6) {
+        errors.date_of_birth = 'Student age should be between 1 and 6 years for this school';
+        hasError = true;
       }
     }
-    
+
+    if (!formData.gender) {
+      errors.gender = 'Gender is required';
+      hasError = true;
+    }
+
+    if (!formData.blood_group) {
+      errors.blood_group = 'Blood Group is required';
+      hasError = true;
+    }
+
+    if (!formData.class_id) {
+      errors.class_id = 'Class is required';
+      hasError = true;
+    }
+
+    if (!formData.section) {
+      errors.section = 'Section is required';
+      hasError = true;
+    }
+
+    // Parent Information
+    if (!formData.parent_name.trim()) {
+      errors.parent_name = 'Parent Name is required';
+      hasError = true;
+    }
+
+    if (!formData.parent_relationship) {
+      errors.parent_relationship = 'Parent Relationship is required';
+      hasError = true;
+    }
+
+    if (!formData.parent_email.trim()) {
+      errors.parent_email = 'Parent Email is required';
+      hasError = true;
+    } else if (!/\S+@\S+\.\S+/.test(formData.parent_email)) {
+      errors.parent_email = 'Please enter a valid email address';
+      hasError = true;
+    }
+
+    if (!formData.parent_phone) {
+      errors.parent_phone = 'Parent Phone is required';
+      hasError = true;
+    } else if (formData.parent_phone.length !== 10) {
+      errors.parent_phone = 'Parent Phone must be exactly 10 digits';
+      hasError = true;
+    }
+
+    if (!formData.address.trim()) {
+      errors.address = 'Address is required';
+      hasError = true;
+    }
+
+    // Enrollment Information
+    if (!formData.admission_date) {
+      errors.admission_date = 'Admission Date is required';
+      hasError = true;
+    }
+
+    if (!formData.academic_year) {
+      errors.academic_year = 'Academic Year is required';
+      hasError = true;
+    }
+
+    if (!formData.enrollment_type) {
+      errors.enrollment_type = 'Enrollment Type is required';
+      hasError = true;
+    }
+
+    if ((formData.enrollment_type === 'Transfer' || formData.enrollment_type === 'Returning') && !formData.previous_class) {
+      errors.previous_class = 'Previous Class is required for Transfer or Returning students';
+      hasError = true;
+    }
+
+    // Fee & Charges
+    const regFee = parseFloat(formData.registration_fee);
+    if (formData.registration_fee === '' || isNaN(regFee) || regFee < 0) {
+      errors.registration_fee = 'Registration Fee is required and must be a valid number';
+      hasError = true;
+    }
+
+    const admFee = parseFloat(formData.admission_fee);
+    if (formData.admission_fee === '' || isNaN(admFee) || admFee < 0) {
+      errors.admission_fee = 'Admission Fee is required and must be a valid number';
+      hasError = true;
+    }
+
+    if (!formData.fee_frequency) {
+      errors.fee_frequency = 'Fee Frequency is required';
+      hasError = true;
+    }
+
+    // Transport Details
+    if (!formData.transport_type) {
+      errors.transport_type = 'Transport Type is required';
+      hasError = true;
+    }
+
+    if (formData.transport_type !== 'Walker' && !formData.vendor_id) {
+      errors.vendor_id = 'Please select a vendor for transport';
+      hasError = true;
+    }
+
+    if (!formData.status) {
+      errors.status = 'Status is required';
+      hasError = true;
+    }
+
+    // Emergency Contact
+    if (!formData.emergency_name.trim()) {
+      errors.emergency_name = 'Emergency Contact Name is required';
+      hasError = true;
+    }
+
+    if (!formData.emergency_relationship) {
+      errors.emergency_relationship = 'Emergency Contact Relationship is required';
+      hasError = true;
+    }
+
+    if (!formData.emergency_phone) {
+      errors.emergency_phone = 'Emergency Contact Phone is required';
+      hasError = true;
+    } else if (formData.emergency_phone.length !== 10) {
+      errors.emergency_phone = 'Emergency Contact Phone must be exactly 10 digits';
+      hasError = true;
+    }
+
+    // Authorized Pickup - Only for Walker
+    if (formData.transport_type === 'Walker') {
+      if (formData.authorized_pickup_phone && formData.authorized_pickup_phone.length !== 10) {
+        errors.authorized_pickup_phone = 'Authorized Pickup Phone must be exactly 10 digits';
+        hasError = true;
+      }
+    }
+
     // Validate mandatory documents
     const hasStudentPhoto = formData.student_photo || formData.student_photo_url;
     const hasBirthCert = formData.birth_certificate || formData.birth_certificate_url;
     const hasParentAadharFront = formData.parent_aadhar_front || formData.parent_aadhar_front_url;
     const hasParentAadharBack = formData.parent_aadhar_back || formData.parent_aadhar_back_url;
-    
+
     if (!hasStudentPhoto) {
-      alert('Student Photo is mandatory. Please upload.');
-      return;
+      errors.student_photo = 'Student Photo is mandatory. Please upload.';
+      hasError = true;
     }
+
     if (!hasBirthCert) {
-      alert('Birth Certificate is mandatory. Please upload.');
-      return;
+      errors.birth_certificate = 'Birth Certificate is mandatory. Please upload.';
+      hasError = true;
     }
+
     if (!hasParentAadharFront) {
-      alert('Parent Aadhar (Front) is mandatory. Please upload.');
-      return;
+      errors.parent_aadhar_front = 'Parent Aadhar (Front) is mandatory. Please upload.';
+      hasError = true;
     }
+
     if (!hasParentAadharBack) {
-      alert('Parent Aadhar (Back) is mandatory. Please upload.');
-      return;
+      errors.parent_aadhar_back = 'Parent Aadhar (Back) is mandatory. Please upload.';
+      hasError = true;
     }
-    
-    // Validate transport selection
-    if (formData.transport_type !== 'Walker' && !formData.vendor_id) {
-      alert('Please select a vendor for transport.');
-      return;
-    }
-    
-    // Validate enrollment info
-    if (!formData.admission_date) {
-      alert('Admission Date is required.');
-      return;
-    }
-    if (!formData.academic_year) {
-      alert('Academic Year is required.');
-      return;
-    }
-    
-    // Validate previous class if enrollment type is Transfer or Returning
-    if ((formData.enrollment_type === 'Transfer' || formData.enrollment_type === 'Returning') && !formData.previous_class) {
-      alert('Previous Class is required for Transfer or Returning students.');
-      return;
-    }
-    
-    // Validate recurring fees if initial payment is made
+
+    // Recurring Fees validation
     const recurringTotal = calculateRecurringTotal(formData);
     if (formData.fee_paid && recurringTotal === 0 && !formData.initial_payment_amount) {
-      alert('Please set up recurring fees or initial payment amount.');
+      errors.fee_paid = 'Please set up recurring fees or initial payment amount when marking as paid';
+      hasError = true;
+    }
+
+    setValidationErrors(errors);
+    return { isValid: !hasError, errors };
+  };
+
+  // ==================== SCROLL TO ERROR FIELD ====================
+  const scrollToError = (errors) => {
+    const firstErrorField = Object.keys(errors)[0];
+    if (firstErrorField && fieldRefs.current[firstErrorField]) {
+      // Find the field container in the form
+      const element = fieldRefs.current[firstErrorField];
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Add highlight effect
+      element.style.transition = 'all 0.3s ease';
+      element.style.boxShadow = '0 0 0 3px #ef4444, 0 0 20px rgba(239, 68, 68, 0.2)';
+      element.style.borderRadius = '12px';
+      
+      setTimeout(() => {
+        element.style.boxShadow = '';
+        element.style.borderRadius = '';
+      }, 3000);
+      
+      // Focus on the input if it's an input element
+      const input = element.querySelector('input, select, textarea');
+      if (input) {
+        input.focus();
+        input.style.borderColor = '#ef4444';
+        setTimeout(() => {
+          input.style.borderColor = '';
+        }, 3000);
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (isSubmitting) return;
+    
+    // Run validation
+    const { isValid, errors } = validateForm();
+    
+    if (!isValid) {
+      setShowValidationSummary(true);
+      scrollToError(errors);
+      
+      // Auto-hide validation summary after 8 seconds
+      setTimeout(() => {
+        setShowValidationSummary(false);
+      }, 8000);
+      
       return;
     }
+    
+    // Clear validation errors if all valid
+    setValidationErrors({});
+    setShowValidationSummary(false);
     
     try {
       setIsSubmitting(true);
@@ -480,7 +670,7 @@ export default function StudentDetails() {
         vendor_id: formData.transport_type !== 'Walker' ? formData.vendor_id : null,
         status: formData.status,
         // Fee fields
-        fee_structure: formData.fee_structure || null,   // NEW
+        fee_structure: formData.fee_structure || null,
         registration_fee: parseFloat(formData.registration_fee) || 0,
         admission_fee: parseFloat(formData.admission_fee) || 0,
         tuition_fee: parseFloat(formData.tuition_fee) || 0,
@@ -599,6 +789,10 @@ export default function StudentDetails() {
       parent_aadhar_back: false,
       student_photo: false,
     });
+    
+    // Clear any previous validation errors
+    setValidationErrors({});
+    setShowValidationSummary(false);
     
     // Find vendor ID from the student data
     let vendorId = student.vendor_id || '';
@@ -777,6 +971,8 @@ export default function StudentDetails() {
       parent_aadhar_back: false,
       student_photo: false,
     });
+    setValidationErrors({});
+    setShowValidationSummary(false);
     setEditingStudent(null);
     setShowModal(false);
     setIsSubmitting(false);
@@ -909,9 +1105,13 @@ export default function StudentDetails() {
     const fileData = formData[fieldName];
     const urlData = formData[`${fieldName}_url`];
     const hasDocument = fileData || urlData;
+    const hasError = validationErrors[fieldName];
     
     return (
-      <div>
+      <div 
+        ref={el => fieldRefs.current[fieldName] = el}
+        className={`${hasError ? 'border-l-4 border-red-500 pl-3 rounded-r-lg' : ''}`}
+      >
         <label className="block text-sm font-medium text-gray-700 mb-2">
           {label} {required && <span className="text-red-500">*</span>}
           {editingStudent && hasDocument && !isChanged && (
@@ -919,6 +1119,9 @@ export default function StudentDetails() {
           )}
           {editingStudent && isChanged && (
             <span className="text-xs text-blue-600 ml-2">(New document uploaded)</span>
+          )}
+          {hasError && (
+            <span className="text-xs text-red-500 ml-2 font-normal">⛔ {validationErrors[fieldName]}</span>
           )}
         </label>
         <div className="flex items-center gap-2">
@@ -928,7 +1131,9 @@ export default function StudentDetails() {
             required={!editingStudent && required}
             onChange={(e) => handleFileUpload(e, fieldName)}
             disabled={isSubmitting}
-            className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed ${
+              hasError ? 'border-red-500 ring-1 ring-red-500 rounded-lg' : ''
+            }`}
           />
           {hasDocument && (
             <div className="flex items-center gap-1">
@@ -978,6 +1183,38 @@ export default function StudentDetails() {
         {isChanged && fileData && (
           <p className="text-xs text-blue-500 mt-1">
             New file uploaded. Will replace existing document.
+          </p>
+        )}
+        {hasError && (
+          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+            <AlertCircle size={12} />
+            {validationErrors[fieldName]}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  // Render field with validation
+  const renderField = (label, fieldName, component, required = false, className = '') => {
+    const hasError = validationErrors[fieldName];
+    
+    return (
+      <div 
+        ref={el => fieldRefs.current[fieldName] = el}
+        className={`${hasError ? 'border-l-4 border-red-500 pl-3 rounded-r-lg' : ''} ${className}`}
+      >
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {label} {required && <span className="text-red-500">*</span>}
+          {hasError && (
+            <span className="text-xs text-red-500 ml-2 font-normal">⛔ {validationErrors[fieldName]}</span>
+          )}
+        </label>
+        {component}
+        {hasError && (
+          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+            <AlertCircle size={12} />
+            {validationErrors[fieldName]}
           </p>
         )}
       </div>
@@ -1537,7 +1774,40 @@ export default function StudentDetails() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Validation Summary */}
+              {showValidationSummary && Object.keys(validationErrors).length > 0 && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 mx-6 mt-4 rounded-lg shadow-lg animate-pulse">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-red-800">Please fix the following errors:</h4>
+                      <ul className="mt-2 space-y-1">
+                        {Object.entries(validationErrors).map(([field, message]) => (
+                          <li key={field} className="text-sm text-red-700 flex items-start gap-2">
+                            <span className="text-red-400">•</span>
+                            <span>
+                              <span className="font-medium capitalize">{field.replace(/_/g, ' ')}</span>
+                              : {message}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                        <span className="animate-pulse">🔴</span>
+                        Scroll to the highlighted field to fix the issue
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowValidationSummary(false)}
+                      className="text-red-400 hover:text-red-600 flex-shrink-0"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <form ref={formRef} onSubmit={handleSubmit} className="p-6 space-y-6">
                 {/* Basic Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -1545,10 +1815,9 @@ export default function StudentDetails() {
                     Basic Information
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Student Name <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Student Name',
+                      'name',
                       <input
                         type="text"
                         required
@@ -1557,12 +1826,12 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter student name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Date of Birth <span className="text-red-500">*</span>
-                      </label>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Date of Birth',
+                      'date_of_birth',
                       <input
                         type="date"
                         required
@@ -1570,12 +1839,12 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Gender <span className="text-red-500">*</span>
-                      </label>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Gender',
+                      'gender',
                       <select
                         required
                         value={formData.gender}
@@ -1585,12 +1854,12 @@ export default function StudentDetails() {
                       >
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Blood Group <span className="text-red-500">*</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Blood Group',
+                      'blood_group',
                       <select
                         required
                         value={formData.blood_group}
@@ -1602,12 +1871,12 @@ export default function StudentDetails() {
                         {BLOOD_GROUPS.map(bg => (
                           <option key={bg} value={bg}>{bg}</option>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Class <span className="text-red-500">*</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Class',
+                      'class_id',
                       <select
                         required
                         value={formData.class_id}
@@ -1621,12 +1890,12 @@ export default function StudentDetails() {
                             {cls.name} ({cls.ageGroup})
                           </option>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Section <span className="text-red-500">*</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Section',
+                      'section',
                       <select
                         required
                         value={formData.section}
@@ -1637,8 +1906,9 @@ export default function StudentDetails() {
                         {SECTIONS.map(section => (
                           <option key={section} value={section}>Section {section}</option>
                         ))}
-                      </select>
-                    </div>
+                      </select>,
+                      true
+                    )}
                   </div>
                 </div>
 
@@ -1681,10 +1951,9 @@ export default function StudentDetails() {
                     Parent Information
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Name <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Parent Name',
+                      'parent_name',
                       <input
                         type="text"
                         required
@@ -1693,12 +1962,12 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter parent name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Relationship <span className="text-red-500">*</span>
-                      </label>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Relationship',
+                      'parent_relationship',
                       <select
                         required
                         value={formData.parent_relationship}
@@ -1709,12 +1978,12 @@ export default function StudentDetails() {
                         {RELATIONSHIP_TYPES.map(rel => (
                           <option key={rel} value={rel}>{rel}</option>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Email <span className="text-red-500">*</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Parent Email',
+                      'parent_email',
                       <input
                         type="email"
                         required
@@ -1723,29 +1992,29 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="parent@email.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        inputMode="numeric"
-                        maxLength={10}
-                        pattern="\d{10}"
-                        title="Enter exactly 10 digits"
-                        value={formData.parent_phone}
-                        onChange={(e) => setFormData({ ...formData, parent_phone: handleDigitInput(e.target.value) })}
-                        disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="10-digit phone number"
-                      />
-                      {formData.parent_phone && formData.parent_phone.length !== 10 && (
-                        <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
-                      )}
-                    </div>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Parent Phone',
+                      'parent_phone',
+                      <div>
+                        <input
+                          type="tel"
+                          required
+                          inputMode="numeric"
+                          maxLength={10}
+                          pattern="\d{10}"
+                          title="Enter exactly 10 digits"
+                          value={formData.parent_phone}
+                          onChange={(e) => setFormData({ ...formData, parent_phone: handleDigitInput(e.target.value) })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          placeholder="10-digit phone number"
+                        />
+                      </div>,
+                      true
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Parent Aadhar Number
@@ -1759,10 +2028,9 @@ export default function StudentDetails() {
                         placeholder="XXXX-XXXX-XXXX"
                       />
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Address <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Address',
+                      'address',
                       <textarea
                         required
                         value={formData.address}
@@ -1771,8 +2039,10 @@ export default function StudentDetails() {
                         rows={2}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Full address"
-                      />
-                    </div>
+                      />,
+                      true,
+                      'md:col-span-2'
+                    )}
                   </div>
                 </div>
 
@@ -1784,10 +2054,9 @@ export default function StudentDetails() {
                     <span className="text-xs text-red-500 ml-2">*</span>
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admission Date <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Admission Date',
+                      'admission_date',
                       <input
                         type="date"
                         required
@@ -1795,12 +2064,12 @@ export default function StudentDetails() {
                         onChange={(e) => setFormData({ ...formData, admission_date: e.target.value })}
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Academic Year <span className="text-red-500">*</span>
-                      </label>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Academic Year',
+                      'academic_year',
                       <select
                         required
                         value={formData.academic_year}
@@ -1811,12 +2080,12 @@ export default function StudentDetails() {
                         {ACADEMIC_YEARS.map(year => (
                           <option key={year} value={year}>{year}</option>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Enrollment Type <span className="text-red-500">*</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Enrollment Type',
+                      'enrollment_type',
                       <select
                         required
                         value={formData.enrollment_type}
@@ -1827,13 +2096,12 @@ export default function StudentDetails() {
                         {ENROLLMENT_TYPES.map(type => (
                           <option key={type} value={type}>{type}</option>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Previous Class
-                        <span className="text-xs text-gray-400 ml-1">(If applicable)</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Previous Class',
+                      'previous_class',
                       <select
                         value={formData.previous_class}
                         onChange={(e) => setFormData({ ...formData, previous_class: e.target.value })}
@@ -1844,13 +2112,15 @@ export default function StudentDetails() {
                         {CLASSES.map(cls => (
                           <option key={cls.id} value={cls.id}>{cls.name}</option>
                         ))}
-                      </select>
-                      {(formData.enrollment_type === 'Transfer' || formData.enrollment_type === 'Returning') && !formData.previous_class && (
-                        <p className="text-xs text-red-500 mt-1">
-                          ⚠️ Previous class is required for {formData.enrollment_type} students.
-                        </p>
-                      )}
-                    </div>
+                      </select>,
+                      false,
+                      'md:col-span-1'
+                    )}
+                    {(formData.enrollment_type === 'Transfer' || formData.enrollment_type === 'Returning') && !formData.previous_class && (
+                      <p className="text-xs text-red-500 mt-1">
+                        ⚠️ Previous class is required for {formData.enrollment_type} students.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1893,11 +2163,9 @@ export default function StudentDetails() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Registration Fee (₹) <span className="text-red-500">*</span>
-                        <span className="text-xs text-gray-400 ml-1">(One time)</span>
-                      </label>
+                    {renderField(
+                      'Registration Fee (₹)',
+                      'registration_fee',
                       <input
                         type="number"
                         min="0"
@@ -1908,13 +2176,12 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter registration fee"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admission Fee (₹) <span className="text-red-500">*</span>
-                        <span className="text-xs text-gray-400 ml-1">(One time)</span>
-                      </label>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Admission Fee (₹)',
+                      'admission_fee',
                       <input
                         type="number"
                         min="0"
@@ -1925,8 +2192,9 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Enter admission fee"
-                      />
-                    </div>
+                      />,
+                      true
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Tuition Fee (₹)
@@ -2007,10 +2275,9 @@ export default function StudentDetails() {
                         placeholder="Enter camera fee"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Fee Frequency <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Fee Frequency',
+                      'fee_frequency',
                       <select
                         required
                         value={formData.fee_frequency}
@@ -2021,8 +2288,9 @@ export default function StudentDetails() {
                         {FEE_FREQUENCIES.map(freq => (
                           <option key={freq} value={freq}>{freq}</option>
                         ))}
-                      </select>
-                    </div>
+                      </select>,
+                      true
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Discount (₹)
@@ -2065,11 +2333,19 @@ export default function StudentDetails() {
                           });
                         }}
                         disabled={isSubmitting}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
+                          validationErrors.fee_paid ? 'border-red-500' : ''
+                        }`}
                       >
                         <option value="unpaid">Unpaid</option>
                         <option value="paid">Paid</option>
                       </select>
+                      {validationErrors.fee_paid && (
+                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                          <AlertCircle size={12} />
+                          {validationErrors.fee_paid}
+                        </p>
+                      )}
                     </div>
                     {formData.fee_paid && (
                       <>
@@ -2109,8 +2385,7 @@ export default function StudentDetails() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <Repeat size={18} className="text-blue-600 flex-shrink-0" />
-                    Recurring Fees
-                    <span className="text-xs text-gray-400 ml-2">(Monthly recurring charges)</span>
+                    Recurring Fees                    <span className="text-xs text-gray-400 ml-2">(Monthly recurring charges)</span>
                   </h3>
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2303,10 +2578,9 @@ export default function StudentDetails() {
                     Transport Details
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Transport Type <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Transport Type',
+                      'transport_type',
                       <select
                         required
                         value={formData.transport_type}
@@ -2324,18 +2598,13 @@ export default function StudentDetails() {
                         {TRANSPORT_TYPES.map(type => (
                           <option key={type} value={type}>{type}</option>
                         ))}
-                      </select>
-                      {editingStudent && formData.transport_type !== 'Walker' && formData.vendor_id && (
-                        <p className="text-xs text-green-600 mt-1">
-                          ✓ Currently assigned to: {getVendorName(formData.vendor_id)}
-                        </p>
-                      )}
-                    </div>
+                      </select>,
+                      true
+                    )}
                     {(formData.transport_type === 'Cab' || formData.transport_type === 'Bus') && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select Vendor/Vehicle <span className="text-red-500">*</span>
-                        </label>
+                      renderField(
+                        'Select Vendor/Vehicle',
+                        'vendor_id',
                         <select
                           required
                           value={formData.vendor_id}
@@ -2361,23 +2630,13 @@ export default function StudentDetails() {
                               </option>
                             );
                           })}
-                        </select>
-                        {vendors.length === 0 && (
-                          <p className="text-xs text-orange-500 mt-1">
-                            ⚠️ No active vendors with vehicles found. Please add vendors in Vendor Management.
-                          </p>
-                        )}
-                        {formData.vendor_id && (
-                          <p className="text-xs text-green-600 mt-1">
-                            ✓ Vendor selected: {getVendorName(formData.vendor_id)}
-                          </p>
-                        )}
-                      </div>
+                        </select>,
+                        true
+                      )
                     )}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Status <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Status',
+                      'status',
                       <select
                         required
                         value={formData.status}
@@ -2388,8 +2647,9 @@ export default function StudentDetails() {
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                         <option value="Graduated">Graduated</option>
-                      </select>
-                    </div>
+                      </select>,
+                      true
+                    )}
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Medical Information
@@ -2444,10 +2704,9 @@ export default function StudentDetails() {
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Mobile Number
-                        </label>
+                      {renderField(
+                        'Mobile Number',
+                        'authorized_pickup_phone',
                         <input
                           type="tel"
                           inputMode="numeric"
@@ -2459,11 +2718,9 @@ export default function StudentDetails() {
                           disabled={isSubmitting}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                           placeholder="10-digit phone number"
-                        />
-                        {formData.authorized_pickup_phone && formData.authorized_pickup_phone.length !== 10 && (
-                          <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
-                        )}
-                      </div>
+                        />,
+                        false
+                      )}
                     </div>
                   </div>
                 )}
@@ -2476,10 +2733,9 @@ export default function StudentDetails() {
                     <span className="text-xs text-red-500 ml-2">*</span>
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
+                    {renderField(
+                      'Full Name',
+                      'emergency_name',
                       <input
                         type="text"
                         required
@@ -2488,12 +2744,12 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="Enter emergency contact name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Relationship <span className="text-red-500">*</span>
-                      </label>
+                      />,
+                      true
+                    )}
+                    {renderField(
+                      'Relationship',
+                      'emergency_relationship',
                       <select
                         required
                         value={formData.emergency_relationship}
@@ -2505,12 +2761,12 @@ export default function StudentDetails() {
                         {RELATIONSHIP_TYPES.map(rel => (
                           <option key={rel} value={rel}>{rel}</option>
                         ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Phone Number <span className="text-red-500">*</span>
-                      </label>
+                      </select>,
+                      true
+                    )}
+                    {renderField(
+                      'Phone Number',
+                      'emergency_phone',
                       <input
                         type="tel"
                         required
@@ -2523,11 +2779,9 @@ export default function StudentDetails() {
                         disabled={isSubmitting}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="10-digit phone number"
-                      />
-                      {formData.emergency_phone && formData.emergency_phone.length !== 10 && (
-                        <p className="text-xs text-red-500 mt-1">Must be exactly 10 digits</p>
-                      )}
-                    </div>
+                      />,
+                      true
+                    )}
                   </div>
                 </div>
 
