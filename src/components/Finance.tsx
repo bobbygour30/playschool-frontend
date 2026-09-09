@@ -6,13 +6,16 @@ import {
   PieChart, Wallet, CreditCard, Banknote, Receipt,
   AlertCircle, CheckCircle, Clock, Upload, Building,
   User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
-  History, CalendarDays, ReceiptText, FileSpreadsheet
+  History, CalendarDays, ReceiptText, FileSpreadsheet, Info
 } from 'lucide-react';
 import { 
   getFees, getExpenses, getSalaries, getStudents, getStaff,
   createFee, updateFee, deleteFee,
   createExpense, updateExpense, deleteExpense,
-  createSalary, updateSalary, deleteSalary
+  createSalary, updateSalary, deleteSalary,
+  getFeeRecordSummary, getFeeFullDetails,
+  syncStudentFeesToFinance, generateRecurringFeesBulk,
+  recordPayment,
 } from '../services/api';
 
 export default function Finance() {
@@ -39,6 +42,8 @@ export default function Finance() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [relatedInvoices, setRelatedInvoices] = useState([]);
   const [generatingRecurring, setGeneratingRecurring] = useState(false);
+  const [loadingFeeSummary, setLoadingFeeSummary] = useState(false);
+  const [feeSummary, setFeeSummary] = useState(null);
   
   const [formData, setFormData] = useState({
     student_id: '',
@@ -73,7 +78,6 @@ export default function Finance() {
     payment_date_salary: '',
     remarks: '',
     salary_slip: null,
-    // Recurring fees fields
     recurring_tuition_fee: '',
     recurring_activity_fee: '',
     recurring_transport_fee: '',
@@ -82,16 +86,17 @@ export default function Finance() {
     fee_plan: 'Monthly',
   });
 
-  // Payment form data
+  // Payment form data - simplified
   const [paymentFormData, setPaymentFormData] = useState({
     student_id: '',
     fee_id: '',
     amount_paid: '',
     payment_date: new Date().toISOString().split('T')[0],
-    payment_type: 'full',
     payment_method: 'Cash',
     transaction_no: '',
     notes: '',
+    // Auto-calculated fields
+    payment_type: 'full', // Will be auto-calculated
     is_advance: false,
     advance_allocation: [],
     advance_month: '',
@@ -130,7 +135,6 @@ export default function Finance() {
     } catch (error) {
       console.error('Error loading finance data:', error);
       alert('Failed to load financial data');
-      // Keep previous data or empty arrays
       setFees(prev => Array.isArray(prev) ? prev : []);
       setExpenses(prev => Array.isArray(prev) ? prev : []);
       setSalaryPayments(prev => Array.isArray(prev) ? prev : []);
@@ -141,20 +145,51 @@ export default function Finance() {
     }
   };
 
-  // Function to sync all student fees from student profiles
+   // Fetch fee summary when fee record is selected in payment modal
+  const fetchFeeSummary = async (feeId) => {
+    if (!feeId) {
+      setFeeSummary(null);
+      return;
+    }
+    
+    try {
+      setLoadingFeeSummary(true);
+      const response = await getFeeRecordSummary(feeId);
+      const result = response.data;
+      
+      if (result.success) {
+        setFeeSummary(result.data);
+        
+        // Auto-set amount paid to remaining amount if available
+        const remaining = result.data.remaining_amount || 0;
+        if (remaining > 0) {
+          setPaymentFormData(prev => ({
+            ...prev,
+            amount_paid: remaining,
+            payment_type: 'full'
+          }));
+        }
+      } else {
+        setFeeSummary(null);
+        alert('Failed to fetch fee summary: ' + (result.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error fetching fee summary:', error);
+      setFeeSummary(null);
+      alert('Failed to fetch fee summary');
+    } finally {
+      setLoadingFeeSummary(false);
+    }
+  };
+
+   // Function to sync all student fees from student profiles
   const syncAllStudentFees = async () => {
     if (!confirm('This will sync all student fee records from student profiles to the finance module. Continue?')) return;
     
     try {
       setIsSyncing(true);
-      const response = await fetch('/api/students/sync-fees-to-finance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      const result = await response.json();
+      const response = await syncStudentFeesToFinance();
+      const result = response.data;
       
       if (result.success) {
         alert(result.message || 'Fee sync completed successfully!');
@@ -170,7 +205,7 @@ export default function Finance() {
     }
   };
 
-  // Generate recurring fees for all students
+   // Generate recurring fees for all students
   const generateRecurringFees = async () => {
     const month = prompt('Enter month (YYYY-MM) for recurring fee generation:', new Date().toISOString().slice(0, 7));
     if (!month) return;
@@ -179,15 +214,8 @@ export default function Finance() {
     
     try {
       setGeneratingRecurring(true);
-      const response = await fetch('/api/fees/bulk-generate-recurring', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ month }),
-      });
-      
-      const result = await response.json();
+      const response = await generateRecurringFeesBulk(month);
+      const result = response.data;
       
       if (result.success) {
         alert(`Generated ${result.generated} invoices for ${month}`);
@@ -203,12 +231,12 @@ export default function Finance() {
     }
   };
 
-  // Fetch fee details with payment history
+    // Fetch fee details with payment history
   const fetchFeeDetails = async (feeId) => {
     try {
       setLoadingHistory(true);
-      const response = await fetch(`/api/fees/${feeId}`);
-      const result = await response.json();
+      const response = await getFeeFullDetails(feeId);
+      const result = response.data;
       
       if (result) {
         setFeeDetails(result);
@@ -284,7 +312,7 @@ export default function Finance() {
     return tuition + activity + transport;
   };
 
-  // Handle payment record submission with advance support
+   // Handle payment record submission with simplified flow
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     
@@ -293,13 +321,31 @@ export default function Finance() {
       return;
     }
 
+    if (!paymentFormData.fee_id) {
+      alert('Please select a fee record');
+      return;
+    }
+
     try {
+      // Calculate payment type based on amount and remaining
+      let paymentType = 'full';
+      const remaining = feeSummary?.remaining_amount || 0;
+      const amountPaid = parseFloat(paymentFormData.amount_paid) || 0;
+      
+      if (amountPaid > remaining && remaining > 0) {
+        paymentType = 'advance';
+      } else if (amountPaid < remaining && remaining > 0) {
+        paymentType = 'partial';
+      } else {
+        paymentType = 'full';
+      }
+
       const paymentData = {
         student_id: paymentFormData.student_id,
         fee_id: paymentFormData.fee_id,
-        amount_paid: parseFloat(paymentFormData.amount_paid) || 0,
+        amount_paid: amountPaid,
         payment_date: paymentFormData.payment_date,
-        payment_type: paymentFormData.is_advance ? 'advance' : paymentFormData.payment_type,
+        payment_type: paymentType,
         payment_method: paymentFormData.payment_method,
         transaction_no: paymentFormData.transaction_no,
         notes: paymentFormData.notes,
@@ -307,18 +353,11 @@ export default function Finance() {
         generate_future_invoices: paymentFormData.generate_future_invoices || false,
       };
 
-      const response = await fetch('/api/fees/record-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(paymentData),
-      });
-
-      const result = await response.json();
+      const response = await recordPayment(paymentData);
+      const result = response.data;
 
       if (result.success) {
-        alert('Payment recorded successfully!');
+        alert(`Payment recorded successfully! (${paymentType.charAt(0).toUpperCase() + paymentType.slice(1)})`);
         resetPaymentForm();
         await loadData();
       } else {
@@ -625,10 +664,10 @@ export default function Finance() {
       fee_id: '',
       amount_paid: '',
       payment_date: new Date().toISOString().split('T')[0],
-      payment_type: 'full',
       payment_method: 'Cash',
       transaction_no: '',
       notes: '',
+      payment_type: 'full',
       is_advance: false,
       advance_allocation: [],
       advance_month: '',
@@ -636,6 +675,7 @@ export default function Finance() {
       generate_future_invoices: false,
     });
     setSelectedFeeForPayment(null);
+    setFeeSummary(null);
     setShowPaymentModal(false);
   };
 
@@ -702,6 +742,89 @@ export default function Finance() {
   const filteredSalary = safeSalaryPayments.filter(s => 
     s.staff_id?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Render fee summary in payment modal
+  const renderFeeSummary = () => {
+    if (!feeSummary) return null;
+    
+    const statusColor = getStatusColor(feeSummary.status);
+    const isOverdue = feeSummary.is_overdue || false;
+    
+    return (
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-500">Student</p>
+            <p className="font-semibold text-gray-900">{feeSummary.student_name}</p>
+            <p className="text-sm text-gray-500">{feeSummary.student_class}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Invoice #{feeSummary.invoice_number}</p>
+            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusColor.bg} ${statusColor.text}`}>
+              {statusColor.icon}
+              {feeSummary.status}
+              {isOverdue && ' 🔴'}
+            </span>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-200">
+          <div>
+            <p className="text-xs text-gray-500">Fee Period</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {feeSummary.fee_period?.month || 'N/A'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Due Date</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {feeSummary.due_date ? new Date(feeSummary.due_date).toLocaleDateString() : 'N/A'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Total Amount</p>
+            <p className="text-sm font-bold text-gray-900">₹{feeSummary.total_amount.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Already Paid</p>
+            <p className="text-sm font-semibold text-green-600">₹{feeSummary.paid_amount.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Outstanding</p>
+            <p className={`text-sm font-bold ${feeSummary.remaining_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              ₹{feeSummary.remaining_amount.toLocaleString()}
+            </p>
+          </div>
+          {feeSummary.overdue_amount > 0 && (
+            <div>
+              <p className="text-xs text-gray-500">Overdue</p>
+              <p className="text-sm font-bold text-red-600">₹{feeSummary.overdue_amount.toLocaleString()}</p>
+            </div>
+          )}
+          {feeSummary.advance_amount > 0 && (
+            <div>
+              <p className="text-xs text-gray-500">Advance</p>
+              <p className="text-sm font-bold text-purple-600">₹{feeSummary.advance_amount.toLocaleString()}</p>
+            </div>
+          )}
+        </div>
+        
+        <div className="pt-2 border-t border-gray-200">
+          <p className="text-xs text-gray-500">
+            Payment Type: <span className="font-semibold text-blue-600">
+              {feeSummary.suggested_payment_type === 'full' ? 'Full Payment' : 
+               feeSummary.suggested_payment_type === 'partial' ? 'Partial Payment' : 'Advance Payment'}
+            </span>
+            {feeSummary.remaining_amount > 0 && (
+              <span className="ml-2 text-xs text-gray-400">
+                (Remaining: ₹{feeSummary.remaining_amount.toLocaleString()})
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -980,6 +1103,8 @@ export default function Finance() {
                                     fee_id: fee._id,
                                     amount_paid: remaining > 0 ? remaining : fee.total_amount || 0,
                                   });
+                                  // Fetch fee summary
+                                  fetchFeeSummary(fee._id);
                                   setShowPaymentModal(true);
                                 }} 
                                 className="text-green-600 hover:text-green-800 p-1 transition-colors"
@@ -1377,10 +1502,10 @@ export default function Finance() {
           </div>
         )}
 
-        {/* Payment Record Modal with Advance Support */}
+        {/* Payment Record Modal with Simplified Flow */}
         {showPaymentModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <DollarSign size={24} />
@@ -1392,21 +1517,24 @@ export default function Finance() {
               </div>
 
               <form onSubmit={handlePaymentSubmit} className="p-6 space-y-4">
-                {selectedFeeForPayment && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-                    <p className="text-sm text-blue-700">
-                      Recording payment for: <strong>{selectedFeeForPayment.student_id?.name}</strong>
-                      <br />
-                      Total Amount: ₹{selectedFeeForPayment.total_amount} | 
-                      Paid: ₹{selectedFeeForPayment.paid_amount || 0} | 
-                      Remaining: ₹{(selectedFeeForPayment.total_amount || 0) - (selectedFeeForPayment.paid_amount || 0)}
-                    </p>
+                {/* Fee Summary Section - Auto-displayed when fee is selected */}
+                {loadingFeeSummary ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                    <span className="ml-2 text-gray-500">Loading fee details...</span>
+                  </div>
+                ) : feeSummary ? (
+                  renderFeeSummary()
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-yellow-700 flex items-center gap-2">
+                    <Info size={20} />
+                    <span>Please select a student and fee record to view summary.</span>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Student *</label>
                     <select
                       required
                       value={paymentFormData.student_id}
@@ -1416,6 +1544,7 @@ export default function Finance() {
                           student_id: e.target.value,
                           fee_id: '',
                         });
+                        setFeeSummary(null);
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     >
@@ -1429,28 +1558,35 @@ export default function Finance() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Fee Record/Invoice *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Fee Record/Invoice *</label>
                     <select
                       required
                       value={paymentFormData.fee_id}
                       onChange={(e) => {
-                        const fee = safeFees.find(f => f._id === e.target.value);
-                        const remaining = fee ? (fee.total_amount || 0) - (fee.paid_amount || 0) : 0;
+                        const feeId = e.target.value;
                         setPaymentFormData({
                           ...paymentFormData,
-                          fee_id: e.target.value,
-                          amount_paid: remaining > 0 ? remaining : 0,
+                          fee_id: feeId,
                         });
+                        // Fetch fee summary when fee is selected
+                        if (feeId) {
+                          fetchFeeSummary(feeId);
+                        } else {
+                          setFeeSummary(null);
+                        }
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     >
                       <option value="">Select Fee Record</option>
                       {getStudentFees(paymentFormData.student_id).map((fee) => {
                         const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
+                        const isOverdue = new Date(fee.due_date) < new Date() && fee.status !== 'Paid';
                         return (
                           <option key={fee._id} value={fee._id}>
-                            {fee.invoice_number || (fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A')} - ₹{fee.total_amount} 
-                            {remaining > 0 ? ` (Remaining: ₹${remaining})` : ' (Fully Paid)'}
+                            {fee.invoice_number || (fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A')} - 
+                            ₹{fee.total_amount} 
+                            {remaining > 0 ? ` (Due: ₹${remaining})` : ' (Paid)'}
+                            {isOverdue && ' 🔴 Overdue'}
                           </option>
                         );
                       })}
@@ -1465,10 +1601,18 @@ export default function Finance() {
                       step="0.01"
                       min="0.01"
                       value={paymentFormData.amount_paid}
-                      onChange={(e) => setPaymentFormData({ ...paymentFormData, amount_paid: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setPaymentFormData({ ...paymentFormData, amount_paid: value });
+                      }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       placeholder="Enter amount"
                     />
+                    {feeSummary && feeSummary.remaining_amount > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Remaining: ₹{feeSummary.remaining_amount.toLocaleString()}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -1480,20 +1624,6 @@ export default function Finance() {
                       onChange={(e) => setPaymentFormData({ ...paymentFormData, payment_date: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type *</label>
-                    <select
-                      required
-                      value={paymentFormData.payment_type}
-                      onChange={(e) => setPaymentFormData({ ...paymentFormData, payment_type: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    >
-                      <option value="full">Full Payment</option>
-                      <option value="partial">Partial Payment</option>
-                      <option value="advance">Advance Payment</option>
-                    </select>
                   </div>
 
                   <div>
@@ -1534,109 +1664,154 @@ export default function Finance() {
                     />
                   </div>
 
-                  {/* Advance Payment Section */}
-                  <div className="md:col-span-2">
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <input
-                          type="checkbox"
-                          id="isAdvancePayment"
-                          checked={paymentFormData.is_advance || false}
-                          onChange={(e) => {
-                            setPaymentFormData({
-                              ...paymentFormData,
-                              is_advance: e.target.checked,
-                              advance_allocation: [],
-                              payment_type: e.target.checked ? 'advance' : 'full',
-                            });
-                          }}
-                          className="rounded border-purple-300"
-                        />
-                        <label htmlFor="isAdvancePayment" className="text-sm font-medium text-purple-700">
-                          This is an Advance Payment (for future months)
-                        </label>
-                      </div>
-                      
-                      {paymentFormData.is_advance && (
-                        <div className="space-y-3">
-                          <p className="text-sm text-gray-600">
-                            Allocate advance amount to future months. Total allocation must equal the advance amount.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <input
-                              type="month"
-                              value={paymentFormData.advance_month || ''}
-                              onChange={(e) => setPaymentFormData({ ...paymentFormData, advance_month: e.target.value })}
-                              className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            />
-                            <input
-                              type="number"
-                              placeholder="Amount"
-                              value={paymentFormData.advance_amount_allocation || ''}
-                              onChange={(e) => setPaymentFormData({ ...paymentFormData, advance_amount_allocation: e.target.value })}
-                              className="flex-1 min-w-[120px] px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (paymentFormData.advance_month && paymentFormData.advance_amount_allocation) {
-                                  const allocations = [...(paymentFormData.advance_allocation || [])];
-                                  allocations.push({
-                                    month: paymentFormData.advance_month,
-                                    amount: parseFloat(paymentFormData.advance_amount_allocation),
-                                  });
-                                  setPaymentFormData({
-                                    ...paymentFormData,
-                                    advance_allocation: allocations,
-                                    advance_month: '',
-                                    advance_amount_allocation: '',
-                                  });
-                                }
-                              }}
-                              className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
-                            >
-                              Add
-                            </button>
-                          </div>
-                          {(paymentFormData.advance_allocation || []).length > 0 && (
-                            <div className="space-y-1">
-                              {(paymentFormData.advance_allocation || []).map((alloc, idx) => (
-                                <div key={idx} className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
-                                  <span className="text-sm">{alloc.month}</span>
-                                  <span className="text-sm font-semibold">₹{(alloc.amount || 0).toLocaleString()}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const allocations = (paymentFormData.advance_allocation || []).filter((_, i) => i !== idx);
-                                      setPaymentFormData({ ...paymentFormData, advance_allocation: allocations });
-                                    }}
-                                    className="text-red-500 hover:text-red-700 text-sm"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              ))}
-                              <div className="text-sm text-gray-600">
-                                Total Allocated: ₹{(paymentFormData.advance_allocation || []).reduce((sum, a) => sum + (a.amount || 0), 0).toLocaleString()}
-                              </div>
-                            </div>
+                  {/* Payment Type Display - Auto-calculated, read-only */}
+                  {feeSummary && (
+                    <div className="md:col-span-2">
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-700">Payment Type (Auto-calculated):</span>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            parseFloat(paymentFormData.amount_paid || 0) > feeSummary.remaining_amount && feeSummary.remaining_amount > 0
+                              ? 'bg-purple-100 text-purple-700'
+                              : parseFloat(paymentFormData.amount_paid || 0) < feeSummary.remaining_amount && feeSummary.remaining_amount > 0
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {parseFloat(paymentFormData.amount_paid || 0) > feeSummary.remaining_amount && feeSummary.remaining_amount > 0
+                              ? 'Advance Payment'
+                              : parseFloat(paymentFormData.amount_paid || 0) < feeSummary.remaining_amount && feeSummary.remaining_amount > 0
+                              ? 'Partial Payment'
+                              : 'Full Payment'}
+                          </span>
+                          {feeSummary.remaining_amount <= 0 && (
+                            <span className="text-sm text-green-600">✓ No outstanding balance</span>
                           )}
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              id="generateFutureInvoices"
-                              checked={paymentFormData.generate_future_invoices || false}
-                              onChange={(e) => setPaymentFormData({ ...paymentFormData, generate_future_invoices: e.target.checked })}
-                              className="rounded border-purple-300"
-                            />
-                            <label htmlFor="generateFutureInvoices" className="text-sm text-gray-600">
-                              Generate future invoices for allocated months automatically
-                            </label>
-                          </div>
+                          {feeSummary.is_overdue && (
+                            <span className="text-sm text-red-600 ml-2">⚠️ Overdue</span>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Advance Payment Section - Optional */}
+                  {feeSummary && feeSummary.remaining_amount > 0 && parseFloat(paymentFormData.amount_paid || 0) > feeSummary.remaining_amount && (
+                    <div className="md:col-span-2">
+                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <input
+                            type="checkbox"
+                            id="isAdvancePayment"
+                            checked={paymentFormData.is_advance || false}
+                            onChange={(e) => {
+                              setPaymentFormData({
+                                ...paymentFormData,
+                                is_advance: e.target.checked,
+                                advance_allocation: [],
+                              });
+                            }}
+                            className="rounded border-purple-300"
+                          />
+                          <label htmlFor="isAdvancePayment" className="text-sm font-medium text-purple-700">
+                            Allocate advance amount to future months
+                          </label>
+                        </div>
+                        
+                        {paymentFormData.is_advance && (
+                          <div className="space-y-3">
+                            <p className="text-sm text-gray-600">
+                              Advance amount: ₹{(parseFloat(paymentFormData.amount_paid || 0) - feeSummary.remaining_amount).toLocaleString()}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <input
+                                type="month"
+                                value={paymentFormData.advance_month || ''}
+                                onChange={(e) => setPaymentFormData({ ...paymentFormData, advance_month: e.target.value })}
+                                className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              />
+                              <input
+                                type="number"
+                                placeholder="Amount"
+                                value={paymentFormData.advance_amount_allocation || ''}
+                                onChange={(e) => setPaymentFormData({ ...paymentFormData, advance_amount_allocation: e.target.value })}
+                                className="flex-1 min-w-[120px] px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (paymentFormData.advance_month && paymentFormData.advance_amount_allocation) {
+                                    const allocations = [...(paymentFormData.advance_allocation || [])];
+                                    const totalAdvance = parseFloat(paymentFormData.amount_paid || 0) - feeSummary.remaining_amount;
+                                    const currentAllocated = allocations.reduce((sum, a) => sum + (a.amount || 0), 0);
+                                    const newAmount = parseFloat(paymentFormData.advance_amount_allocation);
+                                    
+                                    if (currentAllocated + newAmount > totalAdvance) {
+                                      alert(`Total allocation (₹{(currentAllocated + newAmount).toLocaleString()}) exceeds advance amount (₹${totalAdvance.toLocaleString()})`);
+                                      return;
+                                    }
+                                    
+                                    allocations.push({
+                                      month: paymentFormData.advance_month,
+                                      amount: newAmount,
+                                    });
+                                    setPaymentFormData({
+                                      ...paymentFormData,
+                                      advance_allocation: allocations,
+                                      advance_month: '',
+                                      advance_amount_allocation: '',
+                                    });
+                                  }
+                                }}
+                                className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600"
+                              >
+                                Add
+                              </button>
+                            </div>
+                            {(paymentFormData.advance_allocation || []).length > 0 && (
+                              <div className="space-y-1">
+                                {(paymentFormData.advance_allocation || []).map((alloc, idx) => (
+                                  <div key={idx} className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
+                                    <span className="text-sm">{alloc.month}</span>
+                                    <span className="text-sm font-semibold">₹{(alloc.amount || 0).toLocaleString()}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const allocations = (paymentFormData.advance_allocation || []).filter((_, i) => i !== idx);
+                                        setPaymentFormData({ ...paymentFormData, advance_allocation: allocations });
+                                      }}
+                                      className="text-red-500 hover:text-red-700 text-sm"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                <div className="text-sm text-gray-600">
+                                  Total Allocated: ₹{(paymentFormData.advance_allocation || []).reduce((sum, a) => sum + (a.amount || 0), 0).toLocaleString()}
+                                  {feeSummary && (
+                                    <span className="ml-2 text-gray-400">
+                                      (Advance: ₹{(parseFloat(paymentFormData.amount_paid || 0) - feeSummary.remaining_amount).toLocaleString()})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="generateFutureInvoices"
+                                checked={paymentFormData.generate_future_invoices || false}
+                                onChange={(e) => setPaymentFormData({ ...paymentFormData, generate_future_invoices: e.target.checked })}
+                                className="rounded border-purple-300"
+                              />
+                              <label htmlFor="generateFutureInvoices" className="text-sm text-gray-600">
+                                Generate future invoices for allocated months automatically
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

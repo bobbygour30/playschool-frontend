@@ -139,6 +139,23 @@ export const createFee = (data) => api.post('/finance/fees', data);
 export const updateFee = (id, data) => api.put(`/finance/fees/${id}`, data);
 export const deleteFee = (id) => api.delete(`/finance/fees/${id}`);
 
+// Per-fee-record summary (used in the "Record Payment" modal).
+// NOTE: named differently from getFeeSummary() above (which hits
+// /students/stats/fee-summary) to avoid clobbering that export.
+export const getFeeRecordSummary = (feeId) => api.get(`/finance/fees/${feeId}/summary`);
+
+// Full fee record details incl. payment history & related invoices
+// (used by the "View Details" modal). Server route: GET /finance/fees/:id
+export const getFeeFullDetails = (feeId) => api.get(`/finance/fees/${feeId}`);
+
+// Sync all student fee records from student profiles into the finance module
+export const syncStudentFeesToFinance = () =>
+  api.post('/students/sync-fees-to-finance');
+
+// Bulk-generate recurring fee invoices for a given month (YYYY-MM)
+export const generateRecurringFeesBulk = (month) =>
+  api.post('/finance/fees/bulk-generate-recurring', { month });
+
 // Expense Management
 export const getExpenses = () => api.get('/finance/expenses');
 export const getExpense = (id) => api.get(`/finance/expenses/${id}`);
@@ -179,13 +196,13 @@ export const uploadGeneralDocument = async (file, type = 'general') => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', type);
-  
+
   const response = await api.post('/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
   });
-  
+
   return response.data;
 };
 
@@ -243,7 +260,7 @@ export const getDashboardStats = async () => {
       getAcademicStats(),
       getFinancialOverview(),
     ]);
-    
+
     return {
       students: {
         total: students.data.length,
@@ -494,7 +511,7 @@ export const updateAssignment = (id, data) => mobileApi.put(`/api/class-assignme
 
 export const deleteAssignment = (id) => mobileApi.delete(`/api/class-assignment/assignment/${id}`);
 
-export const markAssignmentComplete = (id, isCompleted) => 
+export const markAssignmentComplete = (id, isCompleted) =>
   mobileApi.put(`/api/class-assignment/assignment/${id}/complete`, { isCompleted });
 
 // ==================== TEACHER CLASS ASSIGNMENTS ====================
@@ -543,7 +560,7 @@ export const leaveApi = {
 // Statistics API
 export const statsApi = {
   getStats: (params) => holidayLeaveApi.get('/stats', { params }),
-  getUserSummary: (userType, userId) => 
+  getUserSummary: (userType, userId) =>
     holidayLeaveApi.get(`/users/${userType}/${userId}/summary`),
 };
 
@@ -555,41 +572,23 @@ export const settingsApi = {
 
 // Helpers API
 export const helpersApi = {
-  getSubstituteTeachers: (params) => 
+  getSubstituteTeachers: (params) =>
     holidayLeaveApi.get('/substitute-teachers', { params }),
   getFacultyOptions: () => holidayLeaveApi.get('/faculty-options'),
   getStudentOptions: (params) => holidayLeaveApi.get('/student-options', { params }),
 };
 
-// Record a payment against a fee
-export const recordPayment = async (paymentData) => {
-  const response = await fetch('/api/fees/record-payment', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(paymentData),
-  });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to record payment');
-  }
-  
-  return response.json();
-};
+// Record a payment against a fee.
+// Fixed: was calling a bare relative path '/api/fees/record-payment' via raw
+// fetch(), which resolves against the frontend's own origin (not the API
+// server) and hit the SPA fallback, returning index.html instead of JSON.
+// Now routed through the shared `api` axios instance with the correct
+// '/finance' prefix that matches how financeRoutes.js is mounted.
+export const recordPayment = (paymentData) =>
+  api.post('/finance/fees/record-payment', paymentData);
 
-// Get payment history for a fee
-export const getPaymentHistory = async (feeId) => {
-  const response = await fetch(`/api/fees/${feeId}/payments`);
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to fetch payment history');
-  }
-  
-  return response.json();
-};
-
+// Get payment history for a fee (same fix as above: correct base URL + prefix)
+export const getPaymentHistory = (feeId) =>
+  api.get(`/finance/fees/${feeId}/payments`);
 
 export default api;
