@@ -2864,4 +2864,4 @@ export default function StudentDetails() {
       </div>
     </div>
   );
-}
+} 
