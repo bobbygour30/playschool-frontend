@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Plus, Search, Edit, Trash2, X, DollarSign, Calendar, 
   Filter, Download, TrendingUp, TrendingDown, Users, 
@@ -1138,8 +1139,8 @@ export default function Finance() {
         )}
 
         {/* Fee Details Modal with Fee Plan and Fee Account */}
-        {showFeeDetails && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showFeeDetails && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -1355,7 +1356,8 @@ export default function Finance() {
                 )}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Expenses Table */}
@@ -1503,8 +1505,8 @@ export default function Finance() {
         )}
 
         {/* Payment Record Modal with Simplified Flow */}
-        {showPaymentModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showPaymentModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -1746,7 +1748,7 @@ export default function Finance() {
                                     const newAmount = parseFloat(paymentFormData.advance_amount_allocation);
                                     
                                     if (currentAllocated + newAmount > totalAdvance) {
-                                      alert(`Total allocation (₹{(currentAllocated + newAmount).toLocaleString()}) exceeds advance amount (₹${totalAdvance.toLocaleString()})`);
+                                      alert(`Total allocation (₹${(currentAllocated + newAmount).toLocaleString()}) exceeds advance amount (₹${totalAdvance.toLocaleString()})`);
                                       return;
                                     }
                                     
@@ -1825,12 +1827,13 @@ export default function Finance() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Modal for Add/Edit */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-teal-500 to-cyan-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
@@ -2333,7 +2336,8 @@ export default function Finance() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

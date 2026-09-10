@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Calendar, Clock, User, Mail, Phone, FileText, 
   CheckCircle, XCircle, AlertCircle, Filter, Search,
@@ -453,8 +454,8 @@ export default function LeaveManagement() {
   const renderDetailsModal = () => {
     if (!selectedLeave || !showDetailsModal) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    return createPortal(
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
         <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
           <div className={`sticky top-0 px-6 py-4 flex items-center justify-between ${
             selectedLeave.status === 'Pending' ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
@@ -573,7 +574,8 @@ export default function LeaveManagement() {
             )}
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 
@@ -581,8 +583,8 @@ export default function LeaveManagement() {
   const renderRemarksModal = () => {
     if (!showRemarksModal || !selectedLeave) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    return createPortal(
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
         <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
           <div className={`px-6 py-4 ${
             actionType === 'approve' ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-pink-500'
@@ -636,7 +638,8 @@ export default function LeaveManagement() {
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 

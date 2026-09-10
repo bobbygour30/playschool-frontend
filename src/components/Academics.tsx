@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   BookOpen, Calendar, Award, Star, Users, Plus, Search, Edit, 
   Trash2, X, Filter, Download, TrendingUp, Clock, CheckCircle,
@@ -1017,8 +1018,8 @@ export default function Academics() {
         </div>
 
         {/* Document Upload Modal */}
-        {showDocumentModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showDocumentModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
@@ -1099,12 +1100,13 @@ export default function Academics() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Modal for Add/Edit Assessments/Events/Culminations */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className={`sticky top-0 bg-gradient-to-r ${
                 modalType === 'assessment' ? 'from-blue-500 to-indigo-600' :
@@ -1308,7 +1310,8 @@ export default function Academics() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

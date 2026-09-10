@@ -1,5 +1,6 @@
 // components/StudentDetails.jsx
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
@@ -1699,79 +1700,80 @@ export default function StudentDetails() {
         })}
 
         {/* Promote Modal */}
-        {showPromoteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
-              <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 rounded-t-2xl">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <ArrowUpCircle size={22} />
-                  Promote All Students
-                </h2>
-              </div>
-              <div className="p-6 space-y-4">
-                <p className="text-sm text-gray-600">
-                  This will promote all active students to the next class according to the progression:
-                  <br />
-                  <span className="font-medium text-gray-800">Toddler → Pre-Nursery → Nursery → KG-1 → Graduated</span>
-                </p>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Academic Year (for record)
-                  </label>
-                  <input
-                    type="text"
-                    value={promotionAcademicYear}
-                    onChange={(e) => setPromotionAcademicYear(e.target.value)}
-                    placeholder="e.g. 2025-2026"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
-                </div>
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    onClick={() => {
-                      setShowPromoteModal(false);
-                      setPromotionAcademicYear('');
-                    }}
-                    disabled={isPromoting}
-                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handlePromoteStudents}
-                    disabled={isPromoting}
-                    className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
-                  >
-                    {isPromoting ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" /> Promoting...
-                      </>
-                    ) : (
-                      'Confirm Promotion'
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+{showPromoteModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 rounded-t-2xl">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <ArrowUpCircle size={22} />
+          Promote All Students
+        </h2>
+      </div>
+      <div className="p-6 space-y-4">
+        <p className="text-sm text-gray-600">
+          This will promote all active students to the next class according to the progression:
+          <br />
+          <span className="font-medium text-gray-800">Toddler → Pre-Nursery → Nursery → KG-1 → Graduated</span>
+        </p>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Academic Year (for record)
+          </label>
+          <input
+            type="text"
+            value={promotionAcademicYear}
+            onChange={(e) => setPromotionAcademicYear(e.target.value)}
+            placeholder="e.g. 2025-2026"
+            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            onClick={() => {
+              setShowPromoteModal(false);
+              setPromotionAcademicYear('');
+            }}
+            disabled={isPromoting}
+            className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handlePromoteStudents}
+            disabled={isPromoting}
+            className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
+          >
+            {isPromoting ? (
+              <>
+                <Loader2 size={18} className="animate-spin" /> Promoting...
+              </>
+            ) : (
+              'Confirm Promotion'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
         {/* Add/Edit Student Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
-              {/* Modal Header - Sticky */}
-              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
-                <h2 className="text-xl font-bold text-white">
-                  {editingStudent ? 'Edit Student' : 'Add New Student'}
-                </h2>
-                <button 
-                  onClick={resetForm} 
-                  disabled={isSubmitting}
-                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
-                >
-                  <X size={24} />
-                </button>
+{showModal && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
+      {/* Modal Header - Sticky */}
+      <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
+        <h2 className="text-xl font-bold text-white">
+          {editingStudent ? 'Edit Student' : 'Add New Student'}
+        </h2>
+        <button 
+          onClick={resetForm} 
+          disabled={isSubmitting}
+          className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
+        >
+          <X size={24} />
+        </button>
               </div>
 
               {/* Validation Summary */}
@@ -2845,7 +2847,8 @@ export default function StudentDetails() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Plus, Search, Edit, Trash2, X, Truck, MapPin, 
   Phone, User, FileText, Filter, Download, TrendingUp,
@@ -543,8 +544,8 @@ export default function VendorManagement() {
         )}
 
         {/* Add/Edit Vendor Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
@@ -932,7 +933,8 @@ export default function VendorManagement() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

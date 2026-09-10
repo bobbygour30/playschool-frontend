@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
   MapPin, Calendar, Briefcase, Filter, Download, TrendingUp,
@@ -654,9 +655,9 @@ export default function StaffManagement() {
         )}
 
         {/* Add/Edit Staff Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {showModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"> 
               <div className="sticky top-0 bg-gradient-to-r from-indigo-500 to-blue-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
                   {editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
@@ -1188,7 +1189,8 @@ export default function StaffManagement() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

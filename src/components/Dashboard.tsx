@@ -169,10 +169,20 @@ export default function Dashboard() {
       )}
 
       {/* Sidebar */}
+      {/*
+        FIX: removed "md:translate-x-0" — once md:relative kicks in, the
+        translate-x-0 utility still applies `transform: translateX(0)`,
+        which creates a NEW stacking context on the sidebar at desktop/
+        tablet widths. That stacking context was trapping the sidebar's
+        rendering above content that should sit on top of it (like the
+        Add Student modal, portaled or not), causing the "collapsing"
+        look at certain breakpoints. Removing it means md: just relies on
+        md:relative with no lingering transform.
+      */}
       <aside
         className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed md:relative md:translate-x-0 z-30 ${
+        } fixed md:relative z-30 ${
           sidebarOpen ? 'w-72' : 'md:w-20'
         } bg-white/95 backdrop-blur-xl border-r border-gray-200/50 transition-all duration-300 flex flex-col shadow-2xl`}
       >
