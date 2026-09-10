@@ -1599,11 +1599,21 @@ export default function StudentDetails() {
                           </button>
                         </div>
                         
-                        <div className="grid grid-cols-3 gap-2 mt-1">
-                          <div className="text-center">
-                            <p className="text-[10px] text-gray-500">Total</p>
-                            <p className="text-sm font-bold text-purple-600">₹{getTotalFee(student)}</p>
-                          </div>
+                        {/* Monthly / Recurring fee prominently displayed as main number */}
+                        <div className="text-center mt-1">
+                          <p className="text-[10px] text-gray-500">
+                            {getRecurringTotal(student) > 0 ? 'Monthly Fee' : 'No Recurring Fee'}
+                          </p>
+                          <p className="text-lg font-bold text-purple-600">
+                            ₹{getRecurringTotal(student) > 0 ? getRecurringTotal(student) : '0'}
+                          </p>
+                          {getRecurringTotal(student) > 0 && student.recurring_fees?.fee_plan && (
+                            <p className="text-[10px] text-gray-400">({student.recurring_fees.fee_plan})</p>
+                          )}
+                        </div>
+
+                        {/* Fee summary: paid, due, status */}
+                        <div className="grid grid-cols-3 gap-2 mt-2">
                           <div className="text-center">
                             <p className="text-[10px] text-gray-500">Paid</p>
                             <p className="text-sm font-bold text-green-600">
@@ -1616,14 +1626,14 @@ export default function StudentDetails() {
                               {student.fee_paid ? '₹0' : `₹${getTotalFee(student)}`}
                             </p>
                           </div>
-                        </div>
-                        
-                        <div className="flex justify-center mt-1">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            student.fee_paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {student.fee_paid ? 'Paid ✓' : 'Unpaid'}
-                          </span>
+                          <div className="text-center">
+                            <p className="text-[10px] text-gray-500">Status</p>
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              student.fee_paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {student.fee_paid ? 'Paid ✓' : 'Unpaid'}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Expanded Fee Details */}
@@ -1631,6 +1641,7 @@ export default function StudentDetails() {
                           <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
                             <p className="text-xs font-semibold text-gray-700 mb-1">Full Breakdown:</p>
                             <div className="grid grid-cols-2 gap-1 text-xs">
+                              <span className="text-gray-600 font-semibold col-span-2">Total Fees: ₹{getTotalFee(student)}</span>
                               <span className="text-gray-600">Registration: ₹{student.registration_fee || 0}</span>
                               <span className="text-gray-600">Admission: ₹{student.admission_fee || 0}</span>
                               <span className="text-gray-600">Tuition: ₹{student.tuition_fee || 0}</span>
