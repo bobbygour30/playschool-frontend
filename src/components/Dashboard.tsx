@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Users, GraduationCap, Phone, Bus, LayoutDashboard, Menu, X, 
-  Sparkles, ChevronRight, LogOut, Settings, Bell, User,
+  Sparkles, ChevronRight, ChevronLeft, LogOut, Settings, Bell, User,
   TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
   Truck, Briefcase, DollarSign, Heart,
   BookMarked, CalendarDays
@@ -158,6 +158,17 @@ export default function Dashboard() {
     });
   };
 
+  // Handle nav item click — on desktop when collapsed, expand first
+  const handleNavClick = (item: typeof navigation[number]) => {
+    if (!isMobile && !sidebarOpen) {
+      // Expand sidebar first, don't navigate
+      setSidebarOpen(true);
+      return;
+    }
+    setCurrentPage(item.id);
+    if (isMobile) setSidebarOpen(false);
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200">
       {/* Mobile overlay */}
@@ -169,81 +180,111 @@ export default function Dashboard() {
       )}
 
       {/* Sidebar */}
-      {/*
-        FIX: removed "md:translate-x-0" — once md:relative kicks in, the
-        translate-x-0 utility still applies `transform: translateX(0)`,
-        which creates a NEW stacking context on the sidebar at desktop/
-        tablet widths. That stacking context was trapping the sidebar's
-        rendering above content that should sit on top of it (like the
-        Add Student modal, portaled or not), causing the "collapsing"
-        look at certain breakpoints. Removing it means md: just relies on
-        md:relative with no lingering transform.
-      */}
       <aside
-        className={`${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed md:relative z-30 ${
-          sidebarOpen ? 'w-72' : 'md:w-20'
-        } bg-white/95 backdrop-blur-xl border-r border-gray-200/50 transition-all duration-300 flex flex-col shadow-2xl`}
+        className={`
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0
+          fixed md:relative z-30
+          ${sidebarOpen ? 'w-72' : 'md:w-20'}
+          bg-white/95 backdrop-blur-xl
+          border-r border-gray-200/50
+          transition-all duration-300 ease-in-out
+          flex flex-col
+          shadow-2xl
+        `}
       >
         {/* Logo Section */}
-        <div className={`p-6 border-b border-gray-200/50 flex items-center ${sidebarOpen ? 'justify-between' : 'justify-center'}`}>
-          {sidebarOpen && (
-            <div className="flex items-center gap-3">
-              <div className="relative">
+        <div className={`h-[88px] border-b border-gray-200/50 flex items-center ${sidebarOpen ? 'px-6 justify-between' : 'justify-center px-2'}`}>
+          {sidebarOpen ? (
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative flex-shrink-0">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur-md opacity-50"></div>
                 <div className="relative bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg">
                   <Sparkles className="text-white" size={24} />
                 </div>
               </div>
-              <div>
-                <h1 className="text-sm font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <div className="min-w-0">
+                <h1 className="text-sm font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent truncate">
                   Golden PlaySchool
                 </h1>
                 <p className="text-xs text-gray-500">Admin Dashboard</p>
               </div>
             </div>
+          ) : (
+            <div className="relative flex-shrink-0">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur-md opacity-50"></div>
+              <div className="relative bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg">
+                <Sparkles className="text-white" size={22} />
+              </div>
+            </div>
           )}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-xl transition-all duration-300 hover:scale-110"
-          >
-            {sidebarOpen ? <X size={20} className="text-gray-600" /> : <Menu size={20} className="text-gray-600" />}
-          </button>
+
+          {/* Close button — mobile only */}
+          {sidebarOpen && isMobile && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 hover:bg-gray-100 rounded-xl transition-all duration-300"
+              aria-label="Close sidebar"
+            >
+              <X size={20} className="text-gray-600" />
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className={`flex-1 overflow-y-auto overflow-x-hidden ${sidebarOpen ? 'p-4 space-y-2' : 'p-3 space-y-2'}`}>
           {navigation.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  setCurrentPage(item.id);
-                  if (isMobile) setSidebarOpen(false);
-                }}
-                className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-                  isActive
+                onClick={() => handleNavClick(item)}
+                className={`
+                  group relative w-full flex items-center
+                  ${sidebarOpen ? 'gap-3 px-4 py-3' : 'justify-center px-0 py-3'}
+                  rounded-xl
+                  transition-all duration-300
+                  ${isActive
                     ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
-                    : 'text-gray-700 hover:bg-gray-50 hover:scale-105'
-                }`}
+                    : 'text-gray-700 hover:bg-gray-100'
+                  }
+                `}
+                aria-label={item.name}
               >
-                <Icon size={20} className={isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'} />
-                {sidebarOpen && (
-                  <>
-                    <span className={`font-medium ${isActive ? 'text-white' : 'text-gray-700'}`}>
-                      {item.name}
-                    </span>
-                    {isActive && (
-                      <div className="absolute right-4 w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                    )}
-                  </>
+                <Icon
+                  size={20}
+                  className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'} transition-colors`}
+                />
+
+                {/* Label — only when open */}
+                <span
+                  className={`
+                    font-medium text-left truncate
+                    transition-all duration-200
+                    ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'}
+                    ${isActive ? 'text-white' : 'text-gray-700'}
+                  `}
+                >
+                  {item.name}
+                </span>
+
+                {/* Active dot */}
+                {isActive && sidebarOpen && (
+                  <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full animate-pulse flex-shrink-0" />
                 )}
-                {!sidebarOpen && (
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+
+                {/* Tooltip when collapsed (desktop) */}
+                {!sidebarOpen && !isMobile && (
+                  <div className="
+                    absolute left-full ml-3 px-3 py-1.5
+                    bg-gray-900 text-white text-xs font-medium
+                    rounded-lg opacity-0 group-hover:opacity-100
+                    transition-opacity duration-200 pointer-events-none
+                    whitespace-nowrap z-50 shadow-lg
+                  ">
                     {item.name}
+                    <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45" />
                   </div>
                 )}
               </button>
@@ -251,30 +292,85 @@ export default function Dashboard() {
           })}
         </nav>
 
-        {/* Footer Section with Logout */}
-        {sidebarOpen && (
-          <div className="p-4 border-t border-gray-200/50 space-y-2">
-            <button 
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-300"
+        {/* Footer Section — collapse button + logout */}
+        <div className={`border-t border-gray-200/50 ${sidebarOpen ? 'p-4 space-y-2' : 'p-3 space-y-2'}`}>
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            className={`
+              group relative w-full flex items-center
+              ${sidebarOpen ? 'gap-3 px-4 py-2' : 'justify-center px-0 py-3'}
+              rounded-xl
+              text-red-600 hover:bg-red-50
+              transition-all duration-300
+            `}
+            aria-label="Logout"
+          >
+            <LogOut size={20} className="flex-shrink-0" />
+            <span
+              className={`
+                font-medium truncate
+                transition-all duration-200
+                ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'}
+              `}
             >
-              <LogOut size={20} />
-              <span className="font-medium">Logout</span>
-            </button>
-          </div>
-        )}
-        {/* When sidebar is collapsed, show logout icon */}
-        {!sidebarOpen && (
-          <div className="p-4 border-t border-gray-200/50">
-            <button 
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center p-2 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-300"
-              title="Logout"
+              Logout
+            </span>
+            {!sidebarOpen && !isMobile && (
+              <div className="
+                absolute left-full ml-3 px-3 py-1.5
+                bg-gray-900 text-white text-xs font-medium
+                rounded-lg opacity-0 group-hover:opacity-100
+                transition-opacity duration-200 pointer-events-none
+                whitespace-nowrap z-50 shadow-lg
+              ">
+                Logout
+                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45" />
+              </div>
+            )}
+          </button>
+
+          {/* Collapse / Expand toggle — desktop only, beautiful pill */}
+          {!isMobile && (
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className={`
+                group relative w-full flex items-center
+                ${sidebarOpen ? 'gap-3 px-4 py-2' : 'justify-center px-0 py-3'}
+                rounded-xl
+                text-gray-500 hover:text-gray-800 hover:bg-gray-100
+                transition-all duration-300
+              `}
+              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
             >
-              <LogOut size={20} />
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5">
+                {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+              </span>
+              <span
+                className={`
+                  font-medium truncate
+                  transition-all duration-200
+                  ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'}
+                `}
+              >
+                Collapse
+              </span>
+              {!sidebarOpen && (
+                <div className="
+                  absolute left-full ml-3 px-3 py-1.5
+                  bg-gray-900 text-white text-xs font-medium
+                  rounded-lg opacity-0 group-hover:opacity-100
+                  transition-opacity duration-200 pointer-events-none
+                  whitespace-nowrap z-50 shadow-lg
+                ">
+                  Expand
+                  <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45" />
+                </div>
+              )}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -285,9 +381,11 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               {/* Page Title */}
               <div className="flex items-center gap-3">
+                {/* Mobile hamburger */}
                 <button
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="md:hidden p-2 hover:bg-gray-100 rounded-xl transition-all duration-300"
+                  aria-label="Toggle sidebar"
                 >
                   <Menu size={24} className="text-gray-600" />
                 </button>
