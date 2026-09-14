@@ -413,19 +413,6 @@ export default function Dashboard() {
                     <span className="text-sm text-gray-600 font-medium">{formatTime()}</span>
                   </div>
                 </div>
-
-                {/* Notification Bell */}
-                <button className="relative p-2 hover:bg-gray-100 rounded-xl transition-all duration-300">
-                  <Bell size={20} className="text-gray-600" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                </button>
-
-                {/* User Avatar (Mobile) */}
-                <div className="md:hidden">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                    <User className="text-white" size={16} />
-                  </div>
-                </div>
               </div>
             </div>
           </div>
