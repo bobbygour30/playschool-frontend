@@ -311,7 +311,7 @@ export default function ClassAssignment() {
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
+              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent pb-2">
                 Class Assignment
               </h1>
               <p className="text-gray-600 mt-2 flex items-center gap-2">
