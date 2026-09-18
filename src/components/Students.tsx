@@ -16,10 +16,10 @@ import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, g
 
 // Class definitions
 const CLASSES = [
-  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby },
-  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School },
-  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap },
-  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star },
+  { id: 'playgroup', name: 'Playgroup / Pre-Nursery', ageGroup: '2 - 3 years', icon: Baby },
+  { id: 'nursery',   name: 'Nursery',                  ageGroup: '3 - 4 years', icon: School },
+  { id: 'lkg',       name: 'LKG',                      ageGroup: '4 - 5 years', icon: GraduationCap },
+  { id: 'ukg',       name: 'UKG',                      ageGroup: '5 - 6 years', icon: Star },
 ];
 
 const SECTIONS = ['A', 'B', 'C', 'D'];
@@ -42,29 +42,29 @@ const ACADEMIC_YEARS = (() => {
 
 // ==================== FEE STRUCTURES (must match backend) ====================
 const FEE_STRUCTURES = {
-  toddler: {
-    name: 'Toddler Fee Plan',
+  playgroup: {
+    name: 'Playgroup Fee Plan',
     registration_fee: 5000,
     admission_fee: 15000,
     kit_fee: 2500,
     camera_fee: 800,
   },
-  'pre-nursery': {
-    name: 'Pre-Nursery Fee Plan',
+  nursery: {
+    name: 'Nursery Fee Plan',
     registration_fee: 5500,
     admission_fee: 18000,
     kit_fee: 3000,
     camera_fee: 1000,
   },
-  nursery: {
-    name: 'Nursery Fee Plan',
+  lkg: {
+    name: 'LKG Fee Plan',
     registration_fee: 6000,
     admission_fee: 20000,
     kit_fee: 3500,
     camera_fee: 1200,
   },
-  'kg-1': {
-    name: 'KG-1 Fee Plan',
+  ukg: {
+    name: 'UKG Fee Plan',
     registration_fee: 7000,
     admission_fee: 25000,
     kit_fee: 4000,
@@ -116,6 +116,8 @@ const calculateAge = (dateOfBirth) => {
   return `${years} yrs ${months} mon`;
 };
 
+
+
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -149,7 +151,6 @@ export default function StudentDetails() {
     birth_certificate: false,
     aadhar_card: false,
     parent_aadhar_front: false,
-    parent_aadhar_back: false,
     student_photo: false,
   });
 
@@ -185,6 +186,7 @@ export default function StudentDetails() {
     fee_frequency: 'Monthly',
     discount: '',
     fee_paid: false,
+    fee_exempt: false,
     payment_date: '',
     payment_mode: 'Cash',
     // Authorized Pickup
@@ -220,8 +222,6 @@ export default function StudentDetails() {
     aadhar_card_url: null,
     parent_aadhar_front: null,
     parent_aadhar_front_url: null,
-    parent_aadhar_back: null,
-    parent_aadhar_back_url: null,
     student_photo: null,
     student_photo_url: null,
   });
@@ -527,7 +527,6 @@ export default function StudentDetails() {
     const hasStudentPhoto = formData.student_photo || formData.student_photo_url;
     const hasBirthCert = formData.birth_certificate || formData.birth_certificate_url;
     const hasParentAadharFront = formData.parent_aadhar_front || formData.parent_aadhar_front_url;
-    const hasParentAadharBack = formData.parent_aadhar_back || formData.parent_aadhar_back_url;
 
     if (!hasStudentPhoto) {
       errors.student_photo = 'Student Photo is mandatory. Please upload.';
@@ -540,19 +539,19 @@ export default function StudentDetails() {
     }
 
     if (!hasParentAadharFront) {
-      errors.parent_aadhar_front = 'Parent Aadhar (Front) is mandatory. Please upload.';
-      hasError = true;
-    }
-
-    if (!hasParentAadharBack) {
-      errors.parent_aadhar_back = 'Parent Aadhar (Back) is mandatory. Please upload.';
+      errors.parent_aadhar_front = 'Parent Aadhar Card is mandatory. Please upload.';
       hasError = true;
     }
 
     // Recurring Fees validation
     const recurringTotal = calculateRecurringTotal(formData);
-    if (formData.fee_paid && recurringTotal === 0 && !formData.initial_payment_amount) {
-      errors.fee_paid = 'Please set up recurring fees or initial payment amount when marking as paid';
+    const hasInitialAmount =
+      formData.initial_payment_amount !== '' &&
+      formData.initial_payment_amount !== null &&
+      !isNaN(parseFloat(formData.initial_payment_amount));
+
+    if (formData.fee_paid && !formData.fee_exempt && recurringTotal === 0 && !hasInitialAmount) {
+      errors.fee_paid = 'Please enter an initial payment amount, or check "Fee Exempt" if no fee is due';
       hasError = true;
     }
 
@@ -634,7 +633,6 @@ export default function StudentDetails() {
         birth_certificate: documentChanges.birth_certificate ? formData.birth_certificate : formData.birth_certificate_url,
         aadhar_card: documentChanges.aadhar_card ? formData.aadhar_card : formData.aadhar_card_url,
         parent_aadhar_front: documentChanges.parent_aadhar_front ? formData.parent_aadhar_front : formData.parent_aadhar_front_url,
-        parent_aadhar_back: documentChanges.parent_aadhar_back ? formData.parent_aadhar_back : formData.parent_aadhar_back_url,
         student_photo: documentChanges.student_photo ? formData.student_photo : formData.student_photo_url,
       };
       
@@ -683,6 +681,7 @@ export default function StudentDetails() {
         discount: parseFloat(formData.discount) || 0,
         total_amount: totalAmount,
         fee_paid: formData.fee_paid,
+        fee_exempt: formData.fee_exempt,
         payment_date: formData.fee_paid ? formData.payment_date : null,
         payment_mode: formData.payment_mode,
         // Authorized Pickup
@@ -787,7 +786,6 @@ export default function StudentDetails() {
       birth_certificate: false,
       aadhar_card: false,
       parent_aadhar_front: false,
-      parent_aadhar_back: false,
       student_photo: false,
     });
     
@@ -858,6 +856,7 @@ export default function StudentDetails() {
       fee_frequency: student.fee_frequency || 'Monthly',
       discount: student.discount || '',
       fee_paid: student.fee_paid || false,
+      fee_exempt: student.fee_exempt || false,
       payment_date: student.payment_date ? student.payment_date.split('T')[0] : '',
       payment_mode: student.payment_mode || 'Cash',
       authorized_pickup_name: authorizedPickup.name || '',
@@ -890,8 +889,6 @@ export default function StudentDetails() {
       aadhar_card_url: student.documents?.aadhar_card || null,
       parent_aadhar_front: null,
       parent_aadhar_front_url: student.documents?.parent_aadhar_front || null,
-      parent_aadhar_back: null,
-      parent_aadhar_back_url: student.documents?.parent_aadhar_back || null,
       student_photo: null,
       student_photo_url: student.documents?.student_photo || null,
     });
@@ -931,6 +928,7 @@ export default function StudentDetails() {
       fee_frequency: 'Monthly',
       discount: '',
       fee_paid: false,
+      fee_exempt: false,
       payment_date: '',
       payment_mode: 'Cash',
       authorized_pickup_name: '',
@@ -960,8 +958,6 @@ export default function StudentDetails() {
       aadhar_card_url: null,
       parent_aadhar_front: null,
       parent_aadhar_front_url: null,
-      parent_aadhar_back: null,
-      parent_aadhar_back_url: null,
       student_photo: null,
       student_photo_url: null,
     });
@@ -969,7 +965,6 @@ export default function StudentDetails() {
       birth_certificate: false,
       aadhar_card: false,
       parent_aadhar_front: false,
-      parent_aadhar_back: false,
       student_photo: false,
     });
     setValidationErrors({});
@@ -1094,10 +1089,10 @@ export default function StudentDetails() {
 
   const stats = {
     total: students.length,
-    toddler: students.filter(s => s.class_id === 'toddler').length,
-    preNursery: students.filter(s => s.class_id === 'pre-nursery').length,
+    playgroup: students.filter(s => s.class_id === 'playgroup').length,
     nursery: students.filter(s => s.class_id === 'nursery').length,
-    kg1: students.filter(s => s.class_id === 'kg-1').length,
+    lkg: students.filter(s => s.class_id === 'lkg').length,
+    ukg: students.filter(s => s.class_id === 'ukg').length,
   };
 
   // Render document upload field with preview
@@ -1333,8 +1328,8 @@ export default function StudentDetails() {
                 <Baby className="text-white" size={20} />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Toddler</p>
-                <p className="text-2xl font-bold text-gray-800">{stats.toddler}</p>
+                <p className="text-xs text-gray-500">Playgroup</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.playgroup}</p>
               </div>
             </div>
           </div>
@@ -1344,8 +1339,8 @@ export default function StudentDetails() {
                 <School className="text-white" size={20} />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Pre-Nursery</p>
-                <p className="text-2xl font-bold text-gray-800">{stats.preNursery}</p>
+                <p className="text-xs text-gray-500">Nursery</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.nursery}</p>
               </div>
             </div>
           </div>
@@ -1355,8 +1350,8 @@ export default function StudentDetails() {
                 <GraduationCap className="text-white" size={20} />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Nursery</p>
-                <p className="text-2xl font-bold text-gray-800">{stats.nursery}</p>
+                <p className="text-xs text-gray-500">LKG</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.lkg}</p>
               </div>
             </div>
           </div>
@@ -1366,8 +1361,8 @@ export default function StudentDetails() {
                 <Star className="text-white" size={20} />
               </div>
               <div>
-                <p className="text-xs text-gray-500">KG-1</p>
-                <p className="text-2xl font-bold text-gray-800">{stats.kg1}</p>
+                <p className="text-xs text-gray-500">UKG</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.ukg}</p>
               </div>
             </div>
           </div>
@@ -1724,7 +1719,7 @@ export default function StudentDetails() {
         <p className="text-sm text-gray-600">
           This will promote all active students to the next class according to the progression:
           <br />
-          <span className="font-medium text-gray-800">Toddler → Pre-Nursery → Nursery → KG-1 → Graduated</span>
+          <span className="font-medium text-gray-800">Playgroup → Nursery → LKG → UKG → Graduated</span>
         </p>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2157,10 +2152,10 @@ export default function StudentDetails() {
                       className="w-full px-4 py-2.5 border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed bg-white font-medium"
                     >
                       <option value="">-- Select Fee Structure --</option>
-                      <option value="toddler">Toddler Fee Plan</option>
-                      <option value="pre-nursery">Pre-Nursery Fee Plan</option>
+                      <option value="playgroup">Playgroup Fee Plan</option>
                       <option value="nursery">Nursery Fee Plan</option>
-                      <option value="kg-1">KG-1 Fee Plan</option>
+                      <option value="lkg">LKG Fee Plan</option>
+                      <option value="ukg">UKG Fee Plan</option>
                       <option value="other">Other / Custom</option>
                     </select>
                     {formData.fee_structure && FEE_STRUCTURES[formData.fee_structure] && (
@@ -2360,7 +2355,37 @@ export default function StudentDetails() {
                         </p>
                       )}
                     </div>
-                    {formData.fee_paid && (
+                    {/* Fee Exempt Checkbox */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        type="checkbox"
+                        id="feeExempt"
+                        checked={formData.fee_exempt}
+                        onChange={(e) => {
+                          const exempt = e.target.checked;
+                          setFormData(prev => ({
+                            ...prev,
+                            fee_exempt: exempt,
+                            fee_paid: exempt ? true : prev.fee_paid,
+                            initial_payment_amount: exempt ? '0' : prev.initial_payment_amount,
+                            registration_fee: exempt ? 0 : prev.registration_fee,
+                            admission_fee: exempt ? 0 : prev.admission_fee,
+                            tuition_fee: exempt ? 0 : prev.tuition_fee,
+                            activity_fee: exempt ? 0 : prev.activity_fee,
+                            kit_fee: exempt ? 0 : prev.kit_fee,
+                            cab_fee: exempt ? 0 : prev.cab_fee,
+                            camera_fee: exempt ? 0 : prev.camera_fee,
+                            discount: exempt ? 0 : prev.discount,
+                          }));
+                        }}
+                        disabled={isSubmitting}
+                        className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-50"
+                      />
+                      <label htmlFor="feeExempt" className="text-sm text-gray-700">
+                        Fee Exempt (relative / staff child — no payment required)
+                      </label>
+                    </div>
+                    {formData.fee_paid && !formData.fee_exempt && (
                       <>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2510,7 +2535,7 @@ export default function StudentDetails() {
                     </div>
                     
                     {/* Initial Payment Section - Shows when Fee is marked as Paid */}
-                    {formData.fee_paid && (
+                    {formData.fee_paid && !formData.fee_exempt && (
                       <div className="mt-4 pt-4 border-t border-blue-200">
                         <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                           <CreditCard size={16} className="text-green-600" />
@@ -2526,12 +2551,12 @@ export default function StudentDetails() {
                               type="number"
                               min="0"
                               step="0.01"
-                              required={formData.fee_paid}
-                              value={formData.initial_payment_amount || calculateRecurringTotal(formData) || calculateTotalFee(formData)}
+                              required={formData.fee_paid && !formData.fee_exempt}
+                              value={formData.initial_payment_amount}
                               onChange={(e) => setFormData({ ...formData, initial_payment_amount: e.target.value })}
                               disabled={isSubmitting}
                               className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              placeholder="Enter initial payment"
+                              placeholder={String(calculateRecurringTotal(formData) || calculateTotalFee(formData) || 0)}
                             />
                           </div>
                           <div>
@@ -2812,8 +2837,7 @@ export default function StudentDetails() {
                     {renderDocumentUpload('Student Photo', 'student_photo', true)}
                     {renderDocumentUpload('Birth Certificate', 'birth_certificate', true)}
                     {renderDocumentUpload('Student Aadhar Card', 'aadhar_card', false)}
-                    {renderDocumentUpload('Parent Aadhar (Front)', 'parent_aadhar_front', true)}
-                    {renderDocumentUpload('Parent Aadhar (Back)', 'parent_aadhar_back', true)}
+                    {renderDocumentUpload('Parent Aadhar Card', 'parent_aadhar_front', true)}
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
                     <span className="text-red-500">*</span> Fields marked with asterisk are mandatory
@@ -2864,4 +2888,4 @@ export default function StudentDetails() {
       </div>
     </div>
   );
-} 
+}

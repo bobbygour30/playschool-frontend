@@ -19,10 +19,10 @@ import {
 
 // Class definitions
 const CLASSES = [
-  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Heart, color: 'from-pink-500 to-rose-500' },
-  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: Star, color: 'from-blue-500 to-cyan-500' },
-  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: Book, color: 'from-green-500 to-emerald-500' },
-  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: GraduationCap, color: 'from-purple-500 to-pink-500' },
+  { id: 'playgroup', name: 'Playgroup', ageGroup: '2 - 3 years', icon: Heart, color: 'from-pink-500 to-rose-500' },
+  { id: 'nursery',   name: 'Nursery',   ageGroup: '3 - 4 years', icon: Star, color: 'from-blue-500 to-cyan-500' },
+  { id: 'lkg',       name: 'LKG',       ageGroup: '4 - 5 years', icon: Book, color: 'from-green-500 to-emerald-500' },
+  { id: 'ukg',       name: 'UKG',       ageGroup: '5 - 6 years', icon: GraduationCap, color: 'from-purple-500 to-pink-500' },
 ];
 
 // Months definition
@@ -39,7 +39,7 @@ const formatFileSize = (bytes) => {
 };
 
 export default function Academics() {
-  const [selectedClass, setSelectedClass] = useState('toddler');
+  const [selectedClass, setSelectedClass] = useState('playgroup');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [expandedSections, setExpandedSections] = useState({
     assessments: true,

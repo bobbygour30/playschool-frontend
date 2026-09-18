@@ -25,7 +25,7 @@ import {
 } from '../services/api';
 import axios from 'axios';
 
-const CLASSES = ['Toddler', 'Pre-Nursery', 'Nursery', 'KG-1'];
+const CLASSES = ['Playgroup', 'Nursery', 'LKG', 'UKG'];
 const LEAVE_TYPES = ['sick', 'casual', 'earned', 'study', 'other'];
 const LEAVE_STATUSES = ['pending', 'approved', 'rejected', 'cancelled'];
 const HOLIDAY_TYPES = ['public', 'academic', 'optional', 'custom'];

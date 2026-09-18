@@ -15,10 +15,10 @@ import {
 } from '../services/api';
 
 const CLASSES = [
-  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years' },
-  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years' },
-  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years' },
-  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years' },
+  { id: 'playgroup', name: 'Playgroup', ageGroup: '2 - 3 years' },
+  { id: 'nursery',   name: 'Nursery',   ageGroup: '3 - 4 years' },
+  { id: 'lkg',       name: 'LKG',       ageGroup: '4 - 5 years' },
+  { id: 'ukg',       name: 'UKG',       ageGroup: '5 - 6 years' },
 ];
 
 const CONTACT_PERSON_ROLES = ['Father', 'Mother', 'Guardian'];

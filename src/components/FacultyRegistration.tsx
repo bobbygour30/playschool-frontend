@@ -10,10 +10,10 @@ import {
 import { getFacultyAuth, createFacultyAuth, updateFacultyAuth, deleteFacultyAuth, updateFacultyAuthStatus, getFacultyAuthStats, getStudents } from '../services/api';
 
 const CLASSES = [
-  { id: 'toddler', name: 'Toddler', ageGroup: '1.5 - 2.5 years', icon: Baby },
-  { id: 'pre-nursery', name: 'Pre-Nursery', ageGroup: '2.5 - 3.5 years', icon: School },
-  { id: 'nursery', name: 'Nursery', ageGroup: '3.5 - 4.5 years', icon: GraduationCap },
-  { id: 'kg-1', name: 'KG-1', ageGroup: '4.5 - 5.5 years', icon: Star },
+  { id: 'playgroup', name: 'Playgroup', ageGroup: '2 - 3 years', icon: Baby },
+  { id: 'nursery',   name: 'Nursery',   ageGroup: '3 - 4 years', icon: School },
+  { id: 'lkg',       name: 'LKG',       ageGroup: '4 - 5 years', icon: GraduationCap },
+  { id: 'ukg',       name: 'UKG',       ageGroup: '5 - 6 years', icon: Star },
 ];
 
 const SECTIONS = ['A', 'B', 'C', 'D'];
