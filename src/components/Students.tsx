@@ -209,6 +209,7 @@ export default function StudentDetails() {
     recurring_start_month: new Date().toISOString().slice(0, 7),
     recurring_end_month: '',
     recurring_fee_plan: 'Monthly',
+    recurring_monthly_due_day: 5,
     recurring_auto_generate: true,
     // Initial Payment
     initial_payment_amount: '',
@@ -706,6 +707,7 @@ export default function StudentDetails() {
           total_monthly: recurringTotalVal,
           start_month: formData.recurring_start_month || new Date().toISOString().slice(0, 7),
           end_month: formData.recurring_end_month || null,
+          monthly_due_day: Math.min(Math.max(parseInt(formData.recurring_monthly_due_day) || 5, 1), 31),
           fee_plan: formData.recurring_fee_plan || 'Monthly',
           auto_generate: formData.recurring_auto_generate,
           last_generated_month: null,
@@ -876,6 +878,7 @@ export default function StudentDetails() {
       recurring_start_month: recurringFees.start_month || new Date().toISOString().slice(0, 7),
       recurring_end_month: recurringFees.end_month || '',
       recurring_fee_plan: recurringFees.fee_plan || 'Monthly',
+      recurring_monthly_due_day: recurringFees.monthly_due_day || 5,
       recurring_auto_generate: recurringFees.auto_generate !== undefined ? recurringFees.auto_generate : true,
       // Initial Payment
       initial_payment_amount: initialPayment.amount || '',
@@ -947,6 +950,7 @@ export default function StudentDetails() {
       recurring_start_month: new Date().toISOString().slice(0, 7),
       recurring_end_month: '',
       recurring_fee_plan: 'Monthly',
+      recurring_monthly_due_day: 5,
       recurring_auto_generate: true,
       initial_payment_amount: '',
       initial_payment_date: new Date().toISOString().split('T')[0],
@@ -1569,7 +1573,8 @@ export default function StudentDetails() {
                           </p>
                           {student.recurring_fees.fee_plan && (
                             <span className="text-xs text-gray-500 ml-1">
-                              ({student.recurring_fees.fee_plan})
+                              ({student.recurring_fees.fee_plan}
+                              {student.recurring_fees.monthly_due_day ? `, due ${student.recurring_fees.monthly_due_day}${['1','21','31'].includes(String(student.recurring_fees.monthly_due_day)) ? 'st' : ['2','22'].includes(String(student.recurring_fees.monthly_due_day)) ? 'nd' : ['3','23'].includes(String(student.recurring_fees.monthly_due_day)) ? 'rd' : 'th'}` : ''})
                             </span>
                           )}
                         </div>
@@ -2494,6 +2499,23 @@ export default function StudentDetails() {
                             <option key={plan} value={plan}>{plan}</option>
                           ))}
                         </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Monthly Due (Day of Month) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="31"
+                          value={formData.recurring_monthly_due_day}
+                          onChange={(e) => setFormData({ ...formData, recurring_monthly_due_day: e.target.value })}
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          placeholder="e.g. 5"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Every recurring invoice is due on this day each month.</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">

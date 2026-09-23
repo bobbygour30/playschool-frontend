@@ -19,6 +19,16 @@ import {
   recordPayment,
 } from '../services/api';
 
+// Computes the actual due date for an invoice from a 'YYYY-MM' month and a
+// day-of-month (1-31), clamped to that month's last valid day.
+const computeDueDateFromDay = (monthStr, day) => {
+  const base = monthStr || new Date().toISOString().slice(0, 7);
+  const [y, m] = base.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const d = Math.min(Math.max(parseInt(day) || 5, 1), daysInMonth);
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+
 export default function Finance() {
   const [activeTab, setActiveTab] = useState('fees');
   const [loading, setLoading] = useState(true);
@@ -85,6 +95,7 @@ export default function Finance() {
     recurring_start_month: '',
     recurring_end_month: '',
     fee_plan: 'Monthly',
+    monthly_due_day: '5',
   });
 
   // Payment form data - simplified
@@ -375,6 +386,9 @@ export default function Finance() {
     
     try {
       if (modalType === 'fee') {
+        const feeMonth = formData.recurring_start_month || new Date().toISOString().slice(0, 7);
+        const computedDueDate = computeDueDateFromDay(feeMonth, formData.monthly_due_day);
+
         const feeData = {
           student_id: formData.student_id,
           admission_fee: parseFloat(formData.admission_fee) || 0,
@@ -382,16 +396,16 @@ export default function Finance() {
           transport_fee: parseFloat(formData.transport_fee) || 0,
           activity_fee: parseFloat(formData.activity_fee) || 0,
           total_amount: parseFloat(formData.total_amount) || 0,
-          due_date: formData.due_date,
+          due_date: computedDueDate,
           status: formData.status,
           payment_date: formData.payment_date || null,
           payment_method: formData.payment_method,
           transaction_id: formData.transaction_id,
           notes: formData.notes,
           fee_period: {
-            month: formData.due_date?.slice(0, 7) || new Date().toISOString().slice(0, 7),
-            start_date: formData.due_date ? new Date(formData.due_date) : new Date(),
-            end_date: formData.due_date ? new Date(new Date(formData.due_date).setMonth(new Date(formData.due_date).getMonth() + 1)) : new Date(),
+            month: feeMonth,
+            start_date: new Date(feeMonth + '-01'),
+            end_date: new Date(new Date(feeMonth + '-01').setMonth(new Date(feeMonth + '-01').getMonth() + 1) - 1),
           },
           fee_plan: formData.fee_plan || 'Monthly',
           recurring_fees: {
@@ -399,6 +413,7 @@ export default function Finance() {
             activity_fee: parseFloat(formData.recurring_activity_fee) || 0,
             transport_fee: parseFloat(formData.recurring_transport_fee) || 0,
             total_monthly: calculateRecurringTotal(),
+            monthly_due_day: parseInt(formData.monthly_due_day) || 5,
           },
           is_recurring: true,
         };
@@ -522,6 +537,7 @@ export default function Finance() {
         recurring_start_month: item.fee_period?.start_date?.split('T')[0] || '',
         recurring_end_month: item.fee_period?.end_date?.split('T')[0] || '',
         fee_plan: item.fee_plan || 'Monthly',
+        monthly_due_day: item.recurring_fees?.monthly_due_day?.toString() || '5',
       });
     } 
     else if (type === 'expense') {
@@ -564,6 +580,7 @@ export default function Finance() {
         recurring_start_month: '',
         recurring_end_month: '',
         fee_plan: '',
+        monthly_due_day: '5',
       });
     }
     else if (type === 'salary') {
@@ -608,6 +625,7 @@ export default function Finance() {
         recurring_start_month: '',
         recurring_end_month: '',
         fee_plan: '',
+        monthly_due_day: '5',
       });
     }
     
@@ -654,6 +672,7 @@ export default function Finance() {
       recurring_start_month: '',
       recurring_end_month: '',
       fee_plan: 'Monthly',
+      monthly_due_day: '5',
     });
     setEditingItem(null);
     setShowModal(false);
@@ -685,6 +704,10 @@ export default function Finance() {
       case 'Paid':
       case 'Completed':
         return { bg: 'bg-green-100', text: 'text-green-700', icon: <CheckCircle size={12} /> };
+      case 'Due':
+        return { bg: 'bg-orange-100', text: 'text-orange-700', icon: <Clock size={12} /> };
+      case 'Upcoming':
+        return { bg: 'bg-gray-100', text: 'text-gray-600', icon: <Clock size={12} /> };
       case 'Pending':
         return { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: <Clock size={12} /> };
       case 'Overdue':
@@ -809,6 +832,16 @@ export default function Finance() {
             </div>
           )}
         </div>
+        
+        {feeSummary.status === 'Upcoming' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-xs text-blue-700 flex items-start gap-2">
+            <Info size={14} className="flex-shrink-0 mt-0.5" />
+            <span>
+              This invoice isn't due until {feeSummary.due_date ? new Date(feeSummary.due_date).toLocaleDateString() : 'its due date'}.
+              You can still record an early payment for it.
+            </span>
+          </div>
+        )}
         
         <div className="pt-2 border-t border-gray-200">
           <p className="text-xs text-gray-500">
@@ -1041,11 +1074,10 @@ export default function Finance() {
                     </tr>
                   ) : (
                     filteredFees.map((fee) => {
-                      const statusStyle = getStatusColor(fee.status);
-                      const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
-                      const isOverdue = new Date(fee.due_date) < new Date() && fee.status !== 'Paid';
-                      const displayStatus = isOverdue && fee.status === 'Pending' ? 'Overdue' : fee.status;
+                      const displayStatus = fee.status || 'Upcoming';
                       const statusStyleFinal = getStatusColor(displayStatus);
+                      const realRemaining = fee.remaining_amount ?? Math.max(0, (fee.total_amount || 0) - (fee.paid_amount || 0));
+                      const balanceDue = Math.max(0, fee.balance_due ?? realRemaining);
                       
                       return (
                         <tr key={fee._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
@@ -1067,6 +1099,9 @@ export default function Finance() {
                             <div className="text-sm text-gray-600">
                               {fee.fee_period?.month || (fee.due_date ? new Date(fee.due_date).toISOString().slice(0, 7) : 'N/A')}
                             </div>
+                            <div className="text-xs text-gray-400">
+                              Due: {fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A'}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <span className="font-bold text-gray-900">₹{(fee.total_amount || 0).toLocaleString()}</span>
@@ -1076,8 +1111,8 @@ export default function Finance() {
                           </td>
                           <td className="px-6 py-4">
                             <div>
-                              <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                ₹{remaining.toLocaleString()}
+                              <span className={`font-semibold ${balanceDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                ₹{balanceDue.toLocaleString()}
                               </span>
                               {fee.overdue_amount > 0 && (
                                 <span className="text-xs text-red-500 block">Overdue: ₹{fee.overdue_amount.toLocaleString()}</span>
@@ -1102,9 +1137,8 @@ export default function Finance() {
                                     ...paymentFormData,
                                     student_id: fee.student_id?._id || fee.student_id || '',
                                     fee_id: fee._id,
-                                    amount_paid: remaining > 0 ? remaining : fee.total_amount || 0,
+                                    amount_paid: realRemaining > 0 ? realRemaining : fee.total_amount || 0,
                                   });
-                                  // Fetch fee summary
                                   fetchFeeSummary(fee._id);
                                   setShowPaymentModal(true);
                                 }} 
@@ -1581,14 +1615,17 @@ export default function Finance() {
                     >
                       <option value="">Select Fee Record</option>
                       {getStudentFees(paymentFormData.student_id).map((fee) => {
-                        const remaining = (fee.total_amount || 0) - (fee.paid_amount || 0);
-                        const isOverdue = new Date(fee.due_date) < new Date() && fee.status !== 'Paid';
+                        const realRemaining = fee.remaining_amount ?? Math.max(0, (fee.total_amount || 0) - (fee.paid_amount || 0));
+                        const status = fee.status || 'Upcoming';
+                        let statusLabel;
+                        if (status === 'Paid') statusLabel = 'Paid';
+                        else if (status === 'Upcoming') statusLabel = `Upcoming — due ${fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A'}`;
+                        else if (status === 'Overdue') statusLabel = `🔴 Overdue — ₹${realRemaining}`;
+                        else statusLabel = `Due: ₹${realRemaining}`;
+
                         return (
                           <option key={fee._id} value={fee._id}>
-                            {fee.invoice_number || (fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A')} - 
-                            ₹{fee.total_amount} 
-                            {remaining > 0 ? ` (Due: ₹${remaining})` : ' (Paid)'}
-                            {isOverdue && ' 🔴 Overdue'}
+                            {fee.invoice_number || (fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A')} - ₹{fee.total_amount} ({statusLabel})
                           </option>
                         );
                       })}
@@ -1949,6 +1986,20 @@ export default function Finance() {
                           </select>
                         </div>
                         <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Due (Day of Month) *</label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            max="31"
+                            value={formData.monthly_due_day}
+                            onChange={(e) => setFormData({ ...formData, monthly_due_day: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            placeholder="e.g. 5"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Recurring invoices are due on this day every month.</p>
+                        </div>
+                        <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Start Month</label>
                           <input 
                             type="month" 
@@ -2022,14 +2073,10 @@ export default function Finance() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Due Date *</label>
-                        <input 
-                          type="date" 
-                          required 
-                          value={formData.due_date} 
-                          onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Due Date (auto-calculated)</label>
+                        <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-700 font-semibold">
+                          {computeDueDateFromDay(formData.recurring_start_month, formData.monthly_due_day)}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
