@@ -413,6 +413,10 @@ export const deleteFacultyAuth = (id) => api.delete(`/faculty-auth/${id}`);
 export const updateFacultyAuthStatus = (id, status) => api.patch(`/faculty-auth/${id}/status`, { status });
 export const getFacultyAuthStats = () => api.get('/faculty-auth/stats/overview');
 
+// Returns Teachers from Staff who can still get a faculty account
+// (active, has at least one class+section assignment, not yet linked)
+export const getEligibleStaffForFaculty = () => api.get('/faculty-auth/eligible-staff');
+
 // ==================== LEAVE MANAGEMENT ====================
 const LEAVE_API_URL = 'https://golden-playschool-app-backend.vercel.app';
 

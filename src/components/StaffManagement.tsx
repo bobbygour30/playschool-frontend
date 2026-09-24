@@ -7,11 +7,69 @@ import {
   FileText, Upload, Eye, FolderOpen, DollarSign, Award,
   Shield, Heart, BookOpen, UserCheck, Star
 } from 'lucide-react';
-import { getStaff, createStaff, updateStaff, deleteStaff, getClasses } from '../services/api';
+import { getStaff, createStaff, updateStaff, deleteStaff } from '../services/api';
+
+// Must match the class ids used by students
+const CLASSES = [
+  { id: 'playgroup', name: 'Playgroup / Pre-Nursery' },
+  { id: 'nursery', name: 'Nursery' },
+  { id: 'lkg', name: 'LKG' },
+  { id: 'ukg', name: 'UKG' },
+];
+const SECTIONS = ['A', 'B', 'C', 'D'];
+const getClassName = (id) => CLASSES.find((c) => c.id === id)?.name || null;
+const formatAssignment = (a) => `${getClassName(a.class_id) || a.class_id} - ${a.section}`;
+
+const getEmptyForm = () => ({
+  // Personal Information
+  name: '',
+  email: '',
+  phone: '',
+  address: '',
+  date_of_birth: '',
+  gender: 'Male',
+  blood_group: '',
+
+  // Professional Information
+  role: 'Teacher',
+  designation: '',
+  department: 'Academics',
+  assignments: [],   // [{ class_id, section }]
+  date_of_joining: new Date().toISOString().split('T')[0],
+  qualification: '',
+  experience_years: '',
+  specialization: '',
+
+  // Salary & Banking
+  salary: '',
+  account_number: '',
+  ifsc_code: '',
+  bank_name: '',
+  pan_number: '',
+  uan_number: '',
+
+  // Emergency & Documents
+  emergency_contact_name: '',
+  emergency_contact_phone: '',
+  emergency_contact_relation: '',
+  police_verification: '',
+
+  // Status
+  status: 'Active',
+
+  // Documents
+  photo: null,
+  resume: null,
+  qualification_doc: null,
+  experience_doc: null,
+  aadhar_doc: null,
+  pan_doc: null,
+  police_verification_doc: null,
+  offer_letter: null,
+});
 
 export default function StaffManagement() {
   const [staff, setStaff] = useState([]);
-  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -19,53 +77,7 @@ export default function StaffManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [showDocs, setShowDocs] = useState(null);
-  const [formData, setFormData] = useState({
-    // Personal Information
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    date_of_birth: '',
-    gender: 'Male',
-    blood_group: '',
-    
-    // Professional Information
-    role: 'Teacher',
-    designation: '',
-    department: 'Academics',
-    assigned_class_id: '',
-    date_of_joining: new Date().toISOString().split('T')[0],
-    qualification: '',
-    experience_years: '',
-    specialization: '',
-    
-    // Salary & Banking
-    salary: '',
-    account_number: '',
-    ifsc_code: '',
-    bank_name: '',
-    pan_number: '',
-    uan_number: '',
-    
-    // Emergency & Documents
-    emergency_contact_name: '',
-    emergency_contact_phone: '',
-    emergency_contact_relation: '',
-    police_verification: '',
-    
-    // Status
-    status: 'Active',
-    
-    // Documents
-    photo: null,
-    resume: null,
-    qualification_doc: null,
-    experience_doc: null,
-    aadhar_doc: null,
-    pan_doc: null,
-    police_verification_doc: null,
-    offer_letter: null,
-  });
+  const [formData, setFormData] = useState(getEmptyForm());
 
   useEffect(() => {
     loadData();
@@ -74,12 +86,8 @@ export default function StaffManagement() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [staffRes, classesRes] = await Promise.all([
-        getStaff(),
-        getClasses(),
-      ]);
+      const staffRes = await getStaff();
       setStaff(staffRes.data || []);
-      setClasses(classesRes.data || []);
     } catch (error) {
       console.error('Error loading staff:', error);
       alert('Failed to load staff data. Please check your connection.');
@@ -93,66 +101,84 @@ export default function StaffManagement() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, [fieldName]: reader.result }));
+        setFormData((prev) => ({ ...prev, [fieldName]: reader.result }));
       };
       reader.readAsDataURL(file);
     }
   };
 
+  // ---------- assignments editor ----------
+  const addAssignment = () =>
+    setFormData((prev) => ({ ...prev, assignments: [...prev.assignments, { class_id: '', section: '' }] }));
+
+  const updateAssignment = (index, field, value) =>
+    setFormData((prev) => ({
+      ...prev,
+      assignments: prev.assignments.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
+    }));
+
+  const removeAssignment = (index) =>
+    setFormData((prev) => ({
+      ...prev,
+      assignments: prev.assignments.filter((_, i) => i !== index),
+    }));
+
+  // Problem with a row? (duplicate in this form, or another teacher already has that slot)
+  const getRowIssue = (row, index) => {
+    if (!row.class_id || !row.section) return null;
+    const firstIndex = formData.assignments.findIndex(
+      (r) => r.class_id === row.class_id && r.section === row.section
+    );
+    if (firstIndex !== index) return 'Already added above';
+    const other = staff.find(
+      (s) =>
+        s.role === 'Teacher' &&
+        s._id !== editingStaff?._id &&
+        s.assignments?.some((a) => a.class_id === row.class_id && a.section === row.section)
+    );
+    return other ? `${other.name} is already the teacher of this class and section` : null;
+  };
+
+  const hasAssignmentIssues =
+    formData.role === 'Teacher' && formData.assignments.some((row, i) => getRowIssue(row, i));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
+    const isTeacher = formData.role === 'Teacher';
+    if (isTeacher) {
+      if (formData.assignments.length === 0 || formData.assignments.some((r) => !r.class_id || !r.section)) {
+        alert('Please add at least one class and section, and complete every row.');
+        return;
+      }
+      if (hasAssignmentIssues) {
+        alert('Please fix the highlighted class/section assignments.');
+        return;
+      }
+    }
+
     try {
+      const {
+        emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+        photo, resume, qualification_doc, experience_doc,
+        aadhar_doc, pan_doc, police_verification_doc, offer_letter,
+        ...rest
+      } = formData;
+
       const staffData = {
-        // Personal Information
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        date_of_birth: formData.date_of_birth,
-        gender: formData.gender,
-        blood_group: formData.blood_group,
-        
-        // Professional Information
-        role: formData.role,
-        designation: formData.designation,
-        department: formData.department,
-        assigned_class_id: formData.assigned_class_id || null,
-        date_of_joining: formData.date_of_joining,
-        qualification: formData.qualification,
+        ...rest,
+        assignments: isTeacher ? formData.assignments : [],
         experience_years: parseFloat(formData.experience_years) || 0,
-        specialization: formData.specialization,
-        
-        // Salary & Banking
         salary: parseFloat(formData.salary) || 0,
-        account_number: formData.account_number,
-        ifsc_code: formData.ifsc_code,
-        bank_name: formData.bank_name,
-        pan_number: formData.pan_number,
-        uan_number: formData.uan_number,
-        
-        // Emergency & Documents
         emergency_contact: {
-          name: formData.emergency_contact_name,
-          phone: formData.emergency_contact_phone,
-          relation: formData.emergency_contact_relation
+          name: emergency_contact_name,
+          phone: emergency_contact_phone,
+          relation: emergency_contact_relation,
         },
-        police_verification: formData.police_verification,
-        
-        // Status
-        status: formData.status,
-        
-        // Documents
         documents: {
-          photo: formData.photo,
-          resume: formData.resume,
-          qualification_doc: formData.qualification_doc,
-          experience_doc: formData.experience_doc,
-          aadhar_doc: formData.aadhar_doc,
-          pan_doc: formData.pan_doc,
-          police_verification_doc: formData.police_verification_doc,
-          offer_letter: formData.offer_letter,
-        }
+          photo, resume, qualification_doc, experience_doc,
+          aadhar_doc, pan_doc, police_verification_doc, offer_letter,
+        },
       };
 
       if (editingStaff) {
@@ -167,8 +193,7 @@ export default function StaffManagement() {
       resetForm();
     } catch (error) {
       console.error('Error saving staff:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to save staff. Please try again.';
-      alert(errorMessage);
+      alert(error.response?.data?.message || 'Failed to save staff. Please try again.');
     }
   };
 
@@ -180,100 +205,65 @@ export default function StaffManagement() {
         alert('Staff deleted successfully!');
       } catch (error) {
         console.error('Error deleting staff:', error);
-        alert('Failed to delete staff. Please try again.');
+        alert(error.response?.data?.message || 'Failed to delete staff. Please try again.');
       }
     }
   };
 
-  const handleEdit = (staffMember) => {
-    setEditingStaff(staffMember);
+  const handleEdit = (m) => {
+    setEditingStaff(m);
     setFormData({
       // Personal Information
-      name: staffMember.name || '',
-      email: staffMember.email || '',
-      phone: staffMember.phone || '',
-      address: staffMember.address || '',
-      date_of_birth: staffMember.date_of_birth ? staffMember.date_of_birth.split('T')[0] : '',
-      gender: staffMember.gender || 'Male',
-      blood_group: staffMember.blood_group || '',
-      
+      name: m.name || '',
+      email: m.email || '',
+      phone: m.phone || '',
+      address: m.address || '',
+      date_of_birth: m.date_of_birth ? m.date_of_birth.split('T')[0] : '',
+      gender: m.gender || 'Male',
+      blood_group: m.blood_group || '',
+
       // Professional Information
-      role: staffMember.role || 'Teacher',
-      designation: staffMember.designation || '',
-      department: staffMember.department || 'Academics',
-      assigned_class_id: staffMember.assigned_class_id?._id || staffMember.assigned_class_id || '',
-      date_of_joining: staffMember.date_of_joining ? staffMember.date_of_joining.split('T')[0] : new Date().toISOString().split('T')[0],
-      qualification: staffMember.qualification || '',
-      experience_years: staffMember.experience_years?.toString() || '',
-      specialization: staffMember.specialization || '',
-      
+      role: m.role || 'Teacher',
+      designation: m.designation || '',
+      department: m.department || 'Academics',
+      assignments: (m.assignments || []).map((a) => ({ class_id: a.class_id, section: a.section })),
+      date_of_joining: m.date_of_joining ? m.date_of_joining.split('T')[0] : new Date().toISOString().split('T')[0],
+      qualification: m.qualification || '',
+      experience_years: m.experience_years?.toString() || '',
+      specialization: m.specialization || '',
+
       // Salary & Banking
-      salary: staffMember.salary?.toString() || '',
-      account_number: staffMember.account_number || '',
-      ifsc_code: staffMember.ifsc_code || '',
-      bank_name: staffMember.bank_name || '',
-      pan_number: staffMember.pan_number || '',
-      uan_number: staffMember.uan_number || '',
-      
+      salary: m.salary?.toString() || '',
+      account_number: m.account_number || '',
+      ifsc_code: m.ifsc_code || '',
+      bank_name: m.bank_name || '',
+      pan_number: m.pan_number || '',
+      uan_number: m.uan_number || '',
+
       // Emergency & Documents
-      emergency_contact_name: staffMember.emergency_contact?.name || '',
-      emergency_contact_phone: staffMember.emergency_contact?.phone || '',
-      emergency_contact_relation: staffMember.emergency_contact?.relation || '',
-      police_verification: staffMember.police_verification || '',
-      
+      emergency_contact_name: m.emergency_contact?.name || '',
+      emergency_contact_phone: m.emergency_contact?.phone || '',
+      emergency_contact_relation: m.emergency_contact?.relation || '',
+      police_verification: m.police_verification || '',
+
       // Status
-      status: staffMember.status || 'Active',
-      
+      status: m.status || 'Active',
+
       // Documents
-      photo: staffMember.documents?.photo || null,
-      resume: staffMember.documents?.resume || null,
-      qualification_doc: staffMember.documents?.qualification_doc || null,
-      experience_doc: staffMember.documents?.experience_doc || null,
-      aadhar_doc: staffMember.documents?.aadhar_doc || null,
-      pan_doc: staffMember.documents?.pan_doc || null,
-      police_verification_doc: staffMember.documents?.police_verification_doc || null,
-      offer_letter: staffMember.documents?.offer_letter || null,
+      photo: m.documents?.photo || null,
+      resume: m.documents?.resume || null,
+      qualification_doc: m.documents?.qualification_doc || null,
+      experience_doc: m.documents?.experience_doc || null,
+      aadhar_doc: m.documents?.aadhar_doc || null,
+      pan_doc: m.documents?.pan_doc || null,
+      police_verification_doc: m.documents?.police_verification_doc || null,
+      offer_letter: m.documents?.offer_letter || null,
     });
     setShowModal(true);
   };
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      date_of_birth: '',
-      gender: 'Male',
-      blood_group: '',
-      role: 'Teacher',
-      designation: '',
-      department: 'Academics',
-      assigned_class_id: '',
-      date_of_joining: new Date().toISOString().split('T')[0],
-      qualification: '',
-      experience_years: '',
-      specialization: '',
-      salary: '',
-      account_number: '',
-      ifsc_code: '',
-      bank_name: '',
-      pan_number: '',
-      uan_number: '',
-      emergency_contact_name: '',
-      emergency_contact_phone: '',
-      emergency_contact_relation: '',
-      police_verification: '',
-      status: 'Active',
-      photo: null,
-      resume: null,
-      qualification_doc: null,
-      experience_doc: null,
-      aadhar_doc: null,
-      pan_doc: null,
-      police_verification_doc: null,
-      offer_letter: null,
-    });
+    setFormData(getEmptyForm());
     setEditingStaff(null);
     setShowModal(false);
     setShowDocs(null);
@@ -578,13 +568,24 @@ export default function StaffManagement() {
                           <p className="text-xs text-gray-500">Experience</p>
                           <p className="font-medium text-gray-800">{member.experience_years || 0} years</p>
                         </div>
-                        {isTeacher && member.assigned_class_id && (
+                        {isTeacher && (
                           <div className="col-span-2">
-                            <p className="text-xs text-gray-500">Assigned Class</p>
-                            <p className="font-medium text-gray-800 flex items-center gap-1">
-                              <BookOpen size={12} />
-                              {member.assigned_class_id?.name || 'Not Assigned'}
-                            </p>
+                            <p className="text-xs text-gray-500 mb-1">Assigned Classes</p>
+                            {member.assignments?.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {member.assignments.map((a) => (
+                                  <span
+                                    key={`${a.class_id}-${a.section}`}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium"
+                                  >
+                                    <BookOpen size={10} />
+                                    {formatAssignment(a)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="font-medium text-gray-800">Not Assigned</p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -787,7 +788,14 @@ export default function StaffManagement() {
                       <select
                         required
                         value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        onChange={(e) => {
+                          const role = e.target.value;
+                          setFormData({
+                            ...formData,
+                            role,
+                            ...(role !== 'Teacher' ? { assignments: [] } : {}),
+                          });
+                        }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       >
                         <option value="Teacher">Teacher</option>
@@ -823,25 +831,6 @@ export default function StaffManagement() {
                         <option value="Kitchen">Kitchen</option>
                       </select>
                     </div>
-                    {formData.role === 'Teacher' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Assigned Class
-                        </label>
-                        <select
-                          value={formData.assigned_class_id}
-                          onChange={(e) => setFormData({ ...formData, assigned_class_id: e.target.value })}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        >
-                          <option value="">No Class Assigned</option>
-                          {classes.map((cls) => (
-                            <option key={cls._id} value={cls._id}>
-                              {cls.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Date of Joining *
@@ -854,6 +843,78 @@ export default function StaffManagement() {
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       />
                     </div>
+
+                    {/* Multi-row class + section editor (Teacher only) */}
+                    {formData.role === 'Teacher' && (
+                      <div className="md:col-span-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Assigned Classes &amp; Sections *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={addAssignment}
+                            className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                          >
+                            <Plus size={14} /> Add class &amp; section
+                          </button>
+                        </div>
+
+                        {formData.assignments.length === 0 && (
+                          <p className="text-xs text-orange-600 mb-2">
+                            Add at least one class and section for this teacher.
+                          </p>
+                        )}
+
+                        <div className="space-y-2">
+                          {formData.assignments.map((row, i) => {
+                            const issue = getRowIssue(row, i);
+                            return (
+                              <div key={i}>
+                                <div className="flex gap-2">
+                                  <select
+                                    required
+                                    value={row.class_id}
+                                    onChange={(e) => updateAssignment(i, 'class_id', e.target.value)}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                  >
+                                    <option value="">Select Class</option>
+                                    {CLASSES.map((cls) => (
+                                      <option key={cls.id} value={cls.id}>{cls.name}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    required
+                                    value={row.section}
+                                    onChange={(e) => updateAssignment(i, 'section', e.target.value)}
+                                    className="w-36 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                  >
+                                    <option value="">Section</option>
+                                    {SECTIONS.map((sec) => (
+                                      <option key={sec} value={sec}>Section {sec}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeAssignment(i)}
+                                    className="px-3 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100"
+                                    title="Remove"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                                {issue && (
+                                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                                    <AlertCircle size={12} /> {issue}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Highest Qualification *
@@ -1182,7 +1243,8 @@ export default function StaffManagement() {
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all"
+                    disabled={!!hasAssignmentIssues}
+                    className="px-6 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {editingStaff ? 'Update Staff' : 'Add Staff'}
                   </button>

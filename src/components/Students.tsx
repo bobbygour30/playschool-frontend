@@ -1,8 +1,8 @@
 // components/StudentDetails.jsx
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
+import {
+  Plus, Search, Edit, Trash2, X, Users, Mail, Phone,
   MapPin, Calendar, Bus, Heart, Star, Award, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, Upload, FileText,
   UserCheck, Briefcase, Baby, School, Truck, Eye, FolderOpen, BookOpen,
@@ -160,7 +160,7 @@ export default function StudentDetails() {
     gender: 'Male',
     blood_group: '',
     class_id: '',
-    section: 'A',
+    section: '',
     assigned_teacher_id: '',
     parent_name: '',
     parent_relationship: 'Mother',
@@ -287,19 +287,36 @@ export default function StudentDetails() {
   // Strips non-digits and caps length at 10 — used for parent_phone and emergency_contact
   const handleDigitInput = (value) => value.replace(/\D/g, '').slice(0, 10);
 
-  const handleClassChange = (classId) => {
-    setFormData(prev => ({ ...prev, class_id: classId }));
-    
-    const matchingTeacher = teachers.find(teacher => 
-      teacher.assigned_class_id && teacher.assigned_class_id._id === classId
-    );
-    
-    if (matchingTeacher) {
-      setFormData(prev => ({ ...prev, assigned_teacher_id: matchingTeacher._id }));
-    } else {
-      setFormData(prev => ({ ...prev, assigned_teacher_id: '' }));
-    }
+  // ==================== STAFF ↔ CLASS/SECTION LINK ====================
+  // Teacher in charge of a given class + section (from Staff Management)
+  const getTeacherFor = (classId, section) =>
+    teachers.find((t) =>
+      t.assignments?.some((a) => a.class_id === classId && a.section === section)
+    ) || null;
+
+  // Only sections that actually have an active teacher
+  const getSectionsForClass = (classId) =>
+    SECTIONS.filter((sec) => getTeacherFor(classId, sec));
+
+  const applyClassSection = (classId, section) => {
+    const teacher = getTeacherFor(classId, section);
+    setFormData((prev) => ({
+      ...prev,
+      class_id: classId,
+      section,
+      assigned_teacher_id: teacher?._id || '',
+    }));
   };
+
+  const handleClassChange = (classId) => {
+    const sections = getSectionsForClass(classId);
+    const nextSection = sections.includes(formData.section) ? formData.section : (sections[0] || '');
+    applyClassSection(classId, nextSection);
+  };
+
+  const handleSectionChange = (section) => applyClassSection(formData.class_id, section);
+
+  const selectedTeacher = getTeacherFor(formData.class_id, formData.section);
 
   // ==================== FEE STRUCTURE HANDLER ====================
   const handleFeeStructureChange = (structureKey) => {
@@ -407,6 +424,9 @@ export default function StudentDetails() {
 
     if (!formData.section) {
       errors.section = 'Section is required';
+      hasError = true;
+    } else if (formData.class_id && !getTeacherFor(formData.class_id, formData.section)) {
+      errors.section = 'No active teacher is assigned to this class & section. Assign one in Staff Management first.';
       hasError = true;
     }
 
@@ -762,12 +782,13 @@ export default function StudentDetails() {
     try {
       setIsPromoting(true);
       const res = await promoteAllStudents(promotionAcademicYear.trim());
-      const { promoted, graduated, skipped } = res.data.results;
+      const { promoted, graduated, skipped, noTeacher } = res.data.results;
       alert(
         `Promotion complete!\n\n` +
         `Promoted to next class: ${promoted}\n` +
         `Graduated: ${graduated}\n` +
-        `Skipped (no standard class assigned): ${skipped}`
+        `Skipped (no standard class assigned): ${skipped}\n` +
+        `Promoted but no teacher yet in new class/section: ${noTeacher || 0}`
       );
       await loadData();
       setShowPromoteModal(false);
@@ -832,8 +853,8 @@ export default function StudentDetails() {
       gender: student.gender || 'Male',
       blood_group: student.blood_group || '',
       class_id: student.class_id || '',
-      section: student.section || 'A',
-      assigned_teacher_id: student.assigned_teacher_id?._id || student.assigned_teacher_id || '',
+      section: student.section || '',
+      assigned_teacher_id: getTeacherFor(student.class_id, student.section)?._id || '',
       parent_name: student.parent_name || '',
       parent_relationship: student.parent_relationship || 'Mother',
       parent_email: student.parent_email || '',
@@ -906,7 +927,7 @@ export default function StudentDetails() {
       gender: 'Male',
       blood_group: '',
       class_id: '',
-      section: 'A',
+      section: '',
       assigned_teacher_id: '',
       parent_name: '',
       parent_relationship: 'Mother',
@@ -1062,11 +1083,15 @@ export default function StudentDetails() {
     return vendor ? vendor.vendor_name : 'N/A';
   };
 
-  const getTeacherForClass = (classId, section) => {
-    const teacher = teachers.find(t => 
-      t.assigned_class_id?._id === classId || t.assigned_class_id === classId
-    );
-    return teacher ? teacher.name : 'Not Assigned';
+  // Returns comma-separated list of all sections (with their teacher) for this class
+  const getTeachersForClass = (classId) => {
+    const list = SECTIONS
+      .map((sec) => {
+        const t = getTeacherFor(classId, sec);
+        return t ? `${sec}: ${t.name}` : null;
+      })
+      .filter(Boolean);
+    return list.length ? list.join(', ') : 'Not Assigned';
   };
 
   const getTotalFee = (student) => {
@@ -1449,7 +1474,7 @@ export default function StudentDetails() {
                     {filteredClassStudents.length} Students
                   </span>
                   <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                    Teacher: {getTeacherForClass(classSection.id, 'A')}
+                    Teacher: {getTeachersForClass(classSection.id)}
                   </span>
                 </div>
               </div>
@@ -1898,11 +1923,14 @@ export default function StudentDetails() {
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Select Class</option>
-                        {CLASSES.map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            {cls.name} ({cls.ageGroup})
-                          </option>
-                        ))}
+                        {CLASSES.map((cls) => {
+                          const hasTeacher = getSectionsForClass(cls.id).length > 0;
+                          return (
+                            <option key={cls.id} value={cls.id} disabled={!hasTeacher}>
+                              {cls.name} ({cls.ageGroup}){!hasTeacher ? ' - no teacher assigned' : ''}
+                            </option>
+                          );
+                        })}
                       </select>,
                       true
                     )}
@@ -1912,12 +1940,17 @@ export default function StudentDetails() {
                       <select
                         required
                         value={formData.section}
-                        onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                        disabled={isSubmitting}
+                        onChange={(e) => handleSectionChange(e.target.value)}
+                        disabled={isSubmitting || !formData.class_id}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
-                        {SECTIONS.map(section => (
-                          <option key={section} value={section}>Section {section}</option>
+                        <option value="">
+                          {formData.class_id ? 'Select Section' : 'Select a class first'}
+                        </option>
+                        {getSectionsForClass(formData.class_id).map((sec) => (
+                          <option key={sec} value={sec}>
+                            Section {sec} - {getTeacherFor(formData.class_id, sec)?.name}
+                          </option>
                         ))}
                       </select>,
                       true
@@ -1925,36 +1958,22 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Staff Assignment */}
+                {/* Staff Assignment (auto, from Staff Management) */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <UserCheck size={18} className="text-purple-600 flex-shrink-0" />
-                    Staff Assignment
+                    Class Teacher
                   </h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Assigned Teacher
-                    </label>
-                    <select
-                      value={formData.assigned_teacher_id}
-                      onChange={(e) => setFormData({ ...formData, assigned_teacher_id: e.target.value })}
-                      disabled={isSubmitting}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">Auto-assigned based on class</option>
-                      {teachers.map((teacher) => (
-                        <option key={teacher._id} value={teacher._id}>
-                          {teacher.name} - {teacher.designation} 
-                          {teacher.assigned_class_id?.name ? ` (${teacher.assigned_class_id.name})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {formData.class_id && !formData.assigned_teacher_id && (
-                      <p className="text-xs text-orange-500 mt-1">
-                        ⚠️ No teacher assigned to this class. Please select a teacher manually.
-                      </p>
-                    )}
+                  <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-700">
+                    {selectedTeacher
+                      ? `${selectedTeacher.name}${selectedTeacher.designation ? ' - ' + selectedTeacher.designation : ''}`
+                      : 'Auto-assigned when you select a class and section'}
                   </div>
+                  {formData.class_id && getSectionsForClass(formData.class_id).length === 0 && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      ⚠️ No teacher is assigned to this class. Create/assign a teacher in Staff Management first.
+                    </p>
+                  )}
                 </div>
 
                 {/* Parent Information */}

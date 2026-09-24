@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Plus, Search, Edit, Trash2, X, Users, Mail, Phone, 
+import {
+  Plus, Search, Edit, Trash2, X, Users, Mail, Phone,
   MapPin, Calendar, User, Lock, Eye, EyeOff, Filter, Download,
   UserPlus, GraduationCap, TrendingUp, AlertCircle, CheckCircle,
   Clock, Award, Star, BookOpen, Briefcase, Building, UserCheck,
-  School, Baby, GraduationHat, BookMarked, ChevronRight
+  School, Baby, BookMarked, ChevronRight
 } from 'lucide-react';
-import { getFacultyAuth, createFacultyAuth, updateFacultyAuth, deleteFacultyAuth, updateFacultyAuthStatus, getFacultyAuthStats, getStudents } from '../services/api';
+import {
+  getFacultyAuth,
+  createFacultyAuth,
+  updateFacultyAuth,
+  deleteFacultyAuth,
+  updateFacultyAuthStatus,
+  getFacultyAuthStats,
+  getStudents,
+  getEligibleStaffForFaculty,
+} from '../services/api';
 
 const CLASSES = [
   { id: 'playgroup', name: 'Playgroup', ageGroup: '2 - 3 years', icon: Baby },
@@ -18,9 +27,33 @@ const CLASSES = [
 
 const SECTIONS = ['A', 'B', 'C', 'D'];
 
+// Works for new records (assignments[]) and legacy ones (single class/section)
+const getAssignments = (f) =>
+  f?.assignments?.length
+    ? f.assignments
+    : f?.assigned_class
+    ? [{ class_id: f.assigned_class, section: f.assigned_section }]
+    : [];
+
+const formatAssignment = (a) => {
+  const c = CLASSES.find((x) => x.id === a.class_id);
+  return `${c ? c.name : a.class_id} - ${a.section}`;
+};
+
+const getEmptyForm = () => ({
+  staff_id: '',
+  employee_id: '',
+  username: '',
+  password: '',
+  subject: '',
+  status: 'Active',
+  notes: '',
+});
+
 export default function FacultyRegistration() {
   const [faculty, setFaculty] = useState([]);
   const [students, setStudents] = useState([]);
+  const [eligibleStaff, setEligibleStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -35,24 +68,7 @@ export default function FacultyRegistration() {
     inactive: 0,
     onLeave: 0
   });
-  const [formData, setFormData] = useState({
-    faculty_name: '',
-    mobile_number: '',
-    email: '',
-    qualification: '',
-    address: '',
-    assigned_class: '',
-    assigned_section: 'A',
-    subject: '',
-    employee_id: '',
-    joining_date: new Date().toISOString().split('T')[0],
-    username: '',
-    password: '',
-    status: 'Active',
-    experience_years: '',
-    specialization: '',
-    notes: '',
-  });
+  const [formData, setFormData] = useState(getEmptyForm());
 
   useEffect(() => {
     loadData();
@@ -61,18 +77,21 @@ export default function FacultyRegistration() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [facultyRes, statsRes, studentsRes] = await Promise.all([
+      const [facultyRes, statsRes, studentsRes, eligibleRes] = await Promise.all([
         getFacultyAuth(),
         getFacultyAuthStats(),
         getStudents(),
+        getEligibleStaffForFaculty(),
       ]);
       setFaculty(facultyRes.data || []);
       setStats(statsRes.data || { total: 0, active: 0, inactive: 0, onLeave: 0 });
       setStudents(studentsRes.data || []);
-      
+      setEligibleStaff(eligibleRes.data || []);
+
       // Debug log to check data
       console.log('Faculty Data:', facultyRes.data);
       console.log('Students Data:', studentsRes.data);
+      console.log('Eligible Staff:', eligibleRes.data);
     } catch (error) {
       console.error('Error loading faculty:', error);
       alert('Failed to load faculty data');
@@ -84,11 +103,22 @@ export default function FacultyRegistration() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Only account-level data is sent; identity/class data comes from Staff on the server
+      const payload = {
+        staff_id: formData.staff_id,
+        employee_id: formData.employee_id,
+        username: formData.username,
+        subject: formData.subject,
+        status: formData.status,
+        notes: formData.notes,
+        ...(formData.password ? { password: formData.password } : {}),
+      };
+
       if (editingFaculty) {
-        await updateFacultyAuth(editingFaculty._id, formData);
+        await updateFacultyAuth(editingFaculty._id, payload);
         alert('Faculty updated successfully!');
       } else {
-        await createFacultyAuth(formData);
+        await createFacultyAuth(payload);
         alert('Faculty registered successfully!');
       }
       await loadData();
@@ -126,21 +156,12 @@ export default function FacultyRegistration() {
   const handleEdit = (facultyMember) => {
     setEditingFaculty(facultyMember);
     setFormData({
-      faculty_name: facultyMember.faculty_name || '',
-      mobile_number: facultyMember.mobile_number || '',
-      email: facultyMember.email || '',
-      qualification: facultyMember.qualification || '',
-      address: facultyMember.address || '',
-      assigned_class: facultyMember.assigned_class || '',
-      assigned_section: facultyMember.assigned_section || 'A',
-      subject: facultyMember.subject || '',
+      staff_id: facultyMember.staff_id?._id || facultyMember.staff_id || '',
       employee_id: facultyMember.employee_id || '',
-      joining_date: facultyMember.joining_date ? facultyMember.joining_date.split('T')[0] : new Date().toISOString().split('T')[0],
       username: facultyMember.username || '',
       password: '',
+      subject: facultyMember.subject || '',
       status: facultyMember.status || 'Active',
-      experience_years: facultyMember.experience_years?.toString() || '',
-      specialization: facultyMember.specialization || '',
       notes: facultyMember.notes || '',
     });
     setShowModal(true);
@@ -151,54 +172,25 @@ export default function FacultyRegistration() {
     setShowStudentsModal(true);
   };
 
-  // FIXED: Get students by class and section (not by teacher ID)
+  // Match students against the faculty's full assignments list
+  const matchesFaculty = (student, facultyMember) =>
+    getAssignments(facultyMember).some(
+      (a) => a.class_id === student.class_id && a.section === student.section
+    );
+
   const getStudentsByFaculty = () => {
     if (!selectedFaculty) return [];
-    
-    // Match students based on class_id and section
-    const matchedStudents = students.filter(student => 
-      student.class_id === selectedFaculty.assigned_class && 
-      student.section === selectedFaculty.assigned_section
-    );
-    
-    console.log('Selected Faculty:', selectedFaculty.faculty_name, selectedFaculty.assigned_class, selectedFaculty.assigned_section);
-    console.log('Matched Students:', matchedStudents.length);
-    
-    return matchedStudents;
+    return students.filter((s) => matchesFaculty(s, selectedFaculty));
   };
 
-  // FIXED: Get student count for each faculty card
-  const getStudentCountForFaculty = (facultyMember) => {
-    // Count students that match this faculty's class and section
-    const count = students.filter(student => 
-      student.class_id === facultyMember.assigned_class && 
-      student.section === facultyMember.assigned_section
-    ).length;
-    
-    return count;
-  };
+  const getStudentCountForFaculty = (facultyMember) =>
+    students.filter((s) => matchesFaculty(s, facultyMember)).length;
 
   const resetForm = () => {
-    setFormData({
-      faculty_name: '',
-      mobile_number: '',
-      email: '',
-      qualification: '',
-      address: '',
-      assigned_class: '',
-      assigned_section: 'A',
-      subject: '',
-      employee_id: '',
-      joining_date: new Date().toISOString().split('T')[0],
-      username: '',
-      password: '',
-      status: 'Active',
-      experience_years: '',
-      specialization: '',
-      notes: '',
-    });
+    setFormData(getEmptyForm());
     setEditingFaculty(null);
     setShowModal(false);
+    setShowPassword(false);
   };
 
   const getFilteredFaculty = () => {
@@ -239,6 +231,26 @@ export default function FacultyRegistration() {
 
   const filteredFaculty = getFilteredFaculty();
 
+  // Read-only "linked staff" preview shown in the modal
+  const selectedStaff = eligibleStaff.find((s) => s._id === formData.staff_id);
+  const staffPreview = editingFaculty
+    ? {
+        name: editingFaculty.faculty_name,
+        email: editingFaculty.email,
+        phone: editingFaculty.mobile_number,
+        qualification: editingFaculty.qualification,
+        assignments: getAssignments(editingFaculty),
+      }
+    : selectedStaff
+    ? {
+        name: selectedStaff.name,
+        email: selectedStaff.email,
+        phone: selectedStaff.phone,
+        qualification: selectedStaff.qualification,
+        assignments: selectedStaff.assignments || [],
+      }
+    : null;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-6">
@@ -265,16 +277,24 @@ export default function FacultyRegistration() {
                 Manage faculty accounts, class assignments, and student roster
               </p>
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="group relative px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105"
-            >
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
-              <div className="flex items-center gap-2 relative">
-                <UserPlus size={20} />
-                <span className="font-semibold">Register Faculty</span>
-              </div>
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={() => setShowModal(true)}
+                disabled={eligibleStaff.length === 0}
+                className="group relative px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              >
+                <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 rounded-xl transition-opacity"></div>
+                <div className="flex items-center gap-2 relative">
+                  <UserPlus size={20} />
+                  <span className="font-semibold">Register Faculty</span>
+                </div>
+              </button>
+              {eligibleStaff.length === 0 && (
+                <p className="text-xs text-orange-600">
+                  Add a Teacher (with class &amp; section) in Staff Management first
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -363,10 +383,9 @@ export default function FacultyRegistration() {
             </div>
           ) : (
             filteredFaculty.map((facultyMember) => {
-              const ClassIcon = getClassIcon(facultyMember.assigned_class);
-              // FIXED: Use the new function to get student count
               const studentCount = getStudentCountForFaculty(facultyMember);
-              
+              const assignments = getAssignments(facultyMember);
+
               return (
                 <div key={facultyMember._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
                   {/* Faculty Header */}
@@ -381,7 +400,7 @@ export default function FacultyRegistration() {
                           <p className="text-xs text-white/80 flex items-center gap-2">
                             <Briefcase size={10} /> {facultyMember.employee_id}
                             <span className={`px-1.5 py-0.5 rounded text-xs ${
-                              facultyMember.status === 'Active' ? 'bg-green-600' : 
+                              facultyMember.status === 'Active' ? 'bg-green-600' :
                               facultyMember.status === 'On Leave' ? 'bg-yellow-600' : 'bg-gray-600'
                             }`}>
                               {facultyMember.status}
@@ -395,14 +414,24 @@ export default function FacultyRegistration() {
                   {/* Faculty Details */}
                   <div className="p-4 space-y-3">
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-2">
-                        <p className="text-xs text-gray-500">Assigned Class</p>
-                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                          <ClassIcon size={12} />
-                          {getClassName(facultyMember.assigned_class)} - {facultyMember.assigned_section}
-                        </p>
+                      <div className="bg-gray-50 rounded-lg p-2 col-span-2">
+                        <p className="text-xs text-gray-500 mb-1">Assigned Classes</p>
+                        <div className="flex flex-wrap gap-1">
+                          {assignments.length > 0 ? (
+                            assignments.map((a) => (
+                              <span
+                                key={`${a.class_id}-${a.section}`}
+                                className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium"
+                              >
+                                {formatAssignment(a)}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-500">Not Assigned</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-2">
+                      <div className="bg-gray-50 rounded-lg p-2 col-span-2">
                         <p className="text-xs text-gray-500">Subject</p>
                         <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
                           <BookMarked size={12} />
@@ -478,69 +507,90 @@ export default function FacultyRegistration() {
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
-                  {editingFaculty ? 'Edit Faculty' : 'Register New Faculty'}
+                  {editingFaculty ? 'Edit Faculty Account' : 'Register Faculty Account'}
                 </h2>
                 <button onClick={resetForm} className="text-white hover:bg-white/20 rounded-lg p-1">
                   <X size={24} />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                {/* Step 1: pick an existing staff member */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Staff Member (Teacher) *
+                  </label>
+                  <select
+                    required
+                    disabled={!!editingFaculty}
+                    value={formData.staff_id}
+                    onChange={(e) => {
+                      const s = eligibleStaff.find((x) => x._id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        staff_id: e.target.value,
+                        subject: s?.specialization || '',
+                      });
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                  >
+                    {editingFaculty ? (
+                      <option value={formData.staff_id}>{editingFaculty.faculty_name}</option>
+                    ) : (
+                      <>
+                        <option value="">Select a teacher from Staff Management</option>
+                        {eligibleStaff.map((s) => (
+                          <option key={s._id} value={s._id}>
+                            {s.name} - {(s.assignments || []).map(formatAssignment).join(', ')}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  {!editingFaculty && eligibleStaff.length === 0 && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      No teachers available. Create a Teacher with a class and section in Staff Management first.
+                    </p>
+                  )}
+                </div>
+
+                {/* Read-only details copied from Staff */}
+                {staffPreview && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-green-700 mb-3">
+                      Details from Staff Management (edit them there)
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div><p className="text-xs text-gray-500">Name</p><p className="font-medium text-gray-800">{staffPreview.name}</p></div>
+                      <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-800">{staffPreview.email}</p></div>
+                      <div><p className="text-xs text-gray-500">Mobile</p><p className="font-medium text-gray-800">{staffPreview.phone}</p></div>
+                      <div><p className="text-xs text-gray-500">Qualification</p><p className="font-medium text-gray-800">{staffPreview.qualification}</p></div>
+                      <div className="md:col-span-2">
+                        <p className="text-xs text-gray-500 mb-1">Assigned Classes</p>
+                        <div className="flex flex-wrap gap-1">
+                          {staffPreview.assignments.map((a) => (
+                            <span
+                              key={`${a.class_id}-${a.section}`}
+                              className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium"
+                            >
+                              {formatAssignment(a)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: account details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Faculty Name *</label>
-                    <input type="text" required value={formData.faculty_name} onChange={(e) => setFormData({ ...formData, faculty_name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number *</label>
-                    <input type="tel" required value={formData.mobile_number} onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email ID *</label>
-                    <input type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Qualification *</label>
-                    <input type="text" required value={formData.qualification} onChange={(e) => setFormData({ ...formData, qualification: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
-                    <textarea required value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Class *</label>
-                    <select required value={formData.assigned_class} onChange={(e) => setFormData({ ...formData, assigned_class: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl">
-                      <option value="">Select Class</option>
-                      {CLASSES.map(cls => (
-                        <option key={cls.id} value={cls.id}>{cls.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Section</label>
-                    <select value={formData.assigned_section} onChange={(e) => setFormData({ ...formData, assigned_section: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl">
-                      {SECTIONS.map(sec => <option key={sec} value={sec}>{sec}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                    <input type="text" value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Employee ID *</label>
                     <input type="text" required value={formData.employee_id} onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Joining Date *</label>
-                    <input type="date" required value={formData.joining_date} onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Experience (Years)</label>
-                    <input type="number" step="0.5" value={formData.experience_years} onChange={(e) => setFormData({ ...formData, experience_years: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Specialization</label>
-                    <input type="text" value={formData.specialization} onChange={(e) => setFormData({ ...formData, specialization: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                    <input type="text" value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
@@ -549,7 +599,14 @@ export default function FacultyRegistration() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Password {!editingFaculty && '*'}</label>
                     <div className="relative">
-                      <input type={showPassword ? 'text' : 'password'} required={!editingFaculty} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-xl pr-10" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required={!editingFaculty}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        placeholder={editingFaculty ? 'Leave blank to keep current' : ''}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl pr-10"
+                      />
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2">
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
@@ -589,7 +646,7 @@ export default function FacultyRegistration() {
                 <div>
                   <h2 className="text-xl font-bold text-white">Students of {selectedFaculty.faculty_name}</h2>
                   <p className="text-white/80 text-sm mt-1">
-                    {getClassName(selectedFaculty.assigned_class)} - Section {selectedFaculty.assigned_section}
+                    {getAssignments(selectedFaculty).map(formatAssignment).join(' • ')}
                   </p>
                 </div>
                 <button onClick={() => setShowStudentsModal(false)} className="text-white hover:bg-white/20 rounded-lg p-1">
@@ -614,7 +671,8 @@ export default function FacultyRegistration() {
                           <div>
                             <p className="font-semibold text-gray-800">{student.name}</p>
                             <p className="text-xs text-gray-500">
-                              Roll No: {student.rollNumber} | Section {student.section || 'A'}
+                              {formatAssignment({ class_id: student.class_id, section: student.section || 'A' })}
+                              {student.rollNumber ? ` | Roll No: ${student.rollNumber}` : ''}
                             </p>
                           </div>
                         </div>
