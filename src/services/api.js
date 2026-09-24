@@ -591,4 +591,50 @@ export const recordPayment = (paymentData) =>
 export const getPaymentHistory = (feeId) =>
   api.get(`/finance/fees/${feeId}/payments`);
 
+
+// ==================== ENQUIRIES (ADMISSION LEADS) ====================
+
+// List enquiries with optional filters. Pass e.g.
+// { status, source, class_interested, overdue_only, search, page, limit }
+export const getEnquiries = (params) =>
+  api.get('/enquiries', { params });
+
+// Single enquiry by id (populates converted_student_id if present)
+export const getEnquiry = (id) =>
+  api.get(`/enquiries/${id}`);
+
+// Create a new enquiry. Required fields on the server:
+// student_name, parent_name, parent_phone (10 digits), knowledge_source.
+export const createEnquiry = (data) =>
+  api.post('/enquiries', data);
+
+// Full update of an enquiry (used by the Edit modal).
+export const updateEnquiry = (id, data) =>
+  api.put(`/enquiries/${id}`, data);
+
+// Delete an enquiry.
+export const deleteEnquiry = (id) =>
+  api.delete(`/enquiries/${id}`);
+
+// Dashboard stats: total / per-status / overdue follow-ups /
+// this-month new & converted / conversion rate.
+export const getEnquiryStats = () =>
+  api.get('/enquiries/stats/overview');
+
+// Allowed enum values (statuses + knowledge sources) so the frontend
+// dropdowns stay in sync with the model if the server list changes.
+export const getEnquiryOptions = () =>
+  api.get('/enquiries/meta/options');
+
+// Append a follow-up note to an enquiry. Payload:
+// { note, status?, next_follow_up_date?, recorded_by? }
+// Server auto-stamps last_follow_up_date and updates status/next date.
+export const recordFollowUp = (enquiryId, payload) =>
+  api.post(`/enquiries/${enquiryId}/follow-up`, payload);
+
+// Mark an enquiry as Converted. Optionally pass { student_id, note } to
+// link it to an already-created student record.
+export const convertEnquiry = (enquiryId, payload = {}) =>
+  api.post(`/enquiries/${enquiryId}/convert`, payload);
+
 export default api;
