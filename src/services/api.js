@@ -669,4 +669,25 @@ export const deleteLunchMenuDay = (day, classId) =>
 export const toggleLunchMenuDayStatus = (day, isActive, classId) =>
   api.patch(`/lunch-menu/${day}/status`, { is_active: isActive, class_id: classId });
 
+
+// Notifications
+export const notificationApi = {
+  getNotifications: (params) => api.get('/notifications', { params }),
+  getUnreadCount: (audience = 'admin') => api.get('/notifications/unread-count', { params: { audience } }),
+  markRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllRead: (audience = 'admin') => api.put('/notifications/read-all', { audience }),
+  deleteNotification: (id) => api.delete(`/notifications/${id}`),
+  scanLeavesToday: () => api.post('/notifications/scan-leaves-today'),
+};
+
+// Achievements
+export const achievementApi = {
+  getAll: (params) => api.get('/achievements', { params }),
+  getForStudent: (studentId) => api.get(`/achievements/student/${studentId}`),
+  getOptions: () => api.get('/achievements/meta/options'),
+  create: (data) => api.post('/achievements', data),
+  update: (id, data) => api.put(`/achievements/${id}`, data),
+  remove: (id) => api.delete(`/achievements/${id}`),
+};
+
 export default api;

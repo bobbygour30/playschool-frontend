@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { 
   Users, GraduationCap, Phone, Bus, LayoutDashboard, Menu, X, 
-  Sparkles, ChevronRight, ChevronLeft, LogOut, Settings, Bell, User,
-  TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
+  Sparkles, ChevronRight, ChevronLeft, LogOut, Settings, User,
+  TrendingUp, Award, Trophy, Calendar, Clock, BookOpen, FileText, 
   Truck, Briefcase, DollarSign, Heart,
   BookMarked, CalendarDays, MessageSquarePlus, UtensilsCrossed
 } from 'lucide-react';
@@ -19,9 +19,11 @@ import FacultyRegistration from './FacultyRegistration';
 import LeaveManagement from './LeaveManagement';
 import ClassAssignment from './ClassAssignment';
 import HolidayLeaveManagement from './HolidayLeaveManagement';
+import StudentAchievementsPage from './StudentAchievementsPage';
+import NotificationBell from './NotificationBell';
 import Login from './Login';
 
-type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment' | 'holidayLeave' | 'enquiries' | 'lunchMenu';
+type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment' | 'holidayLeave' | 'enquiries' | 'lunchMenu' | 'achievements';
 
 // Hardcoded credentials
 const VALID_CREDENTIALS = {
@@ -98,6 +100,7 @@ export default function Dashboard() {
   const navigation = [
   { id: 'overview' as Page, name: 'Dashboard', icon: LayoutDashboard, color: 'from-blue-500 to-cyan-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
   { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
+  { id: 'achievements' as Page, name: 'Achievement Chain', icon: Trophy, color: 'from-amber-500 to-orange-600', bgColor: 'bg-amber-50', textColor: 'text-amber-600' },
   { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
   { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
   { id: 'enquiries' as Page, name: 'Admission Enquiries', icon: MessageSquarePlus, color: 'from-orange-500 to-amber-600', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
@@ -117,6 +120,8 @@ export default function Dashboard() {
         return <Overview onNavigate={handleNavigate} />;
       case 'studentDetails':
         return <StudentDetails />;
+      case 'achievements':
+        return <StudentAchievementsPage />;
       case 'academics':
         return <Academics />;
       case 'vendor':
@@ -420,6 +425,9 @@ export default function Dashboard() {
                     <span className="text-sm text-gray-600 font-medium">{formatTime()}</span>
                   </div>
                 </div>
+
+                {/* Notifications */}
+                <NotificationBell audience="admin" />
               </div>
             </div>
           </div>
