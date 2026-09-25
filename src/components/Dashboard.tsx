@@ -4,14 +4,15 @@ import {
   Sparkles, ChevronRight, ChevronLeft, LogOut, Settings, Bell, User,
   TrendingUp, Award, Calendar, Clock, BookOpen, FileText, 
   Truck, Briefcase, DollarSign, Heart,
-  BookMarked, CalendarDays,MessageSquarePlus
+  BookMarked, CalendarDays, MessageSquarePlus, UtensilsCrossed
 } from 'lucide-react';
 import Overview from './Overview';
 import StudentDetails from './Students';
 import Academics from './Academics';
 import VendorManagement from './VendorManagement';
 import StaffManagement from './StaffManagement';
-import Enquiries from './Enquiries';   // <-- ADD THIS
+import Enquiries from './Enquiries';
+import LunchMenu from './LunchMenu';
 import Finance from './Finance';
 import ParentRegistration from './ParentRegistration';
 import FacultyRegistration from './FacultyRegistration';
@@ -20,7 +21,7 @@ import ClassAssignment from './ClassAssignment';
 import HolidayLeaveManagement from './HolidayLeaveManagement';
 import Login from './Login';
 
-type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment' | 'holidayLeave' | 'enquiries';
+type Page = 'overview' | 'studentDetails' | 'academics' | 'vendor' | 'staff' | 'finance' | 'parents' | 'faculty' | 'leaves' | 'classAssignment' | 'holidayLeave' | 'enquiries' | 'lunchMenu';
 
 // Hardcoded credentials
 const VALID_CREDENTIALS = {
@@ -99,11 +100,12 @@ export default function Dashboard() {
   { id: 'studentDetails' as Page, name: 'Student Details', icon: Users, color: 'from-purple-500 to-pink-500', bgColor: 'bg-purple-50', textColor: 'text-purple-600' },
   { id: 'academics' as Page, name: 'Academics', icon: BookOpen, color: 'from-green-500 to-emerald-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
   { id: 'parents' as Page, name: 'Parents', icon: Heart, color: 'from-blue-500 to-indigo-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
-  { id: 'enquiries' as Page, name: 'Admission Enquiries', icon: MessageSquarePlus, color: 'from-orange-500 to-amber-600', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },  // <-- ADD THIS
+  { id: 'enquiries' as Page, name: 'Admission Enquiries', icon: MessageSquarePlus, color: 'from-orange-500 to-amber-600', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
   { id: 'faculty' as Page, name: 'Faculty', icon: GraduationCap, color: 'from-green-500 to-teal-500', bgColor: 'bg-green-50', textColor: 'text-green-600' },
   { id: 'classAssignment' as Page, name: 'Class Assignment', icon: BookMarked, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
   { id: 'holidayLeave' as Page, name: 'Holiday & Leave', icon: CalendarDays, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
   { id: 'leaves' as Page, name: 'Leave Management', icon: Calendar, color: 'from-blue-500 to-purple-500', bgColor: 'bg-blue-50', textColor: 'text-blue-600' },
+  { id: 'lunchMenu' as Page, name: 'Lunch Menu', icon: UtensilsCrossed, color: 'from-rose-500 to-orange-500', bgColor: 'bg-rose-50', textColor: 'text-rose-600' },
   { id: 'vendor' as Page, name: 'Vendor Management', icon: Truck, color: 'from-orange-500 to-red-500', bgColor: 'bg-orange-50', textColor: 'text-orange-600' },
   { id: 'staff' as Page, name: 'Staff Management', icon: Briefcase, color: 'from-indigo-500 to-purple-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-600' },
   { id: 'finance' as Page, name: 'Finance', icon: DollarSign, color: 'from-cyan-500 to-teal-500', bgColor: 'bg-cyan-50', textColor: 'text-cyan-600' },
@@ -125,8 +127,8 @@ export default function Dashboard() {
         return <Finance />;
       case 'parents':
         return <ParentRegistration />;
-        case 'enquiries':            // <-- ADD THIS
-      return <Enquiries />;
+      case 'enquiries':
+        return <Enquiries />;
       case 'classAssignment':
         return <ClassAssignment />;
       case 'faculty':
@@ -135,6 +137,8 @@ export default function Dashboard() {
         return <LeaveManagement />;
       case 'holidayLeave':
         return <HolidayLeaveManagement />;
+      case 'lunchMenu':
+        return <LunchMenu />;
       default:
         return <Overview onNavigate={handleNavigate} />;
     }

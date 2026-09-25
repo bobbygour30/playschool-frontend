@@ -641,4 +641,32 @@ export const recordFollowUp = (enquiryId, payload) =>
 export const convertEnquiry = (enquiryId, payload = {}) =>
   api.post(`/enquiries/${enquiryId}/convert`, payload);
 
+// ==================== LUNCH MENU ====================
+export const getLunchMenuWeek = (classId) =>
+  api.get('/lunch-menu', { params: classId ? { class_id: classId } : {} });
+
+export const getLunchMenuDay = (day, classId) =>
+  api.get(`/lunch-menu/${day}`, { params: classId ? { class_id: classId } : {} });
+
+export const getCurrentMeal = (classId) =>
+  api.get('/lunch-menu/current', { params: classId ? { class_id: classId } : {} });
+
+// Upserts (creates or replaces) a full day's meal list.
+// data: { day, class_id?, meals: [{ meal_label, meal_name, time, items, description }], notes? }
+export const saveLunchMenuDay = (data) => api.post('/lunch-menu', data);
+
+export const addLunchMenuMeal = (day, data) => api.post(`/lunch-menu/${day}/meal`, data);
+
+export const updateLunchMenuMeal = (day, mealId, data) =>
+  api.put(`/lunch-menu/${day}/meal/${mealId}`, data);
+
+export const deleteLunchMenuMeal = (day, mealId, classId) =>
+  api.delete(`/lunch-menu/${day}/meal/${mealId}`, { params: classId ? { class_id: classId } : {} });
+
+export const deleteLunchMenuDay = (day, classId) =>
+  api.delete(`/lunch-menu/${day}`, { params: classId ? { class_id: classId } : {} });
+
+export const toggleLunchMenuDayStatus = (day, isActive, classId) =>
+  api.patch(`/lunch-menu/${day}/status`, { is_active: isActive, class_id: classId });
+
 export default api;
