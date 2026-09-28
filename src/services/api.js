@@ -690,4 +690,10 @@ export const achievementApi = {
   remove: (id) => api.delete(`/achievements/${id}`),
 };
 
+export const getStudentFeeInvoices = (studentId, params = {}) =>
+  api.get(`/finance/fees/student/${studentId}`, { params });
+
+export const ensureFeeInvoice = (data) =>
+  api.post('/finance/fees/ensure-invoice', data);
+
 export default api;

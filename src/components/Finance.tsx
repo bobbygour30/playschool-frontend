@@ -16,7 +16,7 @@ import {
   createSalary, updateSalary, deleteSalary,
   getFeeRecordSummary, getFeeFullDetails,
   syncStudentFeesToFinance, generateRecurringFeesBulk,
-  recordPayment,
+  recordPayment, getStudentFeeInvoices, ensureFeeInvoice,
 } from '../services/api';
 
 // Computes the actual due date for an invoice from a 'YYYY-MM' month and a
@@ -55,6 +55,9 @@ export default function Finance() {
   const [generatingRecurring, setGeneratingRecurring] = useState(false);
   const [loadingFeeSummary, setLoadingFeeSummary] = useState(false);
   const [feeSummary, setFeeSummary] = useState(null);
+  const [studentInvoices, setStudentInvoices] = useState([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [newInvoiceMonth, setNewInvoiceMonth] = useState('');
   
   const [formData, setFormData] = useState({
     student_id: '',
@@ -191,6 +194,47 @@ export default function Finance() {
       alert('Failed to fetch fee summary');
     } finally {
       setLoadingFeeSummary(false);
+    }
+  };
+
+  // Load ALL invoices of a student (auto-creates current + next 2 months)
+  const loadStudentInvoices = async (studentId) => {
+    if (!studentId) { setStudentInvoices([]); return; }
+    try {
+      setLoadingInvoices(true);
+      const res = await getStudentFeeInvoices(studentId, { ensureUpcoming: true });
+      const invoices = res?.data?.invoices;
+      setStudentInvoices(Array.isArray(invoices) ? invoices : []);
+    } catch (error) {
+      console.error('Error loading student invoices:', error);
+      setStudentInvoices([]);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  // Admin can create the invoice of any month (e.g. October) and pay it right away
+  const handleCreateInvoiceForMonth = async () => {
+    if (!paymentFormData.student_id) { alert('Select a student first'); return; }
+    if (!newInvoiceMonth) { alert('Pick a month'); return; }
+    try {
+      const res = await ensureFeeInvoice({
+        student_id: paymentFormData.student_id,
+        month: newInvoiceMonth,
+      });
+      if (res.data?.success) {
+        const invoice = res.data.invoice;
+        await loadStudentInvoices(paymentFormData.student_id);
+        setPaymentFormData(prev => ({ ...prev, fee_id: invoice._id }));
+        fetchFeeSummary(invoice._id);
+        setNewInvoiceMonth('');
+        loadData();
+      } else {
+        alert(res.data?.message || 'Could not create invoice');
+      }
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      alert(error?.response?.data?.message || 'Could not create invoice');
     }
   };
 
@@ -386,18 +430,23 @@ export default function Finance() {
     
     try {
       if (modalType === 'fee') {
-        const feeMonth = formData.recurring_start_month || new Date().toISOString().slice(0, 7);
+        const feeMonth = (formData.recurring_start_month || new Date().toISOString().slice(0, 7)).slice(0, 7);
         const computedDueDate = computeDueDateFromDay(feeMonth, formData.monthly_due_day);
+
+        const oneTimeTotal = parseFloat(formData.total_amount) || 0;
+        const recurringTotal = calculateRecurringTotal();
+        // If only recurring fees were entered, the invoice total = monthly recurring total
+        const useRecurring = oneTimeTotal <= 0 && recurringTotal > 0;
 
         const feeData = {
           student_id: formData.student_id,
           admission_fee: parseFloat(formData.admission_fee) || 0,
-          tuition_fee: parseFloat(formData.tuition_fee) || 0,
-          transport_fee: parseFloat(formData.transport_fee) || 0,
-          activity_fee: parseFloat(formData.activity_fee) || 0,
-          total_amount: parseFloat(formData.total_amount) || 0,
+          tuition_fee: parseFloat(formData.tuition_fee) || (useRecurring ? parseFloat(formData.recurring_tuition_fee) || 0 : 0),
+          transport_fee: parseFloat(formData.transport_fee) || (useRecurring ? parseFloat(formData.recurring_transport_fee) || 0 : 0),
+          activity_fee: parseFloat(formData.activity_fee) || (useRecurring ? parseFloat(formData.recurring_activity_fee) || 0 : 0),
+          total_amount: useRecurring ? recurringTotal : oneTimeTotal,
           due_date: computedDueDate,
-          status: formData.status,
+          // status is now calculated automatically from paid amount + due date
           payment_date: formData.payment_date || null,
           payment_method: formData.payment_method,
           transaction_id: formData.transaction_id,
@@ -412,7 +461,7 @@ export default function Finance() {
             tuition_fee: parseFloat(formData.recurring_tuition_fee) || 0,
             activity_fee: parseFloat(formData.recurring_activity_fee) || 0,
             transport_fee: parseFloat(formData.recurring_transport_fee) || 0,
-            total_monthly: calculateRecurringTotal(),
+            total_monthly: recurringTotal,
             monthly_due_day: parseInt(formData.monthly_due_day) || 5,
           },
           is_recurring: true,
@@ -534,8 +583,8 @@ export default function Finance() {
         recurring_tuition_fee: item.recurring_fees?.tuition_fee?.toString() || '',
         recurring_activity_fee: item.recurring_fees?.activity_fee?.toString() || '',
         recurring_transport_fee: item.recurring_fees?.transport_fee?.toString() || '',
-        recurring_start_month: item.fee_period?.start_date?.split('T')[0] || '',
-        recurring_end_month: item.fee_period?.end_date?.split('T')[0] || '',
+        recurring_start_month: item.fee_period?.month || item.due_date?.slice(0, 7) || '',
+        recurring_end_month: item.fee_period?.end_date?.slice(0, 7) || '',
         fee_plan: item.fee_plan || 'Monthly',
         monthly_due_day: item.recurring_fees?.monthly_due_day?.toString() || '5',
       });
@@ -696,6 +745,8 @@ export default function Finance() {
     });
     setSelectedFeeForPayment(null);
     setFeeSummary(null);
+    setStudentInvoices([]);
+    setNewInvoiceMonth('');
     setShowPaymentModal(false);
   };
 
@@ -716,6 +767,8 @@ export default function Finance() {
         return { bg: 'bg-blue-100', text: 'text-blue-700', icon: <Clock size={12} /> };
       case 'Advance':
         return { bg: 'bg-purple-100', text: 'text-purple-700', icon: <TrendingUp size={12} /> };
+      case 'No Dues':
+        return { bg: 'bg-gray-100', text: 'text-gray-500', icon: null };
       default:
         return { bg: 'bg-gray-100', text: 'text-gray-700', icon: null };
     }
@@ -728,26 +781,51 @@ export default function Finance() {
   const safeStudents = Array.isArray(students) ? students : [];
   const safeStaff = Array.isArray(staff) ? staff : [];
 
-  const totalFeesCollected = safeFees
-    .filter(f => f.status === 'Paid')
-    .reduce((sum, f) => sum + (f.total_amount || 0), 0);
-  
-  const pendingFees = safeFees
-    .filter(f => f.status === 'Pending' || f.status === 'Overdue')
-    .reduce((sum, f) => sum + (f.total_amount || 0), 0);
-  
+  // Collected = actual money received (includes partial + advance payments)
+  const totalFeesCollected = safeFees.reduce((sum, f) => sum + (f.paid_amount || 0), 0);
+
+  // Pending = amount currently due (not-yet-due invoices are excluded)
+  const pendingFees = safeFees.reduce((sum, f) => sum + (f.amount_due || 0), 0);
+  const pendingCount = safeFees.filter(f => (f.amount_due || 0) > 0).length;
+
   const totalExpenses = safeExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  
+
   const totalSalaryPaid = safeSalaryPayments
     .filter(s => s.status === 'Completed')
     .reduce((sum, s) => sum + (s.net_salary || 0), 0);
-  
+
   const netBalance = totalFeesCollected - totalExpenses - totalSalaryPaid;
 
-  // Get fee records for a specific student
+  // Invoices for the selected student (fetched fully from the server, sorted by due date)
   const getStudentFees = (studentId) => {
-    return safeFees.filter(f => 
-      f.student_id?._id === studentId || f.student_id === studentId
+    if (!studentId) return [];
+    if (studentInvoices.length > 0) return studentInvoices;
+    return safeFees.filter(f => f.student_id?._id === studentId || f.student_id === studentId);
+  };
+
+  // "Partial · Upcoming", "Partial · Due", "Partial · Overdue"
+  const phaseStyle = (phase) => {
+    if (phase === 'Overdue') return 'bg-red-100 text-red-700';
+    if (phase === 'Due') return 'bg-orange-100 text-orange-700';
+    return 'bg-gray-100 text-gray-600';
+  };
+
+  const renderStatusBadge = (fee) => {
+    const status = fee.status || 'Upcoming';
+    const style = getStatusColor(status);
+    const phase = fee.payment_phase;
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${style.bg} ${style.text}`}>
+          {style.icon}
+          {status}
+        </span>
+        {status === 'Partial' && phase && (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${phaseStyle(phase)}`}>
+            {phase}
+          </span>
+        )}
+      </div>
     );
   };
 
@@ -770,10 +848,10 @@ export default function Finance() {
   // Render fee summary in payment modal
   const renderFeeSummary = () => {
     if (!feeSummary) return null;
-    
+
     const statusColor = getStatusColor(feeSummary.status);
-    const isOverdue = feeSummary.is_overdue || false;
-    
+    const phase = feeSummary.payment_phase;
+
     return (
       <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3">
         <div className="flex items-center justify-between">
@@ -784,20 +862,22 @@ export default function Finance() {
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-500">Invoice #{feeSummary.invoice_number}</p>
-            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusColor.bg} ${statusColor.text}`}>
-              {statusColor.icon}
-              {feeSummary.status}
-              {isOverdue && ' 🔴'}
-            </span>
+            <div className="flex items-center justify-end gap-1">
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusColor.bg} ${statusColor.text}`}>
+                {statusColor.icon}
+                {feeSummary.status}
+              </span>
+              {feeSummary.status === 'Partial' && phase && (
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${phaseStyle(phase)}`}>{phase}</span>
+              )}
+            </div>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-gray-200">
           <div>
             <p className="text-xs text-gray-500">Fee Period</p>
-            <p className="text-sm font-semibold text-gray-800">
-              {feeSummary.fee_period?.month || 'N/A'}
-            </p>
+            <p className="text-sm font-semibold text-gray-800">{feeSummary.fee_period?.month || 'N/A'}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Due Date</p>
@@ -807,16 +887,22 @@ export default function Finance() {
           </div>
           <div>
             <p className="text-xs text-gray-500">Total Amount</p>
-            <p className="text-sm font-bold text-gray-900">₹{feeSummary.total_amount.toLocaleString()}</p>
+            <p className="text-sm font-bold text-gray-900">₹{(feeSummary.total_amount || 0).toLocaleString()}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Already Paid</p>
-            <p className="text-sm font-semibold text-green-600">₹{feeSummary.paid_amount.toLocaleString()}</p>
+            <p className="text-sm font-semibold text-green-600">₹{(feeSummary.paid_amount || 0).toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Outstanding</p>
-            <p className={`text-sm font-bold ${feeSummary.remaining_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              ₹{feeSummary.remaining_amount.toLocaleString()}
+            <p className="text-xs text-gray-500">Remaining</p>
+            <p className={`text-sm font-bold ${feeSummary.remaining_amount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              ₹{(feeSummary.remaining_amount || 0).toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Amount Due</p>
+            <p className={`text-sm font-bold ${feeSummary.amount_due > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              ₹{(feeSummary.amount_due || 0).toLocaleString()}
             </p>
           </div>
           {feeSummary.overdue_amount > 0 && (
@@ -827,33 +913,28 @@ export default function Finance() {
           )}
           {feeSummary.advance_amount > 0 && (
             <div>
-              <p className="text-xs text-gray-500">Advance</p>
+              <p className="text-xs text-gray-500">Credit</p>
               <p className="text-sm font-bold text-purple-600">₹{feeSummary.advance_amount.toLocaleString()}</p>
             </div>
           )}
         </div>
-        
-        {feeSummary.status === 'Upcoming' && (
+
+        {feeSummary.is_upcoming && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-xs text-blue-700 flex items-start gap-2">
             <Info size={14} className="flex-shrink-0 mt-0.5" />
             <span>
               This invoice isn't due until {feeSummary.due_date ? new Date(feeSummary.due_date).toLocaleDateString() : 'its due date'}.
-              You can still record an early payment for it.
+              Early payments are accepted; Amount Due stays ₹0 until the due date.
             </span>
           </div>
         )}
-        
+
         <div className="pt-2 border-t border-gray-200">
           <p className="text-xs text-gray-500">
             Payment Type: <span className="font-semibold text-blue-600">
-              {feeSummary.suggested_payment_type === 'full' ? 'Full Payment' : 
+              {feeSummary.suggested_payment_type === 'full' ? 'Full Payment' :
                feeSummary.suggested_payment_type === 'partial' ? 'Partial Payment' : 'Advance Payment'}
             </span>
-            {feeSummary.remaining_amount > 0 && (
-              <span className="ml-2 text-xs text-gray-400">
-                (Remaining: ₹{feeSummary.remaining_amount.toLocaleString()})
-              </span>
-            )}
           </p>
         </div>
       </div>
@@ -911,7 +992,7 @@ export default function Finance() {
               <span className="text-2xl font-bold text-orange-600">₹{pendingFees.toLocaleString()}</span>
             </div>
             <h3 className="text-sm text-gray-600 mb-1">Pending Fees</h3>
-            <p className="text-2xl font-bold text-gray-800">{safeFees.filter(f => f.status === 'Pending' || f.status === 'Partial').length} Students</p>
+            <p className="text-2xl font-bold text-gray-800">{pendingCount} Invoices</p>
             <p className="text-xs text-gray-500 mt-2">Needs follow-up</p>
           </div>
 
@@ -1058,7 +1139,7 @@ export default function Finance() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fee Period</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Amount</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid Amount</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance/Due</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount Due</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -1074,11 +1155,9 @@ export default function Finance() {
                     </tr>
                   ) : (
                     filteredFees.map((fee) => {
-                      const displayStatus = fee.status || 'Upcoming';
-                      const statusStyleFinal = getStatusColor(displayStatus);
                       const realRemaining = fee.remaining_amount ?? Math.max(0, (fee.total_amount || 0) - (fee.paid_amount || 0));
-                      const balanceDue = Math.max(0, fee.balance_due ?? realRemaining);
-                      
+                      const amountDue = Math.max(0, fee.amount_due ?? fee.balance_due ?? 0);
+
                       return (
                         <tr key={fee._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
                           <td className="px-6 py-4">
@@ -1111,47 +1190,43 @@ export default function Finance() {
                           </td>
                           <td className="px-6 py-4">
                             <div>
-                              <span className={`font-semibold ${balanceDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                ₹{balanceDue.toLocaleString()}
+                              <span className={`font-semibold ${amountDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                ₹{amountDue.toLocaleString()}
                               </span>
+                              {fee.payment_phase === 'Upcoming' && realRemaining > 0 && (
+                                <span className="text-xs text-gray-400 block">Remaining ₹{realRemaining.toLocaleString()} (not yet due)</span>
+                              )}
                               {fee.overdue_amount > 0 && (
                                 <span className="text-xs text-red-500 block">Overdue: ₹{fee.overdue_amount.toLocaleString()}</span>
                               )}
                               {fee.advance_amount > 0 && (
-                                <span className="text-xs text-purple-500 block">Advance: ₹{fee.advance_amount.toLocaleString()}</span>
+                                <span className="text-xs text-purple-500 block">Credit: ₹{fee.advance_amount.toLocaleString()}</span>
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusStyleFinal.bg} ${statusStyleFinal.text}`}>
-                              {statusStyleFinal.icon}
-                              {displayStatus}
-                            </span>
-                          </td>
+                          <td className="px-6 py-4">{renderStatusBadge(fee)}</td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <button 
+                              <button
                                 onClick={() => {
+                                  const sid = fee.student_id?._id || fee.student_id || '';
                                   setSelectedFeeForPayment(fee);
                                   setPaymentFormData({
                                     ...paymentFormData,
-                                    student_id: fee.student_id?._id || fee.student_id || '',
+                                    student_id: sid,
                                     fee_id: fee._id,
-                                    amount_paid: realRemaining > 0 ? realRemaining : fee.total_amount || 0,
+                                    amount_paid: realRemaining > 0 ? realRemaining : '',
                                   });
+                                  loadStudentInvoices(sid);
                                   fetchFeeSummary(fee._id);
                                   setShowPaymentModal(true);
-                                }} 
+                                }}
                                 className="text-green-600 hover:text-green-800 p-1 transition-colors"
                                 title="Record Payment"
                               >
                                 <DollarSign size={18} />
                               </button>
-                              <button 
-                                onClick={() => fetchFeeDetails(fee._id)} 
-                                className="text-purple-600 hover:text-purple-800 p-1 transition-colors"
-                                title="View Details"
-                              >
+                              <button onClick={() => fetchFeeDetails(fee._id)} className="text-purple-600 hover:text-purple-800 p-1 transition-colors" title="View Details">
                                 <Eye size={18} />
                               </button>
                               <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 p-1 transition-colors" title="Edit">
@@ -1575,12 +1650,11 @@ export default function Finance() {
                       required
                       value={paymentFormData.student_id}
                       onChange={(e) => {
-                        setPaymentFormData({
-                          ...paymentFormData,
-                          student_id: e.target.value,
-                          fee_id: '',
-                        });
+                        const sid = e.target.value;
+                        setPaymentFormData({ ...paymentFormData, student_id: sid, fee_id: '', amount_paid: '' });
                         setFeeSummary(null);
+                        setStudentInvoices([]);
+                        loadStudentInvoices(sid);
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     >
@@ -1594,43 +1668,61 @@ export default function Finance() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Fee Record/Invoice *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Fee Record/Invoice * {loadingInvoices && <span className="text-xs text-gray-400">(loading...)</span>}
+                    </label>
                     <select
                       required
                       value={paymentFormData.fee_id}
                       onChange={(e) => {
                         const feeId = e.target.value;
-                        setPaymentFormData({
-                          ...paymentFormData,
-                          fee_id: feeId,
-                        });
-                        // Fetch fee summary when fee is selected
-                        if (feeId) {
-                          fetchFeeSummary(feeId);
-                        } else {
-                          setFeeSummary(null);
-                        }
+                        setPaymentFormData({ ...paymentFormData, fee_id: feeId });
+                        if (feeId) fetchFeeSummary(feeId);
+                        else setFeeSummary(null);
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     >
                       <option value="">Select Fee Record</option>
                       {getStudentFees(paymentFormData.student_id).map((fee) => {
-                        const realRemaining = fee.remaining_amount ?? Math.max(0, (fee.total_amount || 0) - (fee.paid_amount || 0));
-                        const status = fee.status || 'Upcoming';
-                        let statusLabel;
-                        if (status === 'Paid') statusLabel = 'Paid';
-                        else if (status === 'Upcoming') statusLabel = `Upcoming — due ${fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A'}`;
-                        else if (status === 'Overdue') statusLabel = `🔴 Overdue — ₹${realRemaining}`;
-                        else statusLabel = `Due: ₹${realRemaining}`;
-
+                        const remaining = fee.remaining_amount ?? Math.max(0, (fee.total_amount || 0) - (fee.paid_amount || 0));
+                        const dueTxt = fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A';
+                        let label;
+                        switch (fee.status) {
+                          case 'Paid': label = 'Paid'; break;
+                          case 'Advance': label = 'Paid in advance'; break;
+                          case 'No Dues': label = 'No dues'; break;
+                          case 'Partial': label = `Partial · ${fee.payment_phase} — ₹${remaining} left`; break;
+                          case 'Upcoming': label = `Upcoming — due ${dueTxt}`; break;
+                          case 'Overdue': label = `Overdue — ₹${remaining}`; break;
+                          default: label = `Due — ₹${remaining}`;
+                        }
                         return (
                           <option key={fee._id} value={fee._id}>
-                            {fee.invoice_number || (fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A')} - ₹{fee.total_amount} ({statusLabel})
+                            {fee.fee_period?.month || dueTxt} · {fee.invoice_number || ''} · ₹{fee.total_amount} ({label})
                           </option>
                         );
                       })}
                     </select>
                   </div>
+
+                  {paymentFormData.student_id && (
+                    <div className="md:col-span-2 bg-gray-50 border border-dashed border-gray-300 rounded-xl p-3 flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-gray-600">Invoice not in the list?</span>
+                      <input
+                        type="month"
+                        value={newInvoiceMonth}
+                        onChange={(e) => setNewInvoiceMonth(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateInvoiceForMonth}
+                        className="px-4 py-2 bg-teal-500 text-white rounded-lg text-sm hover:bg-teal-600"
+                      >
+                        Create invoice for this month
+                      </button>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Amount Paid *</label>
@@ -2079,19 +2171,10 @@ export default function Finance() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
-                        <select 
-                          required 
-                          value={formData.status} 
-                          onChange={(e) => setFormData({ ...formData, status: e.target.value })} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="Paid">Paid</option>
-                          <option value="Overdue">Overdue</option>
-                          <option value="Partial">Partial</option>
-                          <option value="Advance">Advance</option>
-                        </select>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                        <div className="w-full px-4 py-2 bg-gray-100 rounded-xl text-gray-600 text-sm">
+                          Calculated automatically from payments and due date
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
