@@ -15,17 +15,6 @@ import {
   getArchivedStudentProfile,
 } from '../services/api';
 
-// ==================== ADMIN AUTH ====================
-const isAuthorizedAdmin = () => {
-  try {
-    if (localStorage.getItem('isAdmin') === 'true') return true;
-    const email = localStorage.getItem('userEmail') || '';
-    return email === 'admin@goldenplay.com';
-  } catch {
-    return false;
-  }
-};
-
 // Friendly display config per entity type
 const ENTITY_META = {
   Student: { label: 'Student', icon: Users, bg: 'from-purple-500 to-pink-600', chip: 'bg-purple-100 text-purple-700' },
@@ -40,7 +29,6 @@ const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
 const inr = (n) => `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
 
-// Short, human-friendly description shown under each row's title
 const describeSnapshot = (entry) => {
   const s = entry.snapshot || {};
   switch (entry.entity_type) {
@@ -71,7 +59,6 @@ const describeSnapshot = (entry) => {
   }
 };
 
-// Title shown bold on each row
 const rowTitle = (entry) => {
   const s = entry.snapshot || {};
   if (entry.entity_type === 'Fee') {
@@ -90,8 +77,6 @@ export default function ArchivedRecords() {
   const [summary, setSummary] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-
-  const canRestore = isAuthorizedAdmin();
 
   const [restoreTarget, setRestoreTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -132,7 +117,6 @@ export default function ArchivedRecords() {
 
   const handleRestore = async () => {
     if (!restoreTarget) return;
-    if (!canRestore) { alert('Only an authorized admin can restore records.'); return; }
     try {
       setBusyId(restoreTarget._id);
       const res = await restoreArchivedRecord(restoreTarget._id);
@@ -232,11 +216,6 @@ export default function ArchivedRecords() {
               <Archive size={18} className="text-slate-500" />
               Archived students &amp; finance records. Restore or permanently delete with a reason.
             </p>
-            {!canRestore && (
-              <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 inline-flex items-center gap-1 px-3 py-1 rounded-full">
-                <Info size={12} /> Read-only mode — only authorized admins can restore
-              </p>
-            )}
           </div>
           <div className="flex gap-3">
             <button
@@ -247,7 +226,7 @@ export default function ArchivedRecords() {
               <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
               Refresh
             </button>
-            {summary?.total > 0 && canRestore && (
+            {summary?.total > 0 && (
               <button
                 onClick={() => setShowEmptyConfirm(true)}
                 className="px-5 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
@@ -310,7 +289,6 @@ export default function ArchivedRecords() {
               const Icon = meta.icon;
               const busy = busyId === entry._id;
               const isStudent = entry.entity_type === 'Student';
-              const isFee = entry.entity_type === 'Fee';
 
               return (
                 <div key={entry._id} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-xl transition-all border border-gray-200/50 overflow-hidden">
@@ -351,17 +329,15 @@ export default function ArchivedRecords() {
                       )}
                       <button
                         onClick={() => setRestoreTarget(entry)}
-                        disabled={busy || !canRestore}
-                        title={canRestore ? 'Restore this record' : 'Only authorized admins can restore'}
-                        className="px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={busy}
+                        className="px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
                       >
                         <RotateCcw size={16} /> Restore
                       </button>
                       <button
                         onClick={() => { setDeleteTarget(entry); setDeleteReason(''); }}
-                        disabled={busy || !canRestore}
-                        title={canRestore ? 'Permanently delete' : 'Only authorized admins can delete'}
-                        className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={busy}
+                        className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
                       >
                         {busy ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                         Delete Forever
@@ -392,18 +368,12 @@ export default function ArchivedRecords() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {canRestore ? (
-                    <button
-                      onClick={() => { setProfileTarget(null); setRestoreTarget(profileTarget); }}
-                      className="px-4 py-2 bg-white text-purple-700 rounded-lg hover:bg-white/90 text-sm font-semibold flex items-center gap-1"
-                    >
-                      <RotateCcw size={16} /> Restore Student
-                    </button>
-                  ) : (
-                    <span className="px-3 py-1.5 bg-white/20 text-white text-xs rounded-full">
-                      Read-only
-                    </span>
-                  )}
+                  <button
+                    onClick={() => { setProfileTarget(null); setRestoreTarget(profileTarget); }}
+                    className="px-4 py-2 bg-white text-purple-700 rounded-lg hover:bg-white/90 text-sm font-semibold flex items-center gap-1"
+                  >
+                    <RotateCcw size={16} /> Restore Student
+                  </button>
                   <button
                     onClick={() => { setProfileTarget(null); setProfileData(null); }}
                     className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors"
@@ -596,13 +566,6 @@ export default function ArchivedRecords() {
                         </div>
                       )}
                     </section>
-
-                    {!canRestore && (
-                      <p className="mt-6 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
-                        <Info size={14} /> You are viewing this archived profile in read-only mode.
-                        Only an authorized admin can restore this student.
-                      </p>
-                    )}
                   </>
                 )}
               </div>
