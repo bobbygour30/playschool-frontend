@@ -10,7 +10,7 @@ import {
   Dropbox, File, ArrowUpCircle, User, Hash, Clock, CalendarDays,
   Info, ChevronDown, ChevronUp, Printer, Camera, Shield, UserCog,
   FileSpreadsheet, Repeat, RefreshCw, Calendar as CalendarIcon,
-  Wallet, Banknote, TrendingDown
+  Wallet, Banknote, TrendingDown, Archive
 } from 'lucide-react';
 import { getStudents, createStudent, updateStudent, deleteStudent, getClasses, getVehicles, getStaff, getVendors, promoteAllStudents } from '../services/api';
 
@@ -116,8 +116,6 @@ const calculateAge = (dateOfBirth) => {
   return `${years} yrs ${months} mon`;
 };
 
-
-
 export default function StudentDetails() {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -137,11 +135,17 @@ export default function StudentDetails() {
   const [promotionAcademicYear, setPromotionAcademicYear] = useState('');
   const [expandedFeeCard, setExpandedFeeCard] = useState(null);
   const [isFormSticky, setIsFormSticky] = useState(false);
-  
+
+  // ==================== DELETE (ARCHIVE) MODAL STATE ====================
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
   const [showValidationSummary, setShowValidationSummary] = useState(false);
-  
+
   // Refs for scrolling to error fields
   const formRef = useRef(null);
   const fieldRefs = useRef({});
@@ -244,19 +248,19 @@ export default function StudentDetails() {
 
       setStudents(studentsRes.data || []);
       setClasses(classesRes.data || CLASSES);
-      
+
       const allStaff = staffRes.data || [];
       setTeachers(allStaff.filter(s => s.role === 'Teacher' && s.status === 'Active'));
       setVehicles((vehiclesRes.data || []).filter(v => v.status === 'Active'));
-      
+
       const allVendors = vendorsRes.data || [];
-      const activeVendorsWithVehicles = allVendors.filter(v => 
-        v.status === 'Active' && 
-        v.vehicle_number && 
+      const activeVendorsWithVehicles = allVendors.filter(v =>
+        v.status === 'Active' &&
+        v.vehicle_number &&
         v.vehicle_number.trim() !== ''
       );
       setVendors(activeVendorsWithVehicles);
-      
+
       calculateFeeStats(studentsRes.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -273,7 +277,7 @@ export default function StudentDetails() {
     const totalAmount = studentsList.reduce((sum, s) => sum + (s.total_amount || 0), 0);
     const paidAmount = studentsList.filter(s => s.fee_paid).reduce((sum, s) => sum + (s.total_amount || 0), 0);
     const unpaidAmount = totalAmount - paidAmount;
-    
+
     setFeeStats({
       total,
       paid,
@@ -345,8 +349,8 @@ export default function StudentDetails() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setDocumentChanges(prev => ({ ...prev, [fieldName]: true }));
-        setFormData(prev => ({ 
-          ...prev, 
+        setFormData(prev => ({
+          ...prev,
           [fieldName]: reader.result,
           [`${fieldName}_url`]: null
         }));
@@ -584,21 +588,18 @@ export default function StudentDetails() {
   const scrollToError = (errors) => {
     const firstErrorField = Object.keys(errors)[0];
     if (firstErrorField && fieldRefs.current[firstErrorField]) {
-      // Find the field container in the form
       const element = fieldRefs.current[firstErrorField];
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      
-      // Add highlight effect
+
       element.style.transition = 'all 0.3s ease';
       element.style.boxShadow = '0 0 0 3px #ef4444, 0 0 20px rgba(239, 68, 68, 0.2)';
       element.style.borderRadius = '12px';
-      
+
       setTimeout(() => {
         element.style.boxShadow = '';
         element.style.borderRadius = '';
       }, 3000);
-      
-      // Focus on the input if it's an input element
+
       const input = element.querySelector('input, select, textarea');
       if (input) {
         input.focus();
@@ -612,35 +613,31 @@ export default function StudentDetails() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (isSubmitting) return;
-    
-    // Run validation
+
     const { isValid, errors } = validateForm();
-    
+
     if (!isValid) {
       setShowValidationSummary(true);
       scrollToError(errors);
-      
-      // Auto-hide validation summary after 8 seconds
+
       setTimeout(() => {
         setShowValidationSummary(false);
       }, 8000);
-      
+
       return;
     }
-    
-    // Clear validation errors if all valid
+
     setValidationErrors({});
     setShowValidationSummary(false);
-    
+
     try {
       setIsSubmitting(true);
-      
+
       const totalAmount = calculateTotalFee(formData);
       const recurringTotalVal = calculateRecurringTotal(formData);
-      
-      // Find the selected vendor to get vehicle_id
+
       let vehicleId = null;
       if (formData.transport_type !== 'Walker' && formData.vendor_id) {
         const selectedVendor = vendors.find(v => v._id === formData.vendor_id);
@@ -648,27 +645,24 @@ export default function StudentDetails() {
           vehicleId = selectedVendor.vehicle_id || selectedVendor._id;
         }
       }
-      
-      // Prepare documents - use existing URLs if not changed
+
       const documents = {
         birth_certificate: documentChanges.birth_certificate ? formData.birth_certificate : formData.birth_certificate_url,
         aadhar_card: documentChanges.aadhar_card ? formData.aadhar_card : formData.aadhar_card_url,
         parent_aadhar_front: documentChanges.parent_aadhar_front ? formData.parent_aadhar_front : formData.parent_aadhar_front_url,
         student_photo: documentChanges.student_photo ? formData.student_photo : formData.student_photo_url,
       };
-      
-      // Prepare authorized pickup data
+
       const authorizedPickup = formData.transport_type === 'Walker' ? {
         name: formData.authorized_pickup_name || '',
         relationship: formData.authorized_pickup_relationship || '',
         phone: formData.authorized_pickup_phone || '',
       } : null;
-      
-      // Determine initial payment details
-      const initialPaymentAmount = formData.fee_paid 
+
+      const initialPaymentAmount = formData.fee_paid
         ? (parseFloat(formData.initial_payment_amount) || recurringTotalVal || totalAmount)
         : 0;
-      
+
       const studentData = {
         name: formData.name,
         date_of_birth: formData.date_of_birth,
@@ -689,7 +683,6 @@ export default function StudentDetails() {
         vehicle_id: vehicleId,
         vendor_id: formData.transport_type !== 'Walker' ? formData.vendor_id : null,
         status: formData.status,
-        // Fee fields
         fee_structure: formData.fee_structure || null,
         registration_fee: parseFloat(formData.registration_fee) || 0,
         admission_fee: parseFloat(formData.admission_fee) || 0,
@@ -705,21 +698,17 @@ export default function StudentDetails() {
         fee_exempt: formData.fee_exempt,
         payment_date: formData.fee_paid ? formData.payment_date : null,
         payment_mode: formData.payment_mode,
-        // Authorized Pickup
         authorized_pickup: authorizedPickup,
-        // Emergency Contact
         emergency_contact: {
           name: formData.emergency_name || '',
           relationship: formData.emergency_relationship || '',
           phone: formData.emergency_phone || '',
         },
-        // Enrollment Information
         admission_date: formData.admission_date,
         academic_year: formData.academic_year,
         enrollment_type: formData.enrollment_type,
         previous_class: formData.previous_class || '',
         documents: documents,
-        // Recurring Fees
         recurring_fees: {
           tuition_fee: parseFloat(formData.recurring_tuition_fee) || 0,
           activity_fee: parseFloat(formData.recurring_activity_fee) || 0,
@@ -741,7 +730,7 @@ export default function StudentDetails() {
           },
         },
       };
-      
+
       if (editingStudent) {
         await updateStudent(editingStudent._id, studentData);
         alert('Student updated successfully!');
@@ -753,7 +742,7 @@ export default function StudentDetails() {
           alert('Student added successfully!');
         }
       }
-      
+
       await loadData();
       resetForm();
     } catch (error) {
@@ -765,17 +754,39 @@ export default function StudentDetails() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (confirm('Are you sure you want to delete this student?')) {
-      try {
-        await deleteStudent(id);
-        await loadData();
-        alert('Student deleted successfully!');
-      } catch (error) {
-        console.error('Error deleting student:', error);
-        alert('Failed to delete student. Please try again.');
-      }
+  // ==================== DELETE (ARCHIVE) FLOW ====================
+  const handleDeleteClick = (student) => {
+    setDeleteTarget(student);
+    setDeleteReason('');
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      setIsDeleting(true);
+      await deleteStudent(deleteTarget._id, deleteReason.trim());
+      alert(
+        `"${deleteTarget.name}" has been moved to the Archive.\n\n` +
+        `You can restore it anytime from the Archived Records page.`
+      );
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+      setDeleteReason('');
+      await loadData();
+    } catch (error) {
+      console.error('Error archiving student:', error);
+      alert(error?.response?.data?.message || 'Failed to archive student. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+    setDeleteReason('');
   };
 
   const handlePromoteStudents = async () => {
@@ -803,7 +814,7 @@ export default function StudentDetails() {
 
   const handleEdit = (student) => {
     console.log('Editing student:', student);
-    
+
     setEditingStudent(student);
     setDocumentChanges({
       birth_certificate: false,
@@ -811,17 +822,15 @@ export default function StudentDetails() {
       parent_aadhar_front: false,
       student_photo: false,
     });
-    
-    // Clear any previous validation errors
+
     setValidationErrors({});
     setShowValidationSummary(false);
-    
-    // Find vendor ID from the student data
+
     let vendorId = student.vendor_id || '';
     if (vendorId && typeof vendorId === 'object' && vendorId._id) {
       vendorId = vendorId._id;
     }
-    
+
     if (!vendorId && student.vehicle_id) {
       const vehicleId = typeof student.vehicle_id === 'object' ? student.vehicle_id._id : student.vehicle_id;
       const foundVendor = vendors.find(v => v.vehicle_id === vehicleId || v._id === vehicleId);
@@ -829,24 +838,24 @@ export default function StudentDetails() {
         vendorId = foundVendor._id;
       }
     }
-    
+
     let vehicleId = student.vehicle_id || '';
     if (vehicleId && typeof vehicleId === 'object' && vehicleId._id) {
       vehicleId = vehicleId._id;
     }
-    
+
     if (vendorId) {
       const selectedVendor = vendors.find(v => v._id === vendorId);
       if (selectedVendor && selectedVendor.vehicle_id) {
         vehicleId = selectedVendor.vehicle_id;
       }
     }
-    
+
     const authorizedPickup = student.authorized_pickup || {};
     const emergencyContact = student.emergency_contact || {};
     const recurringFees = student.recurring_fees || {};
     const initialPayment = recurringFees.initial_payment || {};
-    
+
     setFormData({
       name: student.name || '',
       date_of_birth: student.date_of_birth ? student.date_of_birth.split('T')[0] : '',
@@ -867,7 +876,6 @@ export default function StudentDetails() {
       vehicle_id: vehicleId,
       vendor_id: vendorId,
       status: student.status || 'Active',
-      // Fee structure
       fee_structure: student.fee_structure || '',
       registration_fee: student.registration_fee || '',
       admission_fee: student.admission_fee || '',
@@ -892,7 +900,6 @@ export default function StudentDetails() {
       academic_year: student.academic_year || ACADEMIC_YEARS[0],
       enrollment_type: student.enrollment_type || 'New Admission',
       previous_class: student.previous_class || '',
-      // Recurring Fees
       recurring_tuition_fee: recurringFees.tuition_fee || '',
       recurring_activity_fee: recurringFees.activity_fee || '',
       recurring_transport_fee: recurringFees.transport_fee || '',
@@ -901,12 +908,10 @@ export default function StudentDetails() {
       recurring_fee_plan: recurringFees.fee_plan || 'Monthly',
       recurring_monthly_due_day: recurringFees.monthly_due_day || 5,
       recurring_auto_generate: recurringFees.auto_generate !== undefined ? recurringFees.auto_generate : true,
-      // Initial Payment
       initial_payment_amount: initialPayment.amount || '',
       initial_payment_date: initialPayment.payment_date ? new Date(initialPayment.payment_date).toISOString().split('T')[0] : '',
       initial_payment_method: initialPayment.payment_method || 'Cash',
       initial_payment_transaction: initialPayment.transaction_id || '',
-      // Document fields
       birth_certificate: null,
       birth_certificate_url: student.documents?.birth_certificate || null,
       aadhar_card: null,
@@ -916,7 +921,7 @@ export default function StudentDetails() {
       student_photo: null,
       student_photo_url: student.documents?.student_photo || null,
     });
-    
+
     setShowModal(true);
   };
 
@@ -999,7 +1004,6 @@ export default function StudentDetails() {
     setIsSubmitting(false);
   };
 
-  // Handle scroll for sticky form footer
   useEffect(() => {
     if (showModal) {
       const modalContent = document.querySelector('.modal-scroll-content');
@@ -1019,7 +1023,7 @@ export default function StudentDetails() {
 
   const getFilteredStudents = () => {
     let filtered = students;
-    
+
     if (searchTerm) {
       filtered = filtered.filter((student) =>
         student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1027,15 +1031,15 @@ export default function StudentDetails() {
         student.parent_email?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     if (selectedClass !== 'all') {
       filtered = filtered.filter((student) => student.class_id === selectedClass);
     }
-    
+
     if (selectedSection !== 'all') {
       filtered = filtered.filter((student) => student.section === selectedSection);
     }
-    
+
     return filtered;
   };
 
@@ -1067,10 +1071,10 @@ export default function StudentDetails() {
     }
     const vehicle = vehicles.find(v => v._id === vehicleId);
     if (vehicle) return vehicle.vehicle_number;
-    
+
     const vendor = vendors.find(v => v._id === vehicleId || v.vehicle_id === vehicleId);
     if (vendor) return vendor.vehicle_number || vendor.vendor_name || 'N/A';
-    
+
     return 'N/A';
   };
 
@@ -1083,7 +1087,6 @@ export default function StudentDetails() {
     return vendor ? vendor.vendor_name : 'N/A';
   };
 
-  // Returns comma-separated list of all sections (with their teacher) for this class
   const getTeachersForClass = (classId) => {
     const list = SECTIONS
       .map((sec) => {
@@ -1124,16 +1127,15 @@ export default function StudentDetails() {
     ukg: students.filter(s => s.class_id === 'ukg').length,
   };
 
-  // Render document upload field with preview
   const renderDocumentUpload = (label, fieldName, required = false) => {
     const isChanged = documentChanges[fieldName];
     const fileData = formData[fieldName];
     const urlData = formData[`${fieldName}_url`];
     const hasDocument = fileData || urlData;
     const hasError = validationErrors[fieldName];
-    
+
     return (
-      <div 
+      <div
         ref={el => fieldRefs.current[fieldName] = el}
         className={`${hasError ? 'border-l-4 border-red-500 pl-3 rounded-r-lg' : ''}`}
       >
@@ -1168,9 +1170,9 @@ export default function StudentDetails() {
                 <CheckCircle size={20} className="text-green-600" title="Document exists" />
               )}
               {urlData && !isChanged && (
-                <a 
-                  href={urlData} 
-                  target="_blank" 
+                <a
+                  href={urlData}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-purple-600 hover:text-purple-800 text-xs underline ml-1"
                   title="View existing document"
@@ -1183,8 +1185,8 @@ export default function StudentDetails() {
                   type="button"
                   onClick={() => {
                     if (confirm(`Remove ${label}?`)) {
-                      setFormData(prev => ({ 
-                        ...prev, 
+                      setFormData(prev => ({
+                        ...prev,
                         [`${fieldName}_url`]: null,
                         [fieldName]: null
                       }));
@@ -1220,12 +1222,11 @@ export default function StudentDetails() {
     );
   };
 
-  // Render field with validation
   const renderField = (label, fieldName, component, required = false, className = '') => {
     const hasError = validationErrors[fieldName];
-    
+
     return (
-      <div 
+      <div
         ref={el => fieldRefs.current[fieldName] = el}
         className={`${hasError ? 'border-l-4 border-red-500 pl-3 rounded-r-lg' : ''} ${className}`}
       >
@@ -1448,7 +1449,7 @@ export default function StudentDetails() {
         {studentsByClass.map((classSection) => {
           const Icon = classSection.icon;
           const filteredClassStudents = classSection.students.filter(student =>
-            (!searchTerm || 
+            (!searchTerm ||
               student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
               student.parent_name?.toLowerCase().includes(searchTerm.toLowerCase())) &&
             (selectedSection === 'all' || student.section === selectedSection)
@@ -1482,14 +1483,13 @@ export default function StudentDetails() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredClassStudents.map((student) => (
                   <div key={student._id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200 group">
-                    {/* Card Header */}
                     <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 text-white">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3">
                             {student.documents?.student_photo ? (
-                              <img 
-                                src={student.documents.student_photo} 
+                              <img
+                                src={student.documents.student_photo}
                                 alt={student.name}
                                 className="w-12 h-12 rounded-full object-cover border-2 border-white/50 flex-shrink-0"
                               />
@@ -1529,7 +1529,6 @@ export default function StudentDetails() {
                     </div>
 
                     <div className="p-4 space-y-3">
-                      {/* Teacher Info */}
                       <div className="bg-gray-50 rounded-lg p-2 flex items-center gap-2">
                         <UserCheck size={14} className="text-purple-500 flex-shrink-0" />
                         <p className="text-sm font-semibold text-gray-800 truncate">
@@ -1537,7 +1536,6 @@ export default function StudentDetails() {
                         </p>
                       </div>
 
-                      {/* Parent Information */}
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                           <Users size={12} className="flex-shrink-0" />
@@ -1559,7 +1557,6 @@ export default function StudentDetails() {
                         )}
                       </div>
 
-                      {/* Emergency Contact */}
                       {student.emergency_contact && (
                         <div className="bg-red-50 rounded-lg p-2 border border-red-100">
                           <p className="text-xs text-red-600 font-medium flex items-center gap-1">
@@ -1574,7 +1571,6 @@ export default function StudentDetails() {
                         </div>
                       )}
 
-                      {/* Authorized Pickup - Only for Walker */}
                       {student.transport_type === 'Walker' && student.authorized_pickup && (
                         <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
                           <p className="text-xs text-blue-600 font-medium flex items-center gap-1">
@@ -1589,7 +1585,6 @@ export default function StudentDetails() {
                         </div>
                       )}
 
-                      {/* Recurring Fee Badge */}
                       {student.recurring_fees && getRecurringTotal(student) > 0 && (
                         <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
                           <p className="text-xs text-purple-600 font-medium flex items-center gap-1">
@@ -1605,7 +1600,6 @@ export default function StudentDetails() {
                         </div>
                       )}
 
-                      {/* Fee Information */}
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500 flex items-center gap-1">
@@ -1623,8 +1617,7 @@ export default function StudentDetails() {
                             )}
                           </button>
                         </div>
-                        
-                        {/* Monthly / Recurring fee prominently displayed as main number */}
+
                         <div className="text-center mt-1">
                           <p className="text-[10px] text-gray-500">
                             {getRecurringTotal(student) > 0 ? 'Monthly Fee' : 'No Recurring Fee'}
@@ -1637,7 +1630,6 @@ export default function StudentDetails() {
                           )}
                         </div>
 
-                        {/* Fee summary: paid, due, status */}
                         <div className="grid grid-cols-3 gap-2 mt-2">
                           <div className="text-center">
                             <p className="text-[10px] text-gray-500">Paid</p>
@@ -1661,7 +1653,6 @@ export default function StudentDetails() {
                           </div>
                         </div>
 
-                        {/* Expanded Fee Details */}
                         {expandedFeeCard === student._id && (
                           <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
                             <p className="text-xs font-semibold text-gray-700 mb-1">Full Breakdown:</p>
@@ -1720,7 +1711,7 @@ export default function StudentDetails() {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(student._id)}
+                          onClick={() => handleDeleteClick(student)}
                           className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
                         >
                           <Trash2 size={14} />
@@ -1736,83 +1727,152 @@ export default function StudentDetails() {
         })}
 
         {/* Promote Modal */}
-{showPromoteModal && createPortal(
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-    <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
-      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 rounded-t-2xl">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <ArrowUpCircle size={22} />
-          Promote All Students
-        </h2>
-      </div>
-      <div className="p-6 space-y-4">
-        <p className="text-sm text-gray-600">
-          This will promote all active students to the next class according to the progression:
-          <br />
-          <span className="font-medium text-gray-800">Playgroup → Nursery → LKG → UKG → Graduated</span>
-        </p>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Academic Year (for record)
-          </label>
-          <input
-            type="text"
-            value={promotionAcademicYear}
-            onChange={(e) => setPromotionAcademicYear(e.target.value)}
-            placeholder="e.g. 2025-2026"
-            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          />
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            onClick={() => {
-              setShowPromoteModal(false);
-              setPromotionAcademicYear('');
-            }}
-            disabled={isPromoting}
-            className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handlePromoteStudents}
-            disabled={isPromoting}
-            className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
-          >
-            {isPromoting ? (
-              <>
-                <Loader2 size={18} className="animate-spin" /> Promoting...
-              </>
-            ) : (
-              'Confirm Promotion'
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>,
-  document.body
-)}
+        {showPromoteModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+              <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 rounded-t-2xl">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <ArrowUpCircle size={22} />
+                  Promote All Students
+                </h2>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-600">
+                  This will promote all active students to the next class according to the progression:
+                  <br />
+                  <span className="font-medium text-gray-800">Playgroup → Nursery → LKG → UKG → Graduated</span>
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Academic Year (for record)
+                  </label>
+                  <input
+                    type="text"
+                    value={promotionAcademicYear}
+                    onChange={(e) => setPromotionAcademicYear(e.target.value)}
+                    placeholder="e.g. 2025-2026"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowPromoteModal(false);
+                      setPromotionAcademicYear('');
+                    }}
+                    disabled={isPromoting}
+                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePromoteStudents}
+                    disabled={isPromoting}
+                    className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
+                  >
+                    {isPromoting ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Promoting...
+                      </>
+                    ) : (
+                      'Confirm Promotion'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
-        {/* Add/Edit Student Modal */}
-{showModal && createPortal(
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-    <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
-      {/* Modal Header - Sticky */}
-      <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
-        <h2 className="text-xl font-bold text-white">
-          {editingStudent ? 'Edit Student' : 'Add New Student'}
-        </h2>
-        <button 
-          onClick={resetForm} 
-          disabled={isSubmitting}
-          className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
-        >
-          <X size={24} />
-        </button>
+        {/* ==================== DELETE (ARCHIVE) MODAL ==================== */}
+        {showDeleteModal && deleteTarget && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110] p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Archive size={22} />
+                  Archive Student
+                </h2>
+                <button
+                  onClick={closeDeleteModal}
+                  disabled={isDeleting}
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
               </div>
 
-              {/* Validation Summary */}
+              <div className="p-6 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-sm text-amber-800">
+                  <Info size={18} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong>{deleteTarget.name}</strong> and all of their fee invoices will be moved to
+                    the <strong>Archived Records</strong> page. You can restore them anytime.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for archiving <span className="text-xs text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Left the school, duplicate entry, parent request..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    disabled={isDeleting}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={closeDeleteModal}
+                    disabled={isDeleting}
+                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={isDeleting}
+                    className="px-5 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Archiving...
+                      </>
+                    ) : (
+                      <>
+                        <Archive size={18} /> Archive Student
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* Add/Edit Student Modal */}
+        {showModal && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl modal-scroll-content">
+              <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
+                <h2 className="text-xl font-bold text-white">
+                  {editingStudent ? 'Edit Student' : 'Add New Student'}
+                </h2>
+                <button
+                  onClick={resetForm}
+                  disabled={isSubmitting}
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
               {showValidationSummary && Object.keys(validationErrors).length > 0 && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 mx-6 mt-4 rounded-lg shadow-lg animate-pulse">
                   <div className="flex items-start gap-3">
@@ -1958,7 +2018,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Staff Assignment (auto, from Staff Management) */}
+                {/* Staff Assignment */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <UserCheck size={18} className="text-purple-600 flex-shrink-0" />
@@ -2156,14 +2216,13 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* ==================== FEE AND CHARGES (UPDATED) ==================== */}
+                {/* Fee & Charges */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <DollarSign size={18} className="text-purple-600 flex-shrink-0" />
                     Fee & Charges
                   </h3>
 
-                  {/* Fee Structure Dropdown */}
                   <div className="mb-5 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Fee Structure <span className="text-red-500">*</span>
@@ -2185,9 +2244,9 @@ export default function StudentDetails() {
                     {formData.fee_structure && FEE_STRUCTURES[formData.fee_structure] && (
                       <p className="text-xs text-indigo-600 mt-2 flex items-center gap-1">
                         <Info size={12} />
-                        Auto-filled: Registration ₹{FEE_STRUCTURES[formData.fee_structure].registration_fee}, 
-                        Admission ₹{FEE_STRUCTURES[formData.fee_structure].admission_fee}, 
-                        Kit ₹{FEE_STRUCTURES[formData.fee_structure].kit_fee}, 
+                        Auto-filled: Registration ₹{FEE_STRUCTURES[formData.fee_structure].registration_fee},
+                        Admission ₹{FEE_STRUCTURES[formData.fee_structure].admission_fee},
+                        Kit ₹{FEE_STRUCTURES[formData.fee_structure].kit_fee},
                         Camera ₹{FEE_STRUCTURES[formData.fee_structure].camera_fee}
                         {formData.fee_structure === 'other' && ' (Custom – enter values manually)'}
                       </p>
@@ -2356,8 +2415,8 @@ export default function StudentDetails() {
                         onChange={(e) => {
                           const isPaid = e.target.value === 'paid';
                           const recurringTotal = calculateRecurringTotal(formData);
-                          setFormData({ 
-                            ...formData, 
+                          setFormData({
+                            ...formData,
                             fee_paid: isPaid,
                             initial_payment_amount: isPaid ? (recurringTotal || calculateTotalFee(formData)) : '',
                             initial_payment_date: isPaid ? new Date().toISOString().split('T')[0] : '',
@@ -2379,7 +2438,6 @@ export default function StudentDetails() {
                         </p>
                       )}
                     </div>
-                    {/* Fee Exempt Checkbox */}
                     <div className="flex items-center gap-2 mt-2">
                       <input
                         type="checkbox"
@@ -2574,8 +2632,7 @@ export default function StudentDetails() {
                         </label>
                       </div>
                     </div>
-                    
-                    {/* Initial Payment Section - Shows when Fee is marked as Paid */}
+
                     {formData.fee_paid && !formData.fee_exempt && (
                       <div className="mt-4 pt-4 border-t border-blue-200">
                         <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -2664,8 +2721,8 @@ export default function StudentDetails() {
                         required
                         value={formData.transport_type}
                         onChange={(e) => {
-                          setFormData({ 
-                            ...formData, 
+                          setFormData({
+                            ...formData,
                             transport_type: e.target.value,
                             vendor_id: '',
                             vehicle_id: ''
@@ -2689,8 +2746,8 @@ export default function StudentDetails() {
                           value={formData.vendor_id}
                           onChange={(e) => {
                             const vendorId = e.target.value;
-                            setFormData({ 
-                              ...formData, 
+                            setFormData({
+                              ...formData,
                               vendor_id: vendorId
                             });
                           }}
@@ -2702,7 +2759,7 @@ export default function StudentDetails() {
                             const isSelected = vendor._id === formData.vendor_id;
                             return (
                               <option key={vendor._id} value={vendor._id}>
-                                {vendor.vendor_name} - {vendor.vehicle_number} 
+                                {vendor.vendor_name} - {vendor.vehicle_number}
                                 {vendor.vendor_type && ` (${vendor.vendor_type})`}
                                 {vendor.route_details && ` - ${vendor.route_details.substring(0, 30)}${vendor.route_details.length > 30 ? '...' : ''}`}
                                 {isSelected && ' ✓'}
@@ -2745,7 +2802,7 @@ export default function StudentDetails() {
                   </div>
                 </div>
 
-                {/* Authorized Pickup Section - Only for Walker */}
+                {/* Authorized Pickup Section */}
                 {formData.transport_type === 'Walker' && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">

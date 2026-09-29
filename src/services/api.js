@@ -18,7 +18,12 @@ export const getStudentsByTeacher = (teacherId) => api.get(`/students/teacher/${
 export const getStudentClassStats = () => api.get('/students/stats/class-wise');
 export const createStudent = (data) => api.post('/students', data);
 export const updateStudent = (id, data) => api.put(`/students/${id}`, data);
-export const deleteStudent = (id) => api.delete(`/students/${id}`);
+
+// Soft delete: archives the student + all their fee invoices.
+// Optional `reason` is stored on the archive entry.
+export const deleteStudent = (id, reason = '') =>
+  api.delete(`/students/${id}`, { data: { reason } });
+
 // Bulk-promotes all Active students to the next class (KG-1 students graduate).
 // academicYear is optional, purely for the audit record (e.g. "2026-2027").
 export const promoteAllStudents = (academicYear) =>
@@ -139,7 +144,10 @@ export const getFeesByStudent = (studentId, params = {}) =>
   api.get(`/finance/fees/student/${studentId}`, { params });
 export const createFee = (data) => api.post('/finance/fees', data);
 export const updateFee = (id, data) => api.put(`/finance/fees/${id}`, data);
-export const deleteFee = (id) => api.delete(`/finance/fees/${id}`);
+
+// Soft delete: archives the fee invoice.
+export const deleteFee = (id, reason = '') =>
+  api.delete(`/finance/fees/${id}`, { data: { reason } });
 
 // Per-fee-record summary (used in the "Record Payment" modal).
 // NOTE: named differently from getFeeSummary() above (which hits
@@ -168,7 +176,10 @@ export const getExpenses = () => api.get('/finance/expenses');
 export const getExpense = (id) => api.get(`/finance/expenses/${id}`);
 export const createExpense = (data) => api.post('/finance/expenses', data);
 export const updateExpense = (id, data) => api.put(`/finance/expenses/${id}`, data);
-export const deleteExpense = (id) => api.delete(`/finance/expenses/${id}`);
+
+// Soft delete: archives the expense.
+export const deleteExpense = (id, reason = '') =>
+  api.delete(`/finance/expenses/${id}`, { data: { reason } });
 
 // Salary Management
 export const getSalaries = () => api.get('/finance/salaries');
@@ -176,7 +187,10 @@ export const getSalary = (id) => api.get(`/finance/salaries/${id}`);
 export const getSalariesByStaff = (staffId) => api.get(`/finance/salaries/staff/${staffId}`);
 export const createSalary = (data) => api.post('/finance/salaries', data);
 export const updateSalary = (id, data) => api.put(`/finance/salaries/${id}`, data);
-export const deleteSalary = (id) => api.delete(`/finance/salaries/${id}`);
+
+// Soft delete: archives the salary record.
+export const deleteSalary = (id, reason = '') =>
+  api.delete(`/finance/salaries/${id}`, { data: { reason } });
 
 // Financial Reports & Statistics
 export const getFinancialOverview = () => api.get('/finance/dashboard/overview');
@@ -705,5 +719,27 @@ export const getStudentFeeInvoices = (studentId, params = {}) =>
 
 export const ensureFeeInvoice = (data) =>
   api.post('/finance/fees/ensure-invoice', data);
+
+
+// ==================== ARCHIVES ====================
+export const getArchivedRecords = (params = {}) =>
+  api.get('/archives', { params });
+
+export const getArchivedRecord = (id) =>
+  api.get(`/archives/${id}`);
+
+// Restore puts the record back into its live collection
+export const restoreArchivedRecord = (id) =>
+  api.post(`/archives/${id}/restore`);
+
+// Permanent delete REQUIRES a reason (sent in the request body)
+export const permanentlyDeleteArchivedRecord = (id, reason) =>
+  api.delete(`/archives/${id}`, { data: { reason } });
+
+// Empty the entire archive (admin only) — reason mandatory
+export const emptyArchive = (reason) =>
+  api.delete('/archives/empty/all', { data: { reason } });
+
+
 
 export default api;

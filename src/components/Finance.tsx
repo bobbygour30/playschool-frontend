@@ -7,7 +7,8 @@ import {
   PieChart, Wallet, CreditCard, Banknote, Receipt,
   AlertCircle, CheckCircle, Clock, Upload, Building,
   User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
-  History, CalendarDays, ReceiptText, FileSpreadsheet, Info
+  History, CalendarDays, ReceiptText, FileSpreadsheet, Info, Archive,
+  Loader2
 } from 'lucide-react';
 import {
   getFees, getExpenses, getSalaries, getStudents, getStaff,
@@ -58,9 +59,6 @@ const chunk = (arr, size) => {
 };
 
 // All payment rows of ONE invoice.
-// - Uses the real payment history when it exists.
-// - Older invoices can have money on them (paid_amount) but no history entries,
-//   so we show one row built from the invoice itself instead of an empty list.
 const invoicePaymentRows = (inv) => {
   if (!inv) return [];
   const history = Array.isArray(inv.payment_history) ? inv.payment_history : [];
@@ -101,6 +99,18 @@ const invoicePaymentRows = (inv) => {
   return [];
 };
 
+// Human label per delete target, for the archive popup
+const describeTarget = (item, type) => {
+  if (!item) return '';
+  if (type === 'fee') return `${item.invoice_number || 'Invoice'} — ${item.student_id?.name || ''}`.trim();
+  if (type === 'expense') return `${item.category || 'Expense'} — ${inr(item.amount)}`.trim();
+  if (type === 'salary') {
+    const m = item.month ? new Date(item.month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '';
+    return `${item.staff_id?.name || 'Staff'} — ${m} — ${inr(item.net_salary)}`.trim();
+  }
+  return '';
+};
+
 export default function Finance() {
   const [activeTab, setActiveTab] = useState('fees');
   const [loading, setLoading] = useState(true);
@@ -130,6 +140,13 @@ export default function Finance() {
   const [studentInvoices, setStudentInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [newInvoiceMonth, setNewInvoiceMonth] = useState('');
+
+  // ==================== DELETE (ARCHIVE) MODAL STATE ====================
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);   // the record itself
+  const [deleteType, setDeleteType] = useState('');         // 'fee' | 'expense' | 'salary'
+  const [deleteReason, setDeleteReason] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     student_id: '',
@@ -264,8 +281,6 @@ export default function Finance() {
     }
   };
 
-  // Load ALL invoices of a student (server auto-creates current + next 2 months).
-  // When autoSelect is true, picks the first payable invoice for the admin.
   const loadStudentInvoices = async (studentId, autoSelect = false) => {
     if (!studentId) { setStudentInvoices([]); return; }
     try {
@@ -290,7 +305,6 @@ export default function Finance() {
     }
   };
 
-  // Admin can create the invoice of any month and pay it right away
   const handleCreateInvoiceForMonth = async () => {
     if (!paymentFormData.student_id) { alert('Select a student first'); return; }
     if (!newInvoiceMonth) { alert('Pick a month'); return; }
@@ -362,7 +376,6 @@ export default function Finance() {
     }
   };
 
-  // Fetch fee details (server returns the invoice + its payment_history + related_invoices)
   const fetchFeeDetails = async (feeId) => {
     try {
       setLoadingHistory(true);
@@ -596,20 +609,48 @@ export default function Finance() {
     }
   };
 
-  const handleDelete = async (id, type) => {
-    if (confirm('Are you sure you want to delete this record?')) {
-      try {
-        if (type === 'fee') await deleteFee(id);
-        else if (type === 'expense') await deleteExpense(id);
-        else if (type === 'salary') await deleteSalary(id);
+  // ==================== DELETE (ARCHIVE) FLOW ====================
+  const handleDeleteClick = (item, type) => {
+    setDeleteTarget(item);
+    setDeleteType(type);
+    setDeleteReason('');
+    setShowDeleteModal(true);
+  };
 
-        await loadData();
-        alert('Record deleted successfully!');
-      } catch (error) {
-        console.error('Error deleting:', error);
-        alert('Failed to delete. Please try again.');
-      }
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || !deleteType) return;
+    try {
+      setIsDeleting(true);
+      const id = deleteTarget._id;
+      const reason = deleteReason.trim();
+
+      if (deleteType === 'fee') await deleteFee(id, reason);
+      else if (deleteType === 'expense') await deleteExpense(id, reason);
+      else if (deleteType === 'salary') await deleteSalary(id, reason);
+
+      alert(
+        `Record has been moved to the Archive.\n\n` +
+        `You can restore it anytime from the Archived Records page.`
+      );
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+      setDeleteType('');
+      setDeleteReason('');
+      await loadData();
+    } catch (error) {
+      console.error('Error archiving record:', error);
+      alert(error?.response?.data?.message || 'Failed to archive record. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+    setDeleteType('');
+    setDeleteReason('');
   };
 
   const handleEdit = (item, type) => {
@@ -850,10 +891,8 @@ export default function Finance() {
   const safeStudents = Array.isArray(students) ? students : [];
   const safeStaff = Array.isArray(staff) ? staff : [];
 
-  // Collected = actual money received (includes partial + advance payments)
   const totalFeesCollected = safeFees.reduce((sum, f) => sum + (f.paid_amount || 0), 0);
 
-  // Pending = amount currently due (not-yet-due invoices are excluded)
   const pendingFees = safeFees.reduce((sum, f) => sum + (f.amount_due || 0), 0);
   const pendingCount = safeFees.filter(f => (f.amount_due || 0) > 0).length;
 
@@ -1048,7 +1087,6 @@ export default function Finance() {
     if (rf.transport_fee > 0) recurringParts.push(`Transport: ${inr(rf.transport_fee)}`);
     recurringParts.push(`Monthly Total: ${inr(rf.total_monthly)}`);
 
-    // Groups shown as a table: each row holds two label/value pairs
     const groups = [
       {
         title: 'Fee Plan',
@@ -1085,12 +1123,10 @@ export default function Finance() {
       },
     ];
 
-    // Every payment of this student: this invoice + all related invoices
     const invoices = [feeDetails, ...(Array.isArray(relatedInvoices) ? relatedInvoices : [])];
     let paymentRows = invoices.flatMap(invoicePaymentRows);
     paymentRows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-    // Never show an empty "no payments" box: show this invoice as an unpaid row instead
     const nothingPaid = paymentRows.length === 0;
     if (nothingPaid) {
       paymentRows = [{
@@ -1108,7 +1144,6 @@ export default function Finance() {
 
     return (
       <div className="space-y-6">
-        {/* Invoice details as a table */}
         <div className="overflow-x-auto border border-gray-200 rounded-xl">
           <table className="w-full text-sm">
             <tbody className="bg-white">
@@ -1119,7 +1154,6 @@ export default function Finance() {
           </table>
         </div>
 
-        {/* Payments table */}
         <div>
           <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
             <History size={16} className="text-green-500" />
@@ -1177,7 +1211,6 @@ export default function Finance() {
           </div>
         </div>
 
-        {/* Related invoices */}
         {(Array.isArray(relatedInvoices) ? relatedInvoices : []).length > 0 && (
           <div>
             <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
@@ -1221,7 +1254,6 @@ export default function Finance() {
     );
   };
 
-  // One titled block of the details table (title row + rows of two label/value pairs)
   const FragmentGroup = ({ group }) => (
     <>
       <tr className="bg-gradient-to-r from-purple-50 to-pink-50">
@@ -1535,7 +1567,7 @@ export default function Finance() {
                               <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 p-1 transition-colors" title="Edit">
                                 <Edit size={18} />
                               </button>
-                              <button onClick={() => handleDelete(fee._id, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors" title="Delete">
+                              <button onClick={() => handleDeleteClick(fee, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors" title="Delete">
                                 <Trash2 size={18} />
                               </button>
                             </div>
@@ -1550,7 +1582,7 @@ export default function Finance() {
           </div>
         )}
 
-        {/* View Details: everything lives inside "Payment History" */}
+        {/* View Details Modal */}
         {showFeeDetails && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1623,7 +1655,7 @@ export default function Finance() {
                           <button onClick={() => handleEdit(expense, 'expense')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
                             <Edit size={18} />
                           </button>
-                          <button onClick={() => handleDelete(expense._id, 'expense')} className="text-red-600 hover:text-red-800 transition-colors">
+                          <button onClick={() => handleDeleteClick(expense, 'expense')} className="text-red-600 hover:text-red-800 transition-colors">
                             <Trash2 size={18} />
                           </button>
                         </td>
@@ -1702,7 +1734,7 @@ export default function Finance() {
                             <button onClick={() => handleEdit(salary, 'salary')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
                               <Edit size={18} />
                             </button>
-                            <button onClick={() => handleDelete(salary._id, 'salary')} className="text-red-600 hover:text-red-800 transition-colors">
+                            <button onClick={() => handleDeleteClick(salary, 'salary')} className="text-red-600 hover:text-red-800 transition-colors">
                               <Trash2 size={18} />
                             </button>
                           </td>
@@ -1714,6 +1746,77 @@ export default function Finance() {
               </table>
             </div>
           </div>
+        )}
+
+        {/* ==================== DELETE (ARCHIVE) MODAL ==================== */}
+        {showDeleteModal && deleteTarget && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110] p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Archive size={22} />
+                  Archive Record
+                </h2>
+                <button
+                  onClick={closeDeleteModal}
+                  disabled={isDeleting}
+                  className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-sm text-amber-800">
+                  <Info size={18} className="flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong>{describeTarget(deleteTarget, deleteType)}</strong> will be moved to the
+                    <strong> Archived Records</strong> page. You can restore it anytime.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for archiving <span className="text-xs text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Duplicate entry, wrong data, no longer needed..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    disabled={isDeleting}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={closeDeleteModal}
+                    disabled={isDeleting}
+                    className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={isDeleting}
+                    className="px-5 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Archiving...
+                      </>
+                    ) : (
+                      <>
+                        <Archive size={18} /> Archive Record
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
         )}
 
         {/* Payment Record Modal */}
