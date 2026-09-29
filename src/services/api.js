@@ -739,7 +739,8 @@ export const permanentlyDeleteArchivedRecord = (id, reason) =>
 // Empty the entire archive (admin only) — reason mandatory
 export const emptyArchive = (reason) =>
   api.delete('/archives/empty/all', { data: { reason } });
-
+export const getArchivedStudentProfile = (archiveId) =>
+  api.get(`/archives/${archiveId}/student-profile`);
 
 
 export default api;

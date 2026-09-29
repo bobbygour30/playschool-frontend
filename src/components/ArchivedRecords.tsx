@@ -4,14 +4,31 @@ import { createPortal } from 'react-dom';
 import {
   Archive, Search, Trash2, RotateCcw, X, AlertCircle, Users,
   Receipt, TrendingDown, Banknote, RefreshCw, Filter, Info,
-  CheckCircle, FileText, User, Calendar, Loader2,
+  CheckCircle, FileText, User, Calendar, Loader2, Eye,
+  Phone, Mail, Heart, Shield, DollarSign, History,
 } from 'lucide-react';
 import {
   getArchivedRecords,
   restoreArchivedRecord,
   permanentlyDeleteArchivedRecord,
   emptyArchive,
+  getArchivedStudentProfile,
 } from '../services/api';
+
+// ==================== ADMIN AUTH ====================
+// Two ways an admin can be recognized:
+//   1. An explicit flag set at login (localStorage.isAdmin === 'true')
+//   2. The hardcoded admin email from Login.jsx
+// Adjust as needed if your auth model grows.
+const isAuthorizedAdmin = () => {
+  try {
+    if (localStorage.getItem('isAdmin') === 'true') return true;
+    const email = localStorage.getItem('userEmail') || '';
+    return email === 'admin@goldenplay.com';
+  } catch {
+    return false;
+  }
+};
 
 // Friendly display config per entity type
 const ENTITY_META = {
@@ -23,10 +40,10 @@ const ENTITY_META = {
 
 const fmtDateTime = (d) =>
   d ? new Date(d).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
-
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
 const inr = (n) => `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
 
-// Human-readable subtitle per snapshot
 const describeSnapshot = (entry) => {
   const s = entry.snapshot || {};
   switch (entry.entity_type) {
@@ -51,6 +68,9 @@ export default function ArchivedRecords() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
+  // Admin authority — computed once per render
+  const canRestore = isAuthorizedAdmin();
+
   // Modals
   const [restoreTarget, setRestoreTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -58,6 +78,11 @@ export default function ArchivedRecords() {
   const [busyId, setBusyId] = useState(null);
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
   const [emptyReason, setEmptyReason] = useState('');
+
+  // Archived Student Profile drawer
+  const [profileTarget, setProfileTarget] = useState(null);   // archive entry
+  const [profileData, setProfileData] = useState(null);       // { student, fee_invoices, payments, totals }
+  const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => { loadArchives(); }, [typeFilter]);
 
@@ -87,6 +112,7 @@ export default function ArchivedRecords() {
 
   const handleRestore = async () => {
     if (!restoreTarget) return;
+    if (!canRestore) { alert('Only an authorized admin can restore records.'); return; }
     try {
       setBusyId(restoreTarget._id);
       const res = await restoreArchivedRecord(restoreTarget._id);
@@ -133,6 +159,23 @@ export default function ArchivedRecords() {
     }
   };
 
+  // Open the full profile of an archived student
+  const openStudentProfile = async (entry) => {
+    setProfileTarget(entry);
+    setProfileData(null);
+    setProfileLoading(true);
+    try {
+      const res = await getArchivedStudentProfile(entry._id);
+      setProfileData(res.data);
+    } catch (error) {
+      console.error('Error loading archived student profile:', error);
+      alert(error?.response?.data?.message || 'Failed to load student profile');
+      setProfileTarget(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
   const filtered = archives.filter((a) => {
     if (!searchTerm) return true;
     const t = searchTerm.toLowerCase();
@@ -165,8 +208,13 @@ export default function ArchivedRecords() {
             </h1>
             <p className="text-gray-600 mt-2 flex items-center gap-2">
               <Archive size={18} className="text-slate-500" />
-              Restore archived students &amp; finance records, or permanently delete with a reason
+              Archived students &amp; finance records. Restore or permanently delete with a reason.
             </p>
+            {!canRestore && (
+              <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 inline-flex items-center gap-1 px-3 py-1 rounded-full">
+                <Info size={12} /> Read-only mode — only authorized admins can restore
+              </p>
+            )}
           </div>
           <div className="flex gap-3">
             <button
@@ -177,7 +225,7 @@ export default function ArchivedRecords() {
               <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
               Refresh
             </button>
-            {summary?.total > 0 && (
+            {summary?.total > 0 && canRestore && (
               <button
                 onClick={() => setShowEmptyConfirm(true)}
                 className="px-5 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
@@ -239,6 +287,7 @@ export default function ArchivedRecords() {
               const meta = ENTITY_META[entry.entity_type] || ENTITY_META.Student;
               const Icon = meta.icon;
               const busy = busyId === entry._id;
+              const isStudent = entry.entity_type === 'Student';
               return (
                 <div key={entry._id} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-xl transition-all border border-gray-200/50 overflow-hidden">
                   <div className="flex flex-col md:flex-row md:items-center gap-4 p-4">
@@ -266,18 +315,29 @@ export default function ArchivedRecords() {
                       </div>
                     </div>
 
-                    <div className="flex gap-2 flex-shrink-0">
+                    <div className="flex gap-2 flex-shrink-0 flex-wrap">
+                      {isStudent && (
+                        <button
+                          onClick={() => openStudentProfile(entry)}
+                          disabled={busy}
+                          className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
+                        >
+                          <Eye size={16} /> View Profile
+                        </button>
+                      )}
                       <button
                         onClick={() => setRestoreTarget(entry)}
-                        disabled={busy}
-                        className="px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
+                        disabled={busy || !canRestore}
+                        title={canRestore ? 'Restore this record' : 'Only authorized admins can restore'}
+                        className="px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <RotateCcw size={16} /> Restore
                       </button>
                       <button
                         onClick={() => { setDeleteTarget(entry); setDeleteReason(''); }}
-                        disabled={busy}
-                        className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
+                        disabled={busy || !canRestore}
+                        title={canRestore ? 'Permanently delete' : 'Only authorized admins can delete'}
+                        className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {busy ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                         Delete Forever
@@ -288,6 +348,242 @@ export default function ArchivedRecords() {
               );
             })}
           </div>
+        )}
+
+        {/* ==================== ARCHIVED STUDENT PROFILE DRAWER ==================== */}
+        {profileTarget && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110] p-4">
+            <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[92vh] overflow-y-auto shadow-2xl">
+              <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <User size={22} className="text-white flex-shrink-0" />
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold text-white truncate">
+                      Archived Student — {profileData?.student?.name || profileTarget.label}
+                    </h2>
+                    <p className="text-xs text-white/80 truncate">
+                      Archived {fmtDateTime(profileTarget.archived_at)}
+                      {profileTarget.archive_reason ? ` · ${profileTarget.archive_reason}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {canRestore ? (
+                    <button
+                      onClick={() => { setProfileTarget(null); setRestoreTarget(profileTarget); }}
+                      className="px-4 py-2 bg-white text-purple-700 rounded-lg hover:bg-white/90 text-sm font-semibold flex items-center gap-1"
+                    >
+                      <RotateCcw size={16} /> Restore Student
+                    </button>
+                  ) : (
+                    <span className="px-3 py-1.5 bg-white/20 text-white text-xs rounded-full">
+                      Read-only
+                    </span>
+                  )}
+                  <button
+                    onClick={() => { setProfileTarget(null); setProfileData(null); }}
+                    className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {profileLoading ? (
+                  <div className="text-center py-12">
+                    <Loader2 size={40} className="mx-auto text-purple-500 animate-spin" />
+                    <p className="mt-3 text-gray-500">Loading archived student profile...</p>
+                  </div>
+                ) : !profileData ? (
+                  <div className="text-center py-12">
+                    <AlertCircle size={48} className="mx-auto text-red-400" />
+                    <p className="mt-3 text-gray-500">Could not load this student's archived profile.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* ============ STUDENT INFO ============ */}
+                    <section className="mb-6">
+                      <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <User size={16} className="text-purple-500" /> Student Profile
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 rounded-xl p-4 border border-gray-200 text-sm">
+                        <InfoCell label="Name" value={profileData.student?.name} />
+                        <InfoCell label="Class" value={`${profileData.student?.class_id || 'N/A'} · Section ${profileData.student?.section || 'A'}`} />
+                        <InfoCell label="Gender" value={profileData.student?.gender} />
+                        <InfoCell label="Blood Group" value={profileData.student?.blood_group} />
+                        <InfoCell label="Date of Birth" value={fmtDate(profileData.student?.date_of_birth)} />
+                        <InfoCell label="Admission Date" value={fmtDate(profileData.student?.admission_date)} />
+                        <InfoCell label="Academic Year" value={profileData.student?.academic_year} />
+                        <InfoCell label="Enrollment Type" value={profileData.student?.enrollment_type} />
+                      </div>
+                    </section>
+
+                    {/* ============ PARENT / CONTACT ============ */}
+                    <section className="mb-6">
+                      <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <Users size={16} className="text-purple-500" /> Parent &amp; Contact
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 rounded-xl p-4 border border-gray-200 text-sm">
+                        <InfoCell label="Parent Name" value={profileData.student?.parent_name} />
+                        <InfoCell label="Relationship" value={profileData.student?.parent_relationship} />
+                        <InfoCell label="Email" value={profileData.student?.parent_email} icon={Mail} />
+                        <InfoCell label="Phone" value={profileData.student?.parent_phone} icon={Phone} />
+                        <InfoCell label="Blood Group" value={profileData.student?.blood_group} icon={Heart} />
+                        <InfoCell label="Address" value={profileData.student?.address} className="md:col-span-2" />
+                        <InfoCell
+                          label="Emergency Contact"
+                          value={
+                            profileData.student?.emergency_contact
+                              ? `${profileData.student.emergency_contact.name || ''} (${profileData.student.emergency_contact.relationship || ''}) · ${profileData.student.emergency_contact.phone || ''}`
+                              : '—'
+                          }
+                        />
+                        {profileData.student?.authorized_pickup && (
+                          <InfoCell
+                            label="Authorized Pickup"
+                            value={`${profileData.student.authorized_pickup.name || ''} (${profileData.student.authorized_pickup.relationship || ''}) · ${profileData.student.authorized_pickup.phone || ''}`}
+                            icon={Shield}
+                            className="md:col-span-2"
+                          />
+                        )}
+                      </div>
+                    </section>
+
+                    {/* ============ FINANCE SUMMARY ============ */}
+                    <section className="mb-6">
+                      <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <DollarSign size={16} className="text-green-600" /> Finance Summary
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <StatCard label="Total Charged" value={inr(profileData.totals.charged)} tone="green" />
+                        <StatCard label="Total Paid" value={inr(profileData.totals.paid)} tone="blue" />
+                        <StatCard label="Outstanding" value={inr(profileData.totals.outstanding)} tone="red" />
+                        <StatCard label="Advance / Credit" value={inr(profileData.totals.advance)} tone="purple" />
+                      </div>
+                    </section>
+
+                    {/* ============ ARCHIVED INVOICES ============ */}
+                    <section className="mb-6">
+                      <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <Receipt size={16} className="text-teal-500" /> Archived Fee Invoices ({profileData.fee_invoices.length})
+                      </h3>
+                      {profileData.fee_invoices.length === 0 ? (
+                        <div className="text-center py-6 bg-gray-50 rounded-xl border border-gray-200 text-gray-500 text-sm">
+                          No archived invoices for this student.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
+                              <tr>
+                                {['Invoice #', 'Fee Period', 'Due Date', 'Total', 'Paid', 'Outstanding', 'Status'].map((h) => (
+                                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                              {profileData.fee_invoices.map((inv) => (
+                                <tr key={inv._id} className="hover:bg-teal-50/40">
+                                  <td className="px-3 py-3 font-mono text-xs text-gray-700">{inv.invoice_number || 'N/A'}</td>
+                                  <td className="px-3 py-3 text-gray-700">{inv.fee_period?.month || '—'}</td>
+                                  <td className="px-3 py-3 text-gray-700">{fmtDate(inv.due_date)}</td>
+                                  <td className="px-3 py-3 font-semibold text-gray-900">{inr(inv.total_amount)}</td>
+                                  <td className="px-3 py-3 font-semibold text-green-700">{inr(inv.paid_amount)}</td>
+                                  <td className="px-3 py-3 font-semibold text-red-700">
+                                    {inr(Math.max(0, (inv.total_amount || 0) - (inv.paid_amount || 0)))}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                      inv.status === 'Paid' ? 'bg-green-100 text-green-700' :
+                                      inv.status === 'Partial' ? 'bg-blue-100 text-blue-700' :
+                                      inv.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {inv.status || '—'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+
+                    {/* ============ PAYMENT HISTORY ============ */}
+                    <section>
+                      <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <History size={16} className="text-green-500" /> Payment History ({profileData.payments.length})
+                      </h3>
+                      {profileData.payments.length === 0 ? (
+                        <div className="text-center py-6 bg-gray-50 rounded-xl border border-gray-200 text-gray-500 text-sm">
+                          No payments recorded on any archived invoice.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
+                              <tr>
+                                {['Invoice #', 'Fee Period', 'Payment Date', 'Amount', 'Type', 'Method', 'Txn / Notes'].map((h) => (
+                                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                              {profileData.payments.map((p, i) => (
+                                <tr key={i} className="hover:bg-teal-50/40 align-top">
+                                  <td className="px-3 py-3 font-mono text-xs text-gray-700">{p.invoice_number || 'N/A'}</td>
+                                  <td className="px-3 py-3 text-gray-700">{p.fee_period || '—'}</td>
+                                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{fmtDateTime(p.date)}</td>
+                                  <td className="px-3 py-3 font-semibold text-gray-900">{inr(p.amount)}</td>
+                                  <td className="px-3 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                      p.payment_type === 'full' ? 'bg-green-100 text-green-700' :
+                                      p.payment_type === 'partial' ? 'bg-blue-100 text-blue-700' :
+                                      p.payment_type === 'advance' ? 'bg-purple-100 text-purple-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {(p.payment_type || 'full').charAt(0).toUpperCase() + (p.payment_type || 'full').slice(1)}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3 text-gray-700">{p.payment_method || '—'}</td>
+                                  <td className="px-3 py-3 text-xs text-gray-600">
+                                    {p.transaction_id ? <div>Txn: {p.transaction_id}</div> : null}
+                                    {p.notes ? <div className="italic">{p.notes}</div> : null}
+                                    {p.advance_allocation?.length > 0 ? (
+                                      <div className="mt-1">
+                                        <span className="font-semibold">Advance →</span>{' '}
+                                        {p.advance_allocation.map((a, idx) => (
+                                          <span key={idx}>
+                                            {a.month} {inr(a.amount)}{idx < p.advance_allocation.length - 1 ? ', ' : ''}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                    {!p.transaction_id && !p.notes && (!p.advance_allocation || p.advance_allocation.length === 0)
+                                      ? <span className="text-gray-400">—</span> : null}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+
+                    {!canRestore && (
+                      <p className="mt-6 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+                        <Info size={14} /> You are viewing this archived profile in read-only mode.
+                        Only an authorized admin can restore this student.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
         )}
 
         {/* Restore confirm */}
@@ -401,7 +697,8 @@ export default function ArchivedRecords() {
   );
 }
 
-// Small inline components
+// ==================== SMALL HELPERS ====================
+
 function SummaryCard({ title, value, icon: Icon, color, active, onClick }) {
   return (
     <button
@@ -421,9 +718,36 @@ function SummaryCard({ title, value, icon: Icon, color, active, onClick }) {
   );
 }
 
+function InfoCell({ label, value, icon: Icon, className = '' }) {
+  return (
+    <div className={className}>
+      <p className="text-xs text-gray-500 flex items-center gap-1">
+        {Icon && <Icon size={11} />} {label}
+      </p>
+      <p className="font-semibold text-gray-800 break-words">{value || '—'}</p>
+    </div>
+  );
+}
+
+function StatCard({ label, value, tone = 'gray' }) {
+  const toneMap = {
+    green: 'text-green-700 bg-green-50 border-green-200',
+    blue: 'text-blue-700 bg-blue-50 border-blue-200',
+    red: 'text-red-700 bg-red-50 border-red-200',
+    purple: 'text-purple-700 bg-purple-50 border-purple-200',
+    gray: 'text-gray-700 bg-gray-50 border-gray-200',
+  };
+  return (
+    <div className={`rounded-xl p-3 border ${toneMap[tone]}`}>
+      <p className="text-xs opacity-70">{label}</p>
+      <p className="text-lg font-bold">{value}</p>
+    </div>
+  );
+}
+
 function Modal({ children, onClose, title, icon: Icon, gradient }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[120] p-4">
       <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl">
         <div className={`bg-gradient-to-r ${gradient} px-6 py-4 rounded-t-2xl flex items-center justify-between`}>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
