@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Plus, Search, Edit, Trash2, X, DollarSign, Calendar, 
-  Filter, Download, TrendingUp, TrendingDown, Users, 
+import {
+  Plus, Search, Edit, Trash2, X, DollarSign, Calendar,
+  Filter, Download, TrendingUp, TrendingDown, Users,
   FileText, Eye, ChevronDown, ChevronRight, Printer,
   PieChart, Wallet, CreditCard, Banknote, Receipt,
   AlertCircle, CheckCircle, Clock, Upload, Building,
   User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
   History, CalendarDays, ReceiptText, FileSpreadsheet, Info
 } from 'lucide-react';
-import { 
+import {
   getFees, getExpenses, getSalaries, getStudents, getStaff,
   createFee, updateFee, deleteFee,
   createExpense, updateExpense, deleteExpense,
@@ -19,10 +19,17 @@ import {
   recordPayment, getStudentFeeInvoices, ensureFeeInvoice,
 } from '../services/api';
 
+// Local-time month key, avoids the UTC month-boundary bug of toISOString
+const monthKeyLocal = (offset = 0) => {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
 // Computes the actual due date for an invoice from a 'YYYY-MM' month and a
 // day-of-month (1-31), clamped to that month's last valid day.
 const computeDueDateFromDay = (monthStr, day) => {
-  const base = monthStr || new Date().toISOString().slice(0, 7);
+  const base = monthStr || monthKeyLocal(0);
   const [y, m] = base.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
   const d = Math.min(Math.max(parseInt(day) || 5, 1), daysInMonth);
@@ -36,8 +43,8 @@ export default function Finance() {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [editingItem, setEditingItem] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  
+  const [selectedMonth, setSelectedMonth] = useState(monthKeyLocal(0));
+
   const [fees, setFees] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [salaryPayments, setSalaryPayments] = useState([]);
@@ -58,7 +65,7 @@ export default function Finance() {
   const [studentInvoices, setStudentInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [newInvoiceMonth, setNewInvoiceMonth] = useState('');
-  
+
   const [formData, setFormData] = useState({
     student_id: '',
     student_name: '',
@@ -110,8 +117,7 @@ export default function Finance() {
     payment_method: 'Cash',
     transaction_no: '',
     notes: '',
-    // Auto-calculated fields
-    payment_type: 'full', // Will be auto-calculated
+    payment_type: 'full',
     is_advance: false,
     advance_allocation: [],
     advance_month: '',
@@ -141,7 +147,7 @@ export default function Finance() {
         getStudents(),
         getStaff(),
       ]);
-      
+
       setFees(extractArray(feesRes));
       setExpenses(extractArray(expensesRes));
       setSalaryPayments(extractArray(salaryRes));
@@ -160,22 +166,21 @@ export default function Finance() {
     }
   };
 
-   // Fetch fee summary when fee record is selected in payment modal
+  // Fetch fee summary when fee record is selected in payment modal
   const fetchFeeSummary = async (feeId) => {
     if (!feeId) {
       setFeeSummary(null);
       return;
     }
-    
+
     try {
       setLoadingFeeSummary(true);
       const response = await getFeeRecordSummary(feeId);
       const result = response.data;
-      
+
       if (result.success) {
         setFeeSummary(result.data);
-        
-        // Auto-set amount paid to remaining amount if available
+
         const remaining = result.data.remaining_amount || 0;
         if (remaining > 0) {
           setPaymentFormData(prev => ({
@@ -197,14 +202,24 @@ export default function Finance() {
     }
   };
 
-  // Load ALL invoices of a student (auto-creates current + next 2 months)
-  const loadStudentInvoices = async (studentId) => {
+  // Load ALL invoices of a student (auto-creates current + next 2 months).
+  // When autoSelect is true, picks the first payable invoice for the admin.
+  const loadStudentInvoices = async (studentId, autoSelect = false) => {
     if (!studentId) { setStudentInvoices([]); return; }
     try {
       setLoadingInvoices(true);
       const res = await getStudentFeeInvoices(studentId, { ensureUpcoming: true });
-      const invoices = res?.data?.invoices;
-      setStudentInvoices(Array.isArray(invoices) ? invoices : []);
+      const invoices = Array.isArray(res?.data?.invoices) ? res.data.invoices : [];
+      setStudentInvoices(invoices);
+
+      if (autoSelect) {
+        const payable = invoices.filter(f => (f.remaining_amount ?? 0) > 0);
+        const pick = payable.find(f => (f.amount_due || 0) > 0) || payable[0];
+        if (pick) {
+          setPaymentFormData(prev => ({ ...prev, fee_id: pick._id }));
+          fetchFeeSummary(pick._id);
+        }
+      }
     } catch (error) {
       console.error('Error loading student invoices:', error);
       setStudentInvoices([]);
@@ -238,15 +253,15 @@ export default function Finance() {
     }
   };
 
-   // Function to sync all student fees from student profiles
+  // Function to sync all student fees from student profiles
   const syncAllStudentFees = async () => {
     if (!confirm('This will sync all student fee records from student profiles to the finance module. Continue?')) return;
-    
+
     try {
       setIsSyncing(true);
       const response = await syncStudentFeesToFinance();
       const result = response.data;
-      
+
       if (result.success) {
         alert(result.message || 'Fee sync completed successfully!');
         await loadData();
@@ -261,18 +276,18 @@ export default function Finance() {
     }
   };
 
-   // Generate recurring fees for all students
+  // Generate recurring fees for all students
   const generateRecurringFees = async () => {
-    const month = prompt('Enter month (YYYY-MM) for recurring fee generation:', new Date().toISOString().slice(0, 7));
+    const month = prompt('Enter month (YYYY-MM) for recurring fee generation:', monthKeyLocal(0));
     if (!month) return;
-    
+
     if (!confirm(`Generate recurring fees for ${month}? This will create invoices for all students with recurring fees configured.`)) return;
-    
+
     try {
       setGeneratingRecurring(true);
       const response = await generateRecurringFeesBulk(month);
       const result = response.data;
-      
+
       if (result.success) {
         alert(`Generated ${result.generated} invoices for ${month}`);
         await loadData();
@@ -287,13 +302,13 @@ export default function Finance() {
     }
   };
 
-    // Fetch fee details with payment history
+  // Fetch fee details with payment history
   const fetchFeeDetails = async (feeId) => {
     try {
       setLoadingHistory(true);
       const response = await getFeeFullDetails(feeId);
       const result = response.data;
-      
+
       if (result) {
         setFeeDetails(result);
         setPaymentHistory(Array.isArray(result.payment_history) ? result.payment_history : []);
@@ -368,10 +383,10 @@ export default function Finance() {
     return tuition + activity + transport;
   };
 
-   // Handle payment record submission with simplified flow
+  // Handle payment record submission with simplified flow
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!paymentFormData.amount_paid || parseFloat(paymentFormData.amount_paid) <= 0) {
       alert('Please enter a valid payment amount');
       return;
@@ -387,7 +402,7 @@ export default function Finance() {
       let paymentType = 'full';
       const remaining = feeSummary?.remaining_amount || 0;
       const amountPaid = parseFloat(paymentFormData.amount_paid) || 0;
-      
+
       if (amountPaid > remaining && remaining > 0) {
         paymentType = 'advance';
       } else if (amountPaid < remaining && remaining > 0) {
@@ -421,16 +436,16 @@ export default function Finance() {
       }
     } catch (error) {
       console.error('Error recording payment:', error);
-      alert('Failed to record payment. Please try again.');
+      alert(error?.response?.data?.message || 'Failed to record payment. Please try again.');
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       if (modalType === 'fee') {
-        const feeMonth = (formData.recurring_start_month || new Date().toISOString().slice(0, 7)).slice(0, 7);
+        const feeMonth = (formData.recurring_start_month || monthKeyLocal(0)).slice(0, 7);
         const computedDueDate = computeDueDateFromDay(feeMonth, formData.monthly_due_day);
 
         const oneTimeTotal = parseFloat(formData.total_amount) || 0;
@@ -446,7 +461,6 @@ export default function Finance() {
           activity_fee: parseFloat(formData.activity_fee) || (useRecurring ? parseFloat(formData.recurring_activity_fee) || 0 : 0),
           total_amount: useRecurring ? recurringTotal : oneTimeTotal,
           due_date: computedDueDate,
-          // status is now calculated automatically from paid amount + due date
           payment_date: formData.payment_date || null,
           payment_method: formData.payment_method,
           transaction_id: formData.transaction_id,
@@ -466,7 +480,7 @@ export default function Finance() {
           },
           is_recurring: true,
         };
-        
+
         if (editingItem) {
           await updateFee(editingItem._id, feeData);
           alert('Fee record updated successfully!');
@@ -474,7 +488,7 @@ export default function Finance() {
           await createFee(feeData);
           alert('Fee record added successfully!');
         }
-      } 
+      }
       else if (modalType === 'expense') {
         const expenseData = {
           category: formData.expense_category,
@@ -486,7 +500,7 @@ export default function Finance() {
           payment_mode: formData.payment_mode,
           receipt: formData.receipt_doc,
         };
-        
+
         if (editingItem) {
           await updateExpense(editingItem._id, expenseData);
           alert('Expense updated successfully!');
@@ -508,7 +522,7 @@ export default function Finance() {
           remarks: formData.remarks,
           salary_slip: formData.salary_slip,
         };
-        
+
         if (editingItem) {
           await updateSalary(editingItem._id, salaryData);
           alert('Salary record updated successfully!');
@@ -517,7 +531,7 @@ export default function Finance() {
           alert('Salary record added successfully!');
         }
       }
-      
+
       await loadData();
       resetForm();
     } catch (error) {
@@ -532,7 +546,7 @@ export default function Finance() {
         if (type === 'fee') await deleteFee(id);
         else if (type === 'expense') await deleteExpense(id);
         else if (type === 'salary') await deleteSalary(id);
-        
+
         await loadData();
         alert('Record deleted successfully!');
       } catch (error) {
@@ -545,7 +559,7 @@ export default function Finance() {
   const handleEdit = (item, type) => {
     setEditingItem(item);
     setModalType(type);
-    
+
     if (type === 'fee') {
       setFormData({
         student_id: item.student_id?._id || item.student_id || '',
@@ -588,7 +602,7 @@ export default function Finance() {
         fee_plan: item.fee_plan || 'Monthly',
         monthly_due_day: item.recurring_fees?.monthly_due_day?.toString() || '5',
       });
-    } 
+    }
     else if (type === 'expense') {
       setFormData({
         expense_category: item.category || '',
@@ -677,7 +691,7 @@ export default function Finance() {
         monthly_due_day: '5',
       });
     }
-    
+
     setShowModal(true);
   };
 
@@ -829,19 +843,19 @@ export default function Finance() {
     );
   };
 
-  const filteredFees = safeFees.filter(f => 
+  const filteredFees = safeFees.filter(f =>
     f.student_id?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     f.student_id?.parent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     f.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
-  const filteredExpenses = safeExpenses.filter(e => 
+
+  const filteredExpenses = safeExpenses.filter(e =>
     e.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     e.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     e.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
-  const filteredSalary = safeSalaryPayments.filter(s => 
+
+  const filteredSalary = safeSalaryPayments.filter(s =>
     s.staff_id?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -1029,8 +1043,8 @@ export default function Finance() {
             <button
               onClick={() => { setActiveTab('fees'); setSearchTerm(''); }}
               className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
-                activeTab === 'fees' 
-                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md' 
+                activeTab === 'fees'
+                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -1043,8 +1057,8 @@ export default function Finance() {
             <button
               onClick={() => { setActiveTab('expenses'); setSearchTerm(''); }}
               className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
-                activeTab === 'expenses' 
-                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md' 
+                activeTab === 'expenses'
+                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -1057,8 +1071,8 @@ export default function Finance() {
             <button
               onClick={() => { setActiveTab('salary'); setSearchTerm(''); }}
               className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
-                activeTab === 'salary' 
-                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md' 
+                activeTab === 'salary'
+                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -1294,8 +1308,8 @@ export default function Finance() {
                             <p className="font-semibold">{feeDetails.invoice_date ? new Date(feeDetails.invoice_date).toLocaleDateString() : 'N/A'}</p>
                           </div>
                         </div>
-                        {(feeDetails.recurring_fees?.tuition_fee > 0 || 
-                          feeDetails.recurring_fees?.activity_fee > 0 || 
+                        {(feeDetails.recurring_fees?.tuition_fee > 0 ||
+                          feeDetails.recurring_fees?.activity_fee > 0 ||
                           feeDetails.recurring_fees?.transport_fee > 0) && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <p className="text-sm font-semibold text-gray-700 mb-2">Recurring Fees Breakdown</p>
@@ -1340,7 +1354,7 @@ export default function Finance() {
                           <p className="text-xl font-bold text-purple-700">₹{(feeDetails.advance_amount || 0).toLocaleString()}</p>
                         </div>
                       </div>
-                      
+
                       {/* Fee Breakdown */}
                       <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 mb-4">
                         <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
@@ -1443,7 +1457,7 @@ export default function Finance() {
                               <div className="flex items-center gap-4">
                                 <span className="font-semibold">₹{(inv.total_amount || 0).toLocaleString()}</span>
                                 <span className={`px-2 py-1 rounded-full text-xs ${
-                                  inv.status === 'Paid' ? 'bg-green-100 text-green-700' : 
+                                  inv.status === 'Paid' ? 'bg-green-100 text-green-700' :
                                   inv.status === 'Partial' ? 'bg-blue-100 text-blue-700' :
                                   inv.status === 'Overdue' ? 'bg-red-100 text-red-700' :
                                   'bg-yellow-100 text-yellow-700'
@@ -1654,7 +1668,7 @@ export default function Finance() {
                         setPaymentFormData({ ...paymentFormData, student_id: sid, fee_id: '', amount_paid: '' });
                         setFeeSummary(null);
                         setStudentInvoices([]);
-                        loadStudentInvoices(sid);
+                        loadStudentInvoices(sid, true);
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     >
@@ -1686,19 +1700,20 @@ export default function Finance() {
                       {getStudentFees(paymentFormData.student_id).map((fee) => {
                         const remaining = fee.remaining_amount ?? Math.max(0, (fee.total_amount || 0) - (fee.paid_amount || 0));
                         const dueTxt = fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'N/A';
+                        const isNext = fee.fee_period?.month === monthKeyLocal(1);
                         let label;
                         switch (fee.status) {
                           case 'Paid': label = 'Paid'; break;
                           case 'Advance': label = 'Paid in advance'; break;
                           case 'No Dues': label = 'No dues'; break;
-                          case 'Partial': label = `Partial · ${fee.payment_phase} — ₹${remaining} left`; break;
-                          case 'Upcoming': label = `Upcoming — due ${dueTxt}`; break;
-                          case 'Overdue': label = `Overdue — ₹${remaining}`; break;
-                          default: label = `Due — ₹${remaining}`;
+                          case 'Partial': label = `Partial · ${fee.payment_phase} - ₹${remaining} left`; break;
+                          case 'Upcoming': label = `Upcoming - due ${dueTxt}, ₹${remaining} payable now`; break;
+                          case 'Overdue': label = `Overdue - ₹${remaining}`; break;
+                          default: label = `Due - ₹${remaining}`;
                         }
                         return (
-                          <option key={fee._id} value={fee._id}>
-                            {fee.fee_period?.month || dueTxt} · {fee.invoice_number || ''} · ₹{fee.total_amount} ({label})
+                          <option key={fee._id} value={fee._id} disabled={remaining <= 0}>
+                            {isNext ? '★ Next month · ' : ''}{fee.fee_period?.month || dueTxt} · {fee.invoice_number || ''} · ₹{fee.total_amount} ({label})
                           </option>
                         );
                       })}
@@ -1847,7 +1862,7 @@ export default function Finance() {
                             Allocate advance amount to future months
                           </label>
                         </div>
-                        
+
                         {paymentFormData.is_advance && (
                           <div className="space-y-3">
                             <p className="text-sm text-gray-600">
@@ -1875,12 +1890,12 @@ export default function Finance() {
                                     const totalAdvance = parseFloat(paymentFormData.amount_paid || 0) - feeSummary.remaining_amount;
                                     const currentAllocated = allocations.reduce((sum, a) => sum + (a.amount || 0), 0);
                                     const newAmount = parseFloat(paymentFormData.advance_amount_allocation);
-                                    
+
                                     if (currentAllocated + newAmount > totalAdvance) {
                                       alert(`Total allocation (₹${(currentAllocated + newAmount).toLocaleString()}) exceeds advance amount (₹${totalAdvance.toLocaleString()})`);
                                       return;
                                     }
-                                    
+
                                     allocations.push({
                                       month: paymentFormData.advance_month,
                                       amount: newAmount,
@@ -1966,7 +1981,7 @@ export default function Finance() {
             <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-teal-500 to-cyan-600 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white">
-                  {editingItem ? `Edit ${modalType === 'fee' ? 'Fee Record' : modalType === 'expense' ? 'Expense' : 'Salary Payment'}` : 
+                  {editingItem ? `Edit ${modalType === 'fee' ? 'Fee Record' : modalType === 'expense' ? 'Expense' : 'Salary Payment'}` :
                    `Add New ${modalType === 'fee' ? 'Fee Record' : modalType === 'expense' ? 'Expense' : 'Salary Payment'}`}
                 </h2>
                 <button onClick={resetForm} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
@@ -1998,8 +2013,8 @@ export default function Finance() {
                         value={formData.student_id}
                         onChange={(e) => {
                           const student = safeStudents.find(s => s._id === e.target.value);
-                          setFormData({ 
-                            ...formData, 
+                          setFormData({
+                            ...formData,
                             student_id: e.target.value,
                             student_name: student?.name || '',
                             admission_fee: student?.admission_fee?.toString() || '',
@@ -2032,41 +2047,41 @@ export default function Finance() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Tuition Fee</label>
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            value={formData.recurring_tuition_fee} 
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formData.recurring_tuition_fee}
                             onChange={(e) => setFormData({ ...formData, recurring_tuition_fee: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                             placeholder="0.00"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Activity Fee</label>
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            value={formData.recurring_activity_fee} 
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formData.recurring_activity_fee}
                             onChange={(e) => setFormData({ ...formData, recurring_activity_fee: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                             placeholder="0.00"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Transport Fee</label>
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            value={formData.recurring_transport_fee} 
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formData.recurring_transport_fee}
                             onChange={(e) => setFormData({ ...formData, recurring_transport_fee: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                             placeholder="0.00"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Fee Plan</label>
-                          <select 
-                            value={formData.fee_plan} 
+                          <select
+                            value={formData.fee_plan}
                             onChange={(e) => setFormData({ ...formData, fee_plan: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                           >
@@ -2093,20 +2108,20 @@ export default function Finance() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Start Month</label>
-                          <input 
-                            type="month" 
-                            value={formData.recurring_start_month} 
+                          <input
+                            type="month"
+                            value={formData.recurring_start_month}
                             onChange={(e) => setFormData({ ...formData, recurring_start_month: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">End Month</label>
-                          <input 
-                            type="month" 
-                            value={formData.recurring_end_month} 
+                          <input
+                            type="month"
+                            value={formData.recurring_end_month}
                             onChange={(e) => setFormData({ ...formData, recurring_end_month: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                           />
                         </div>
                       </div>
@@ -2115,53 +2130,53 @@ export default function Finance() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Admission Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.admission_fee} 
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.admission_fee}
                           onChange={(e) => handleFeeFieldChange('admission_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Tuition Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.tuition_fee} 
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.tuition_fee}
                           onChange={(e) => handleFeeFieldChange('tuition_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Transport Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.transport_fee} 
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.transport_fee}
                           onChange={(e) => handleFeeFieldChange('transport_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Activity Fee</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.activity_fee} 
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.activity_fee}
                           onChange={(e) => handleFeeFieldChange('activity_fee', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount *</label>
-                        <input 
-                          type="number" 
-                          required 
-                          step="0.01" 
-                          value={formData.total_amount} 
-                          readOnly 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold text-teal-700" 
+                        <input
+                          type="number"
+                          required
+                          step="0.01"
+                          value={formData.total_amount}
+                          readOnly
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold text-teal-700"
                         />
                       </div>
                       <div>
@@ -2178,9 +2193,9 @@ export default function Finance() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                        <select 
-                          value={formData.payment_method} 
-                          onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} 
+                        <select
+                          value={formData.payment_method}
+                          onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         >
                           <option value="Cash">Cash</option>
@@ -2192,30 +2207,30 @@ export default function Finance() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Date</label>
-                        <input 
-                          type="date" 
-                          value={formData.payment_date} 
-                          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        <input
+                          type="date"
+                          value={formData.payment_date}
+                          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Transaction ID</label>
-                        <input 
-                          type="text" 
-                          value={formData.transaction_id} 
-                          onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        <input
+                          type="text"
+                          value={formData.transaction_id}
+                          onChange={(e) => setFormData({ ...formData, transaction_id: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                        <textarea 
-                          value={formData.notes} 
-                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
-                          rows={2} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                          placeholder="Additional notes..." 
+                        <textarea
+                          value={formData.notes}
+                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                          rows={2}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          placeholder="Additional notes..."
                         />
                       </div>
                     </div>
@@ -2227,10 +2242,10 @@ export default function Finance() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Expense Category *</label>
-                      <select 
-                        required 
-                        value={formData.expense_category} 
-                        onChange={(e) => setFormData({ ...formData, expense_category: e.target.value })} 
+                      <select
+                        required
+                        value={formData.expense_category}
+                        onChange={(e) => setFormData({ ...formData, expense_category: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       >
                         <option value="">Select Category</option>
@@ -2244,59 +2259,59 @@ export default function Finance() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Expense Date *</label>
-                      <input 
-                        type="date" 
-                        required 
-                        value={formData.expense_date} 
-                        onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })} 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      <input
+                        type="date"
+                        required
+                        value={formData.expense_date}
+                        onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
-                      <textarea 
-                        required 
-                        value={formData.expense_description} 
-                        onChange={(e) => setFormData({ ...formData, expense_description: e.target.value })} 
-                        rows={2} 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                        placeholder="Describe the expense..." 
+                      <textarea
+                        required
+                        value={formData.expense_description}
+                        onChange={(e) => setFormData({ ...formData, expense_description: e.target.value })}
+                        rows={2}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        placeholder="Describe the expense..."
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Amount *</label>
-                      <input 
-                        type="number" 
-                        required 
-                        step="0.01" 
-                        value={formData.expense_amount} 
-                        onChange={(e) => setFormData({ ...formData, expense_amount: e.target.value })} 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      <input
+                        type="number"
+                        required
+                        step="0.01"
+                        value={formData.expense_amount}
+                        onChange={(e) => setFormData({ ...formData, expense_amount: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Name</label>
-                      <input 
-                        type="text" 
-                        value={formData.vendor_name} 
-                        onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })} 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      <input
+                        type="text"
+                        value={formData.vendor_name}
+                        onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Bill/Invoice Number</label>
-                      <input 
-                        type="text" 
-                        value={formData.bill_number} 
-                        onChange={(e) => setFormData({ ...formData, bill_number: e.target.value })} 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                      <input
+                        type="text"
+                        value={formData.bill_number}
+                        onChange={(e) => setFormData({ ...formData, bill_number: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Payment Mode</label>
-                      <select 
-                        value={formData.payment_mode} 
-                        onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })} 
+                      <select
+                        value={formData.payment_mode}
+                        onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       >
                         <option value="Cash">Cash</option>
@@ -2308,11 +2323,11 @@ export default function Finance() {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Receipt/Bill Document</label>
                       <div className="flex items-center gap-2">
-                        <input 
-                          type="file" 
-                          accept=".pdf,.jpg,.jpeg,.png" 
-                          onChange={(e) => handleFileUpload(e, 'receipt_doc')} 
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" 
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={(e) => handleFileUpload(e, 'receipt_doc')}
+                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
                         />
                         {formData.receipt_doc && <FileText size={20} className="text-green-600" />}
                       </div>
@@ -2330,8 +2345,8 @@ export default function Finance() {
                         value={formData.staff_id}
                         onChange={(e) => {
                           const staffMember = safeStaff.find(s => s._id === e.target.value);
-                          setFormData({ 
-                            ...formData, 
+                          setFormData({
+                            ...formData,
                             staff_id: e.target.value,
                             staff_name: staffMember?.name || '',
                             basic_salary: staffMember?.salary?.toString() || ''
@@ -2352,71 +2367,71 @@ export default function Finance() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Salary Month *</label>
-                        <input 
-                          type="month" 
-                          required 
-                          value={formData.salary_month} 
-                          onChange={(e) => setFormData({ ...formData, salary_month: e.target.value })} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        <input
+                          type="month"
+                          required
+                          value={formData.salary_month}
+                          onChange={(e) => setFormData({ ...formData, salary_month: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary *</label>
-                        <input 
-                          type="number" 
-                          required 
-                          step="0.01" 
-                          value={formData.basic_salary} 
+                        <input
+                          type="number"
+                          required
+                          step="0.01"
+                          value={formData.basic_salary}
                           onChange={(e) => {
                             setFormData({ ...formData, basic_salary: e.target.value });
                             setTimeout(calculateNetSalary, 100);
-                          }} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Allowances</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.allowance} 
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.allowance}
                           onChange={(e) => {
                             setFormData({ ...formData, allowance: e.target.value });
                             setTimeout(calculateNetSalary, 100);
-                          }} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={formData.deductions} 
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.deductions}
                           onChange={(e) => {
                             setFormData({ ...formData, deductions: e.target.value });
                             setTimeout(calculateNetSalary, 100);
-                          }} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Net Salary *</label>
-                        <input 
-                          type="number" 
-                          required 
-                          step="0.01" 
-                          value={formData.net_salary} 
-                          readOnly 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold text-teal-700" 
+                        <input
+                          type="number"
+                          required
+                          step="0.01"
+                          value={formData.net_salary}
+                          readOnly
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50 font-semibold text-teal-700"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status *</label>
-                        <select 
-                          required 
-                          value={formData.payment_status} 
-                          onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })} 
+                        <select
+                          required
+                          value={formData.payment_status}
+                          onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         >
                           <option value="Pending">Pending</option>
@@ -2425,31 +2440,31 @@ export default function Finance() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Payment Date</label>
-                        <input 
-                          type="date" 
-                          value={formData.payment_date} 
-                          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                        <input
+                          type="date"
+                          value={formData.payment_date}
+                          onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-                        <textarea 
-                          value={formData.remarks} 
-                          onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} 
-                          rows={2} 
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-                          placeholder="Additional remarks..." 
+                        <textarea
+                          value={formData.remarks}
+                          onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                          rows={2}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          placeholder="Additional remarks..."
                         />
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Salary Slip Document</label>
                         <div className="flex items-center gap-2">
-                          <input 
-                            type="file" 
-                            accept=".pdf,.jpg,.jpeg,.png" 
-                            onChange={(e) => handleFileUpload(e, 'salary_slip')} 
-                            className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" 
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => handleFileUpload(e, 'salary_slip')}
+                            className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
                           />
                           {formData.salary_slip && <FileText size={20} className="text-green-600" />}
                         </div>

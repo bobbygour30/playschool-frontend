@@ -134,7 +134,9 @@ export const getUpcomingItems = () => api.get('/academics/upcoming');
 // Fee Management
 export const getFees = () => api.get('/finance/fees');
 export const getFee = (id) => api.get(`/finance/fees/${id}`);
-export const getFeesByStudent = (studentId) => api.get(`/finance/fees/student/${studentId}`);
+// Optional params: { month, ensureUpcoming }. Server defaults ensureUpcoming ON.
+export const getFeesByStudent = (studentId, params = {}) =>
+  api.get(`/finance/fees/student/${studentId}`, { params });
 export const createFee = (data) => api.post('/finance/fees', data);
 export const updateFee = (id, data) => api.put(`/finance/fees/${id}`, data);
 export const deleteFee = (id) => api.delete(`/finance/fees/${id}`);
@@ -155,6 +157,11 @@ export const syncStudentFeesToFinance = () =>
 // Bulk-generate recurring fee invoices for a given month (YYYY-MM)
 export const generateRecurringFeesBulk = (month) =>
   api.post('/finance/fees/bulk-generate-recurring', { month });
+
+// Recalculate due_date of every invoice from each student's configured
+// monthly_due_day. Pass { dryRun: true } to preview without writing.
+export const fixFeeDueDates = (options = {}) =>
+  api.post('/finance/fees/fix-due-dates', options);
 
 // Expense Management
 export const getExpenses = () => api.get('/finance/expenses');
@@ -690,6 +697,9 @@ export const achievementApi = {
   remove: (id) => api.delete(`/achievements/${id}`),
 };
 
+// All invoices of a student. Server defaults ensureUpcoming ON, so the
+// current + next 2 months' invoices always exist. Pass
+// { ensureUpcoming: false } to skip auto-creation.
 export const getStudentFeeInvoices = (studentId, params = {}) =>
   api.get(`/finance/fees/student/${studentId}`, { params });
 
