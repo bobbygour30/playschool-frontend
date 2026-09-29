@@ -19,11 +19,19 @@ import {
   recordPayment, getStudentFeeInvoices, ensureFeeInvoice,
 } from '../services/api';
 
+// ==================== HELPERS ====================
+
 // Local-time month key, avoids the UTC month-boundary bug of toISOString
 const monthKeyLocal = (offset = 0) => {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// Local-time 'YYYY-MM-DD' (toISOString gives the previous day in India before 5:30 am)
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 // Computes the actual due date for an invoice from a 'YYYY-MM' month and a
@@ -34,6 +42,63 @@ const computeDueDateFromDay = (monthStr, day) => {
   const daysInMonth = new Date(y, m, 0).getDate();
   const d = Math.min(Math.max(parseInt(day) || 5, 1), daysInMonth);
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+
+// Display helpers (school timezone, so a date never shifts by a day)
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
+const fmtDateTime = (d) =>
+  d ? new Date(d).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
+const inr = (n) => `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
+
+const chunk = (arr, size) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+// All payment rows of ONE invoice.
+// - Uses the real payment history when it exists.
+// - Older invoices can have money on them (paid_amount) but no history entries,
+//   so we show one row built from the invoice itself instead of an empty list.
+const invoicePaymentRows = (inv) => {
+  if (!inv) return [];
+  const history = Array.isArray(inv.payment_history) ? inv.payment_history : [];
+  const base = {
+    invoice_number: inv.invoice_number,
+    month: inv.fee_period?.month,
+  };
+
+  if (history.length > 0) {
+    return history.map((p) => ({
+      ...base,
+      invoice_number: p.invoice_number || inv.invoice_number,
+      date: p.payment_date || p.recorded_at,
+      amount: p.amount,
+      payment_type: p.payment_type,
+      payment_method: p.payment_method,
+      transaction_id: p.transaction_id,
+      notes: p.notes,
+      advance_allocation: p.advance_allocation,
+    }));
+  }
+
+  const paid = inv.paid_amount || 0;
+  if (paid > 0) {
+    const total = inv.total_amount || 0;
+    return [{
+      ...base,
+      date: inv.payment_date || inv.invoice_date,
+      amount: paid,
+      payment_type: paid > total ? 'advance' : paid < total ? 'partial' : 'full',
+      payment_method: inv.payment_method,
+      transaction_id: inv.transaction_id,
+      notes: 'Payment recorded on the invoice',
+      advance_allocation: [],
+    }];
+  }
+
+  return [];
 };
 
 export default function Finance() {
@@ -83,7 +148,7 @@ export default function Finance() {
     expense_category: '',
     expense_description: '',
     expense_amount: '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: todayLocal(),
     vendor_name: '',
     bill_number: '',
     payment_mode: 'Cash',
@@ -108,12 +173,11 @@ export default function Finance() {
     monthly_due_day: '5',
   });
 
-  // Payment form data - simplified
   const [paymentFormData, setPaymentFormData] = useState({
     student_id: '',
     fee_id: '',
     amount_paid: '',
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: todayLocal(),
     payment_method: 'Cash',
     transaction_no: '',
     notes: '',
@@ -129,7 +193,6 @@ export default function Finance() {
     loadData();
   }, [selectedMonth]);
 
-  // Helper to safely extract array from API response
   const extractArray = (res) => {
     if (Array.isArray(res)) return res;
     if (res && Array.isArray(res.data)) return res.data;
@@ -166,7 +229,6 @@ export default function Finance() {
     }
   };
 
-  // Fetch fee summary when fee record is selected in payment modal
   const fetchFeeSummary = async (feeId) => {
     if (!feeId) {
       setFeeSummary(null);
@@ -202,7 +264,7 @@ export default function Finance() {
     }
   };
 
-  // Load ALL invoices of a student (auto-creates current + next 2 months).
+  // Load ALL invoices of a student (server auto-creates current + next 2 months).
   // When autoSelect is true, picks the first payable invoice for the admin.
   const loadStudentInvoices = async (studentId, autoSelect = false) => {
     if (!studentId) { setStudentInvoices([]); return; }
@@ -228,7 +290,7 @@ export default function Finance() {
     }
   };
 
-  // Admin can create the invoice of any month (e.g. October) and pay it right away
+  // Admin can create the invoice of any month and pay it right away
   const handleCreateInvoiceForMonth = async () => {
     if (!paymentFormData.student_id) { alert('Select a student first'); return; }
     if (!newInvoiceMonth) { alert('Pick a month'); return; }
@@ -253,7 +315,6 @@ export default function Finance() {
     }
   };
 
-  // Function to sync all student fees from student profiles
   const syncAllStudentFees = async () => {
     if (!confirm('This will sync all student fee records from student profiles to the finance module. Continue?')) return;
 
@@ -276,7 +337,6 @@ export default function Finance() {
     }
   };
 
-  // Generate recurring fees for all students
   const generateRecurringFees = async () => {
     const month = prompt('Enter month (YYYY-MM) for recurring fee generation:', monthKeyLocal(0));
     if (!month) return;
@@ -302,10 +362,12 @@ export default function Finance() {
     }
   };
 
-  // Fetch fee details with payment history
+  // Fetch fee details (server returns the invoice + its payment_history + related_invoices)
   const fetchFeeDetails = async (feeId) => {
     try {
       setLoadingHistory(true);
+      setShowFeeDetails(true);
+      setFeeDetails(null);
       const response = await getFeeFullDetails(feeId);
       const result = response.data;
 
@@ -314,13 +376,14 @@ export default function Finance() {
         setPaymentHistory(Array.isArray(result.payment_history) ? result.payment_history : []);
         setRelatedInvoices(Array.isArray(result.related_invoices) ? result.related_invoices : []);
         setSelectedFeeForDetails(feeId);
-        setShowFeeDetails(true);
       } else {
+        setShowFeeDetails(false);
         alert('Failed to fetch fee details');
       }
     } catch (error) {
       console.error('Error fetching fee details:', error);
-      alert('Failed to fetch fee details');
+      setShowFeeDetails(false);
+      alert(error?.response?.data?.message || 'Failed to fetch fee details');
     } finally {
       setLoadingHistory(false);
     }
@@ -337,7 +400,6 @@ export default function Finance() {
     }
   };
 
-  // Calculate total fee immediately with current values
   const calculateTotalFee = () => {
     const admission = parseFloat(formData.admission_fee) || 0;
     const tuition = parseFloat(formData.tuition_fee) || 0;
@@ -347,13 +409,11 @@ export default function Finance() {
     return total;
   };
 
-  // Update total amount in form data
   const updateTotalAmount = () => {
     const total = calculateTotalFee();
     setFormData(prev => ({ ...prev, total_amount: total.toString() }));
   };
 
-  // Handle fee field changes with immediate total update
   const handleFeeFieldChange = (field, value) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
@@ -375,7 +435,6 @@ export default function Finance() {
     setFormData(prev => ({ ...prev, net_salary: net.toString() }));
   };
 
-  // Calculate recurring total
   const calculateRecurringTotal = () => {
     const tuition = parseFloat(formData.recurring_tuition_fee) || 0;
     const activity = parseFloat(formData.recurring_activity_fee) || 0;
@@ -383,7 +442,6 @@ export default function Finance() {
     return tuition + activity + transport;
   };
 
-  // Handle payment record submission with simplified flow
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
 
@@ -398,7 +456,6 @@ export default function Finance() {
     }
 
     try {
-      // Calculate payment type based on amount and remaining
       let paymentType = 'full';
       const remaining = feeSummary?.remaining_amount || 0;
       const amountPaid = parseFloat(paymentFormData.amount_paid) || 0;
@@ -450,7 +507,6 @@ export default function Finance() {
 
         const oneTimeTotal = parseFloat(formData.total_amount) || 0;
         const recurringTotal = calculateRecurringTotal();
-        // If only recurring fees were entered, the invoice total = monthly recurring total
         const useRecurring = oneTimeTotal <= 0 && recurringTotal > 0;
 
         const feeData = {
@@ -536,7 +592,7 @@ export default function Finance() {
       resetForm();
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Failed to save. Please try again.');
+      alert(error?.response?.data?.message || 'Failed to save. Please try again.');
     }
   };
 
@@ -608,7 +664,7 @@ export default function Finance() {
         expense_category: item.category || '',
         expense_description: item.description || '',
         expense_amount: item.amount?.toString() || '',
-        expense_date: item.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        expense_date: item.date?.split('T')[0] || todayLocal(),
         vendor_name: item.vendor_name || '',
         bill_number: item.bill_number || '',
         payment_mode: item.payment_mode || 'Cash',
@@ -713,7 +769,7 @@ export default function Finance() {
       expense_category: '',
       expense_description: '',
       expense_amount: '',
-      expense_date: new Date().toISOString().split('T')[0],
+      expense_date: todayLocal(),
       vendor_name: '',
       bill_number: '',
       payment_mode: 'Cash',
@@ -746,7 +802,7 @@ export default function Finance() {
       student_id: '',
       fee_id: '',
       amount_paid: '',
-      payment_date: new Date().toISOString().split('T')[0],
+      payment_date: todayLocal(),
       payment_method: 'Cash',
       transaction_no: '',
       notes: '',
@@ -788,7 +844,6 @@ export default function Finance() {
     }
   };
 
-  // Safe arrays
   const safeFees = Array.isArray(fees) ? fees : [];
   const safeExpenses = Array.isArray(expenses) ? expenses : [];
   const safeSalaryPayments = Array.isArray(salaryPayments) ? salaryPayments : [];
@@ -810,14 +865,12 @@ export default function Finance() {
 
   const netBalance = totalFeesCollected - totalExpenses - totalSalaryPaid;
 
-  // Invoices for the selected student (fetched fully from the server, sorted by due date)
   const getStudentFees = (studentId) => {
     if (!studentId) return [];
     if (studentInvoices.length > 0) return studentInvoices;
     return safeFees.filter(f => f.student_id?._id === studentId || f.student_id === studentId);
   };
 
-  // "Partial · Upcoming", "Partial · Due", "Partial · Overdue"
   const phaseStyle = (phase) => {
     if (phase === 'Overdue') return 'bg-red-100 text-red-700';
     if (phase === 'Due') return 'bg-orange-100 text-orange-700';
@@ -859,7 +912,6 @@ export default function Finance() {
     s.staff_id?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Render fee summary in payment modal
   const renderFeeSummary = () => {
     if (!feeSummary) return null;
 
@@ -954,6 +1006,243 @@ export default function Finance() {
       </div>
     );
   };
+
+  // ==================== PAYMENT HISTORY (View Details) ====================
+  const paymentTypeBadge = (type) => {
+    const t = type || 'full';
+    const cls =
+      t === 'full' ? 'bg-green-100 text-green-700' :
+      t === 'partial' ? 'bg-blue-100 text-blue-700' :
+      t === 'advance' ? 'bg-purple-100 text-purple-700' :
+      'bg-gray-100 text-gray-700';
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${cls}`}>
+        {t.charAt(0).toUpperCase() + t.slice(1)}
+      </span>
+    );
+  };
+
+  const renderFeeDetailsBody = () => {
+    if (loadingHistory) {
+      return (
+        <div className="text-center py-10">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+          <p className="mt-4 text-gray-500">Loading payment history...</p>
+        </div>
+      );
+    }
+
+    if (!feeDetails) {
+      return (
+        <div className="text-center py-10">
+          <AlertCircle className="mx-auto text-red-400" size={48} />
+          <p className="text-lg text-gray-500 mt-2">Could not load payment history. Close this window and try again.</p>
+        </div>
+      );
+    }
+
+    const rf = feeDetails.recurring_fees || {};
+    const recurringParts = [];
+    if (rf.tuition_fee > 0) recurringParts.push(`Tuition: ${inr(rf.tuition_fee)}`);
+    if (rf.activity_fee > 0) recurringParts.push(`Activity: ${inr(rf.activity_fee)}`);
+    if (rf.transport_fee > 0) recurringParts.push(`Transport: ${inr(rf.transport_fee)}`);
+    recurringParts.push(`Monthly Total: ${inr(rf.total_monthly)}`);
+
+    // Groups shown as a table: each row holds two label/value pairs
+    const groups = [
+      {
+        title: 'Fee Plan',
+        pairs: [
+          ['Fee Plan Type', feeDetails.fee_plan || 'Monthly'],
+          ['Fee Period', feeDetails.fee_period?.month || 'N/A'],
+          ['Invoice Number', <span className="font-mono">{feeDetails.invoice_number || 'N/A'}</span>],
+          ['Invoice Date', fmtDate(feeDetails.invoice_date)],
+          ['Due Date', fmtDate(feeDetails.due_date)],
+          ['Recurring Fees Breakdown', recurringParts.join(', ')],
+        ],
+      },
+      {
+        title: 'Fee Account',
+        pairs: [
+          ['Total Charged', <span className="font-bold text-green-700">{inr(feeDetails.total_amount)}</span>],
+          ['Total Paid', <span className="font-bold text-blue-700">{inr(feeDetails.paid_amount)}</span>],
+          ['Outstanding', <span className="font-bold text-red-700">{inr(feeDetails.remaining_amount)}</span>],
+          ['Advance', <span className="font-bold text-purple-700">{inr(feeDetails.advance_amount)}</span>],
+        ],
+      },
+      {
+        title: 'Fee Breakdown',
+        pairs: [
+          ['Admission', inr(feeDetails.admission_fee)],
+          ['Tuition', inr(feeDetails.tuition_fee)],
+          ['Transport', inr(feeDetails.transport_fee)],
+          ['Activity', inr(feeDetails.activity_fee)],
+          ...(feeDetails.registration_fee > 0 ? [['Registration', inr(feeDetails.registration_fee)]] : []),
+          ...(feeDetails.kit_fee > 0 ? [['Kit', inr(feeDetails.kit_fee)]] : []),
+          ...(feeDetails.camera_fee > 0 ? [['Camera', inr(feeDetails.camera_fee)]] : []),
+          ...(feeDetails.discount > 0 ? [['Discount', `-${inr(feeDetails.discount)}`]] : []),
+        ],
+      },
+    ];
+
+    // Every payment of this student: this invoice + all related invoices
+    const invoices = [feeDetails, ...(Array.isArray(relatedInvoices) ? relatedInvoices : [])];
+    let paymentRows = invoices.flatMap(invoicePaymentRows);
+    paymentRows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+    // Never show an empty "no payments" box: show this invoice as an unpaid row instead
+    const nothingPaid = paymentRows.length === 0;
+    if (nothingPaid) {
+      paymentRows = [{
+        invoice_number: feeDetails.invoice_number,
+        month: feeDetails.fee_period?.month,
+        date: null,
+        amount: 0,
+        payment_type: 'unpaid',
+        payment_method: null,
+        notes: `Nothing paid yet. Outstanding ${inr(feeDetails.remaining_amount)}`,
+        advance_allocation: [],
+      }];
+    }
+    const totalReceived = paymentRows.reduce((s, r) => s + (r.amount || 0), 0);
+
+    return (
+      <div className="space-y-6">
+        {/* Invoice details as a table */}
+        <div className="overflow-x-auto border border-gray-200 rounded-xl">
+          <table className="w-full text-sm">
+            <tbody className="bg-white">
+              {groups.map((group) => (
+                <FragmentGroup key={group.title} group={group} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Payments table */}
+        <div>
+          <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+            <History size={16} className="text-green-500" />
+            Payments
+          </h3>
+          <div className="overflow-x-auto border border-gray-200 rounded-xl">
+            <table className="w-full text-sm">
+              <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
+                <tr>
+                  {['Invoice #', 'Fee Period', 'Payment Date', 'Amount', 'Type', 'Method', 'Txn / Notes'].map((h) => (
+                    <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {paymentRows.map((row, index) => (
+                  <tr key={index} className="hover:bg-teal-50/40 transition-colors align-top">
+                    <td className="px-3 py-3 font-mono text-xs text-gray-700">{row.invoice_number || 'N/A'}</td>
+                    <td className="px-3 py-3 text-gray-700">{row.month || 'N/A'}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{fmtDateTime(row.date)}</td>
+                    <td className="px-3 py-3 font-semibold text-gray-900">{inr(row.amount)}</td>
+                    <td className="px-3 py-3">
+                      {row.payment_type === 'unpaid'
+                        ? <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Unpaid</span>
+                        : paymentTypeBadge(row.payment_type)}
+                    </td>
+                    <td className="px-3 py-3 text-gray-700">{row.payment_method || '—'}</td>
+                    <td className="px-3 py-3 text-xs text-gray-600">
+                      {row.transaction_id ? <div>Txn: {row.transaction_id}</div> : null}
+                      {row.notes ? <div className="italic">{row.notes}</div> : null}
+                      {row.advance_allocation && row.advance_allocation.length > 0 ? (
+                        <div className="mt-1">
+                          <span className="font-semibold">Advance to:</span>{' '}
+                          {row.advance_allocation.map((a, i) => (
+                            <span key={i}>
+                              {a.month} {inr(a.amount)}{i < row.advance_allocation.length - 1 ? ', ' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {!row.transaction_id && !row.notes && (!row.advance_allocation || row.advance_allocation.length === 0)
+                        ? <span className="text-gray-400">—</span> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td colSpan={3} className="px-3 py-3 text-right text-xs font-semibold text-gray-600">Total received</td>
+                  <td className="px-3 py-3 font-bold text-green-700">{inr(totalReceived)}</td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        {/* Related invoices */}
+        {(Array.isArray(relatedInvoices) ? relatedInvoices : []).length > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+              <FileSpreadsheet size={16} className="text-teal-500" />
+              Related Invoices
+            </h3>
+            <div className="overflow-x-auto border border-gray-200 rounded-xl">
+              <table className="w-full text-sm">
+                <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
+                  <tr>
+                    {['Invoice #', 'Fee Period', 'Due Date', 'Total', 'Paid', 'Outstanding', 'Status'].map((h) => (
+                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {relatedInvoices.map((inv) => {
+                    const style = getStatusColor(inv.status);
+                    return (
+                      <tr key={inv._id} className="hover:bg-gray-50">
+                        <td className="px-3 py-3 font-mono text-xs text-gray-700">{inv.invoice_number}</td>
+                        <td className="px-3 py-3 text-gray-700">{inv.fee_period?.month || 'N/A'}</td>
+                        <td className="px-3 py-3 text-gray-700">{fmtDate(inv.due_date)}</td>
+                        <td className="px-3 py-3 font-semibold text-gray-900">{inr(inv.total_amount)}</td>
+                        <td className="px-3 py-3 font-semibold text-green-700">{inr(inv.paid_amount)}</td>
+                        <td className="px-3 py-3 font-semibold text-red-700">{inr(inv.remaining_amount)}</td>
+                        <td className="px-3 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${style.bg} ${style.text}`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // One titled block of the details table (title row + rows of two label/value pairs)
+  const FragmentGroup = ({ group }) => (
+    <>
+      <tr className="bg-gradient-to-r from-purple-50 to-pink-50">
+        <th colSpan={4} className="px-4 py-2 text-left text-sm font-bold text-gray-800">{group.title}</th>
+      </tr>
+      {chunk(group.pairs, 2).map((pair, i) => (
+        <tr key={i} className="border-t border-gray-100">
+          <td className="px-4 py-2 text-xs text-gray-500 w-1/6">{pair[0][0]}</td>
+          <td className="px-4 py-2 font-semibold text-gray-800 w-1/3">{pair[0][1]}</td>
+          {pair[1] ? (
+            <>
+              <td className="px-4 py-2 text-xs text-gray-500 w-1/6">{pair[1][0]}</td>
+              <td className="px-4 py-2 font-semibold text-gray-800 w-1/3">{pair[1][1]}</td>
+            </>
+          ) : (
+            <td colSpan={2}></td>
+          )}
+        </tr>
+      ))}
+    </>
+  );
 
   if (loading) {
     return (
@@ -1261,222 +1550,22 @@ export default function Finance() {
           </div>
         )}
 
-        {/* Fee Details Modal with Fee Plan and Fee Account */}
+        {/* View Details: everything lives inside "Payment History" */}
         {showFeeDetails && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-4 flex items-center justify-between z-10">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <FileText size={24} />
-                  Fee Details - {feeDetails?.student_id?.name || 'Student'}
+                  <History size={24} />
+                  Payment History{feeDetails?.student_id?.name ? ` — ${feeDetails.student_id.name}` : ''}
                 </h2>
                 <button onClick={() => setShowFeeDetails(false)} className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors">
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
-                {loadingHistory ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-500">Loading fee details...</p>
-                  </div>
-                ) : feeDetails ? (
-                  <>
-                    {/* Fee Plan Section */}
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <CalendarDays size={20} className="text-purple-500" />
-                        Fee Plan
-                      </h3>
-                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div>
-                            <p className="text-sm text-gray-500">Fee Plan Type</p>
-                            <p className="font-semibold">{feeDetails.fee_plan || 'Monthly'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Fee Period</p>
-                            <p className="font-semibold">{feeDetails.fee_period?.month || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Invoice Number</p>
-                            <p className="font-semibold font-mono">{feeDetails.invoice_number || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Invoice Date</p>
-                            <p className="font-semibold">{feeDetails.invoice_date ? new Date(feeDetails.invoice_date).toLocaleDateString() : 'N/A'}</p>
-                          </div>
-                        </div>
-                        {(feeDetails.recurring_fees?.tuition_fee > 0 ||
-                          feeDetails.recurring_fees?.activity_fee > 0 ||
-                          feeDetails.recurring_fees?.transport_fee > 0) && (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
-                            <p className="text-sm font-semibold text-gray-700 mb-2">Recurring Fees Breakdown</p>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                              {feeDetails.recurring_fees?.tuition_fee > 0 && (
-                                <div className="text-sm"><span className="text-gray-500">Tuition:</span> ₹{feeDetails.recurring_fees.tuition_fee.toLocaleString()}</div>
-                              )}
-                              {feeDetails.recurring_fees?.activity_fee > 0 && (
-                                <div className="text-sm"><span className="text-gray-500">Activity:</span> ₹{feeDetails.recurring_fees.activity_fee.toLocaleString()}</div>
-                              )}
-                              {feeDetails.recurring_fees?.transport_fee > 0 && (
-                                <div className="text-sm"><span className="text-gray-500">Transport:</span> ₹{feeDetails.recurring_fees.transport_fee.toLocaleString()}</div>
-                              )}
-                              <div className="text-sm font-semibold"><span className="text-gray-500">Monthly Total:</span> ₹{(feeDetails.recurring_fees?.total_monthly || 0).toLocaleString()}</div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Fee Account Section */}
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <Wallet size={20} className="text-blue-500" />
-                        Fee Account
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div className="bg-green-50 rounded-xl p-3 border border-green-200">
-                          <p className="text-sm text-gray-500">Total Charged</p>
-                          <p className="text-xl font-bold text-green-700">₹{(feeDetails.total_amount || 0).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-200">
-                          <p className="text-sm text-gray-500">Total Paid</p>
-                          <p className="text-xl font-bold text-blue-700">₹{(feeDetails.paid_amount || 0).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-red-50 rounded-xl p-3 border border-red-200">
-                          <p className="text-sm text-gray-500">Outstanding</p>
-                          <p className="text-xl font-bold text-red-700">₹{(feeDetails.remaining_amount || 0).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-purple-50 rounded-xl p-3 border border-purple-200">
-                          <p className="text-sm text-gray-500">Advance</p>
-                          <p className="text-xl font-bold text-purple-700">₹{(feeDetails.advance_amount || 0).toLocaleString()}</p>
-                        </div>
-                      </div>
-
-                      {/* Fee Breakdown */}
-                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 mb-4">
-                        <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                          <ReceiptText size={16} className="text-teal-500" />
-                          Fee Breakdown
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                          <div><span className="text-gray-500">Admission:</span> ₹{(feeDetails.admission_fee || 0).toLocaleString()}</div>
-                          <div><span className="text-gray-500">Tuition:</span> ₹{(feeDetails.tuition_fee || 0).toLocaleString()}</div>
-                          <div><span className="text-gray-500">Transport:</span> ₹{(feeDetails.transport_fee || 0).toLocaleString()}</div>
-                          <div><span className="text-gray-500">Activity:</span> ₹{(feeDetails.activity_fee || 0).toLocaleString()}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Payment History */}
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <History size={20} className="text-green-500" />
-                        Payment History
-                      </h3>
-                      {(Array.isArray(paymentHistory) ? paymentHistory : []).length === 0 ? (
-                        <div className="text-center py-6 bg-gray-50 rounded-xl border border-gray-200">
-                          <DollarSign className="mx-auto text-gray-400" size={48} />
-                          <p className="text-lg text-gray-500 mt-2">No payments recorded yet</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {(Array.isArray(paymentHistory) ? paymentHistory : []).map((payment, index) => (
-                            <div key={index} className="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors">
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                    <DollarSign className="text-green-600" size={20} />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-gray-900">₹{(payment.amount || 0).toLocaleString()}</div>
-                                    <div className="text-sm text-gray-500">
-                                      {payment.recorded_at ? new Date(payment.recorded_at).toLocaleString() : 'N/A'}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                    payment.payment_type === 'full' ? 'bg-green-100 text-green-700' :
-                                    payment.payment_type === 'partial' ? 'bg-blue-100 text-blue-700' :
-                                    payment.payment_type === 'advance' ? 'bg-purple-100 text-purple-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {payment.payment_type?.charAt(0).toUpperCase() + payment.payment_type?.slice(1) || 'Full'}
-                                  </span>
-                                  <div className="text-sm text-gray-500 mt-1">{payment.payment_method}</div>
-                                </div>
-                              </div>
-                              {payment.transaction_id && (
-                                <div className="mt-2 text-sm text-gray-600">
-                                  Transaction: {payment.transaction_id}
-                                </div>
-                              )}
-                              {payment.invoice_number && (
-                                <div className="mt-1 text-sm text-gray-600">
-                                  Invoice: {payment.invoice_number}
-                                </div>
-                              )}
-                              {payment.notes && (
-                                <div className="mt-1 text-sm text-gray-500">
-                                  Notes: {payment.notes}
-                                </div>
-                              )}
-                              {payment.advance_allocation && payment.advance_allocation.length > 0 && (
-                                <div className="mt-2 text-sm text-gray-600">
-                                  <span className="font-semibold">Advance Allocated to:</span>
-                                  <ul className="list-disc list-inside ml-2">
-                                    {payment.advance_allocation.map((alloc, idx) => (
-                                      <li key={idx}>{alloc.month}: ₹{(alloc.amount || 0).toLocaleString()}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Related Invoices */}
-                    {(Array.isArray(relatedInvoices) ? relatedInvoices : []).length > 0 && (
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                          <FileSpreadsheet size={20} className="text-teal-500" />
-                          Related Invoices
-                        </h3>
-                        <div className="space-y-2">
-                          {(Array.isArray(relatedInvoices) ? relatedInvoices : []).map((inv) => (
-                            <div key={inv._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors">
-                              <div>
-                                <span className="font-mono text-sm">{inv.invoice_number}</span>
-                                <span className="text-sm text-gray-500 ml-2">{inv.fee_period?.month || 'N/A'}</span>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <span className="font-semibold">₹{(inv.total_amount || 0).toLocaleString()}</span>
-                                <span className={`px-2 py-1 rounded-full text-xs ${
-                                  inv.status === 'Paid' ? 'bg-green-100 text-green-700' :
-                                  inv.status === 'Partial' ? 'bg-blue-100 text-blue-700' :
-                                  inv.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                                  'bg-yellow-100 text-yellow-700'
-                                }`}>
-                                  {inv.status}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-8">
-                    <AlertCircle className="mx-auto text-red-400" size={48} />
-                    <p className="text-lg text-gray-500 mt-2">Failed to load fee details</p>
-                  </div>
-                )}
+              <div className="p-6">
+                {renderFeeDetailsBody()}
               </div>
             </div>
           </div>,
@@ -1627,7 +1716,7 @@ export default function Finance() {
           </div>
         )}
 
-        {/* Payment Record Modal with Simplified Flow */}
+        {/* Payment Record Modal */}
         {showPaymentModal && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
             <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1642,7 +1731,6 @@ export default function Finance() {
               </div>
 
               <form onSubmit={handlePaymentSubmit} className="p-6 space-y-4">
-                {/* Fee Summary Section - Auto-displayed when fee is selected */}
                 {loadingFeeSummary ? (
                   <div className="flex items-center justify-center py-4">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
@@ -1810,7 +1898,6 @@ export default function Finance() {
                     />
                   </div>
 
-                  {/* Payment Type Display - Auto-calculated, read-only */}
                   {feeSummary && (
                     <div className="md:col-span-2">
                       <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
@@ -1840,7 +1927,6 @@ export default function Finance() {
                     </div>
                   )}
 
-                  {/* Advance Payment Section - Optional */}
                   {feeSummary && feeSummary.remaining_amount > 0 && parseFloat(paymentFormData.amount_paid || 0) > feeSummary.remaining_amount && (
                     <div className="md:col-span-2">
                       <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
@@ -1990,7 +2076,6 @@ export default function Finance() {
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                {/* Fee Form */}
                 {modalType === 'fee' && (
                   <>
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
@@ -2038,7 +2123,6 @@ export default function Finance() {
                       </select>
                     </div>
 
-                    {/* Recurring Fees Section */}
                     <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
                       <h4 className="font-semibold text-purple-700 mb-3 flex items-center gap-2">
                         <CalendarDays size={16} />
@@ -2237,7 +2321,6 @@ export default function Finance() {
                   </>
                 )}
 
-                {/* Expense Form */}
                 {modalType === 'expense' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -2335,7 +2418,6 @@ export default function Finance() {
                   </div>
                 )}
 
-                {/* Salary Form */}
                 {modalType === 'salary' && (
                   <>
                     <div>
