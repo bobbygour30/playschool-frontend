@@ -16,10 +16,6 @@ import {
 } from '../services/api';
 
 // ==================== ADMIN AUTH ====================
-// Two ways an admin can be recognized:
-//   1. An explicit flag set at login (localStorage.isAdmin === 'true')
-//   2. The hardcoded admin email from Login.jsx
-// Adjust as needed if your auth model grows.
 const isAuthorizedAdmin = () => {
   try {
     if (localStorage.getItem('isAdmin') === 'true') return true;
@@ -44,20 +40,47 @@ const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—';
 const inr = (n) => `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
 
+// Short, human-friendly description shown under each row's title
 const describeSnapshot = (entry) => {
   const s = entry.snapshot || {};
   switch (entry.entity_type) {
     case 'Student':
       return `${s.class_id || 'N/A'} · Section ${s.section || 'A'} · ${s.parent_name || ''} ${s.parent_phone ? '· ' + s.parent_phone : ''}`;
-    case 'Fee':
-      return `Invoice ${s.invoice_number || 'N/A'} · ${s.fee_period?.month || ''} · Total ${inr(s.total_amount)} · Paid ${inr(s.paid_amount)}`;
+
+    case 'Fee': {
+      const student = s.student_name || 'Student';
+      const total = inr(s.total_amount);
+      const paid = inr(s.paid_amount);
+      const due = fmtDate(s.due_date);
+      return `${student} · ${s.invoice_number || 'N/A'} · Total ${total} · Paid ${paid}${s.due_date ? ' · Due ' + due : ''}`;
+    }
+
     case 'Expense':
       return `${s.category || ''} · ${s.vendor_name || ''} · ${inr(s.amount)}`;
-    case 'Salary':
-      return `${s.month ? new Date(s.month).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' }) : ''} · Net ${inr(s.net_salary)}`;
+
+    case 'Salary': {
+      const m = s.month
+        ? new Date(s.month).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' })
+        : '';
+      const staff = s.staff_id?.name || '';
+      return `${staff ? staff + ' · ' : ''}${m} · Net ${inr(s.net_salary)}`;
+    }
+
     default:
       return '';
   }
+};
+
+// Title shown bold on each row
+const rowTitle = (entry) => {
+  const s = entry.snapshot || {};
+  if (entry.entity_type === 'Fee') {
+    const student = s.student_name || 'Student';
+    const inv = s.invoice_number || 'Invoice';
+    const month = s.fee_period?.month ? ` (${s.fee_period.month})` : '';
+    return `${student} — ${inv}${month}`;
+  }
+  return entry.label || 'Untitled';
 };
 
 export default function ArchivedRecords() {
@@ -68,10 +91,8 @@ export default function ArchivedRecords() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  // Admin authority — computed once per render
   const canRestore = isAuthorizedAdmin();
 
-  // Modals
   const [restoreTarget, setRestoreTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteReason, setDeleteReason] = useState('');
@@ -79,9 +100,8 @@ export default function ArchivedRecords() {
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
   const [emptyReason, setEmptyReason] = useState('');
 
-  // Archived Student Profile drawer
-  const [profileTarget, setProfileTarget] = useState(null);   // archive entry
-  const [profileData, setProfileData] = useState(null);       // { student, fee_invoices, payments, totals }
+  const [profileTarget, setProfileTarget] = useState(null);
+  const [profileData, setProfileData] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => { loadArchives(); }, [typeFilter]);
@@ -159,7 +179,6 @@ export default function ArchivedRecords() {
     }
   };
 
-  // Open the full profile of an archived student
   const openStudentProfile = async (entry) => {
     setProfileTarget(entry);
     setProfileData(null);
@@ -179,10 +198,13 @@ export default function ArchivedRecords() {
   const filtered = archives.filter((a) => {
     if (!searchTerm) return true;
     const t = searchTerm.toLowerCase();
+    const s = a.snapshot || {};
     return (
       (a.label || '').toLowerCase().includes(t) ||
       (a.archive_reason || '').toLowerCase().includes(t) ||
-      (a.entity_type || '').toLowerCase().includes(t)
+      (a.entity_type || '').toLowerCase().includes(t) ||
+      (s.student_name || '').toLowerCase().includes(t) ||
+      (s.invoice_number || '').toLowerCase().includes(t)
     );
   });
 
@@ -255,7 +277,7 @@ export default function ArchivedRecords() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
-                placeholder="Search by name, invoice, reason..."
+                placeholder="Search by student, invoice, reason..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -288,6 +310,8 @@ export default function ArchivedRecords() {
               const Icon = meta.icon;
               const busy = busyId === entry._id;
               const isStudent = entry.entity_type === 'Student';
+              const isFee = entry.entity_type === 'Fee';
+
               return (
                 <div key={entry._id} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-xl transition-all border border-gray-200/50 overflow-hidden">
                   <div className="flex flex-col md:flex-row md:items-center gap-4 p-4">
@@ -297,7 +321,7 @@ export default function ArchivedRecords() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-gray-900 truncate">{entry.label || 'Untitled'}</h3>
+                        <h3 className="font-bold text-gray-900 truncate">{rowTitle(entry)}</h3>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${meta.chip}`}>
                           {meta.label}
                         </span>
@@ -402,7 +426,7 @@ export default function ArchivedRecords() {
                   </div>
                 ) : (
                   <>
-                    {/* ============ STUDENT INFO ============ */}
+                    {/* STUDENT INFO */}
                     <section className="mb-6">
                       <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                         <User size={16} className="text-purple-500" /> Student Profile
@@ -419,7 +443,7 @@ export default function ArchivedRecords() {
                       </div>
                     </section>
 
-                    {/* ============ PARENT / CONTACT ============ */}
+                    {/* PARENT / CONTACT */}
                     <section className="mb-6">
                       <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                         <Users size={16} className="text-purple-500" /> Parent &amp; Contact
@@ -450,7 +474,7 @@ export default function ArchivedRecords() {
                       </div>
                     </section>
 
-                    {/* ============ FINANCE SUMMARY ============ */}
+                    {/* FINANCE SUMMARY */}
                     <section className="mb-6">
                       <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                         <DollarSign size={16} className="text-green-600" /> Finance Summary
@@ -463,7 +487,7 @@ export default function ArchivedRecords() {
                       </div>
                     </section>
 
-                    {/* ============ ARCHIVED INVOICES ============ */}
+                    {/* ARCHIVED INVOICES */}
                     <section className="mb-6">
                       <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                         <Receipt size={16} className="text-teal-500" /> Archived Fee Invoices ({profileData.fee_invoices.length})
@@ -477,7 +501,7 @@ export default function ArchivedRecords() {
                           <table className="w-full text-sm">
                             <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
                               <tr>
-                                {['Invoice #', 'Fee Period', 'Due Date', 'Total', 'Paid', 'Outstanding', 'Status'].map((h) => (
+                                {['Student', 'Invoice #', 'Fee Period', 'Due Date', 'Total', 'Paid', 'Outstanding', 'Status'].map((h) => (
                                   <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{h}</th>
                                 ))}
                               </tr>
@@ -485,6 +509,7 @@ export default function ArchivedRecords() {
                             <tbody className="divide-y divide-gray-200 bg-white">
                               {profileData.fee_invoices.map((inv) => (
                                 <tr key={inv._id} className="hover:bg-teal-50/40">
+                                  <td className="px-3 py-3 font-semibold text-gray-800">{inv.student_name || profileData.student?.name || '—'}</td>
                                   <td className="px-3 py-3 font-mono text-xs text-gray-700">{inv.invoice_number || 'N/A'}</td>
                                   <td className="px-3 py-3 text-gray-700">{inv.fee_period?.month || '—'}</td>
                                   <td className="px-3 py-3 text-gray-700">{fmtDate(inv.due_date)}</td>
@@ -511,7 +536,7 @@ export default function ArchivedRecords() {
                       )}
                     </section>
 
-                    {/* ============ PAYMENT HISTORY ============ */}
+                    {/* PAYMENT HISTORY */}
                     <section>
                       <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                         <History size={16} className="text-green-500" /> Payment History ({profileData.payments.length})
