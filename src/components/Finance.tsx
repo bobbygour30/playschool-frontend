@@ -22,6 +22,26 @@ import {
 
 // ==================== HELPERS ====================
 
+// Archive reason options — mirrors the server-side enum in routes/archives.js
+const ARCHIVE_REASONS = [
+  'Duplicate record',
+  'Created by mistake',
+  'Incorrect amount',
+  'Cancelled invoice',
+  'Other',
+];
+
+// Adapt the storage key to however your app stores the logged-in user.
+// (The backend prefers req.user if you have auth middleware.)
+const getCurrentUserName = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    return u.name || u.username || u.email || 'Admin';
+  } catch {
+    return 'Admin';
+  }
+};
+
 // Local-time month key, avoids the UTC month-boundary bug of toISOString
 const monthKeyLocal = (offset = 0) => {
   const now = new Date();
@@ -145,7 +165,8 @@ export default function Finance() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);   // the record itself
   const [deleteType, setDeleteType] = useState('');         // 'fee' | 'expense' | 'salary'
-  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteReasonType, setDeleteReasonType] = useState('');
+  const [deleteReasonText, setDeleteReasonText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -610,32 +631,46 @@ export default function Finance() {
   };
 
   // ==================== DELETE (ARCHIVE) FLOW ====================
+  const resetDeleteState = () => {
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+    setDeleteType('');
+    setDeleteReasonType('');
+    setDeleteReasonText('');
+  };
+
   const handleDeleteClick = (item, type) => {
     setDeleteTarget(item);
     setDeleteType(type);
-    setDeleteReason('');
+    setDeleteReasonType('');
+    setDeleteReasonText('');
     setShowDeleteModal(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget || !deleteType) return;
+
+    if (!deleteReasonType) { alert('Please select a reason'); return; }
+    if (deleteReasonType === 'Other' && !deleteReasonText.trim()) {
+      alert('Please specify the reason');
+      return;
+    }
+
     try {
       setIsDeleting(true);
       const id = deleteTarget._id;
-      const reason = deleteReason.trim();
+      const payload = {
+        reason_type: deleteReasonType,
+        reason: deleteReasonText.trim(),
+        archived_by_name: getCurrentUserName(),
+      };
 
-      if (deleteType === 'fee') await deleteFee(id, reason);
-      else if (deleteType === 'expense') await deleteExpense(id, reason);
-      else if (deleteType === 'salary') await deleteSalary(id, reason);
+      if (deleteType === 'fee') await deleteFee(id, payload);
+      else if (deleteType === 'expense') await deleteExpense(id, payload);
+      else if (deleteType === 'salary') await deleteSalary(id, payload);
 
-      alert(
-        `Record has been moved to the Archive.\n\n` +
-        `You can restore it anytime from the Archived Records page.`
-      );
-      setShowDeleteModal(false);
-      setDeleteTarget(null);
-      setDeleteType('');
-      setDeleteReason('');
+      alert('Record has been archived (voided).\n\nIt can be reviewed or restored from the Archived Records page.');
+      resetDeleteState();
       await loadData();
     } catch (error) {
       console.error('Error archiving record:', error);
@@ -647,10 +682,7 @@ export default function Finance() {
 
   const closeDeleteModal = () => {
     if (isDeleting) return;
-    setShowDeleteModal(false);
-    setDeleteTarget(null);
-    setDeleteType('');
-    setDeleteReason('');
+    resetDeleteState();
   };
 
   const handleEdit = (item, type) => {
@@ -1567,8 +1599,8 @@ export default function Finance() {
                               <button onClick={() => handleEdit(fee, 'fee')} className="text-blue-600 hover:text-blue-800 p-1 transition-colors" title="Edit">
                                 <Edit size={18} />
                               </button>
-                              <button onClick={() => handleDeleteClick(fee, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors" title="Delete">
-                                <Trash2 size={18} />
+                              <button onClick={() => handleDeleteClick(fee, 'fee')} className="text-red-600 hover:text-red-800 p-1 transition-colors" title="Archive / Void">
+                                <Archive size={18} />
                               </button>
                             </div>
                           </td>
@@ -1655,8 +1687,8 @@ export default function Finance() {
                           <button onClick={() => handleEdit(expense, 'expense')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
                             <Edit size={18} />
                           </button>
-                          <button onClick={() => handleDeleteClick(expense, 'expense')} className="text-red-600 hover:text-red-800 transition-colors">
-                            <Trash2 size={18} />
+                          <button onClick={() => handleDeleteClick(expense, 'expense')} className="text-red-600 hover:text-red-800 transition-colors" title="Archive / Void">
+                            <Archive size={18} />
                           </button>
                         </td>
                       </tr>
@@ -1734,8 +1766,8 @@ export default function Finance() {
                             <button onClick={() => handleEdit(salary, 'salary')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
                               <Edit size={18} />
                             </button>
-                            <button onClick={() => handleDeleteClick(salary, 'salary')} className="text-red-600 hover:text-red-800 transition-colors">
-                              <Trash2 size={18} />
+                            <button onClick={() => handleDeleteClick(salary, 'salary')} className="text-red-600 hover:text-red-800 transition-colors" title="Archive / Void">
+                              <Archive size={18} />
                             </button>
                           </td>
                         </tr>
@@ -1748,14 +1780,14 @@ export default function Finance() {
           </div>
         )}
 
-        {/* ==================== DELETE (ARCHIVE) MODAL ==================== */}
+        {/* ==================== ARCHIVE / VOID MODAL ==================== */}
         {showDeleteModal && deleteTarget && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110] p-4">
             <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
               <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 rounded-t-2xl flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Archive size={22} />
-                  Archive Record
+                  Archive / Void Record
                 </h2>
                 <button
                   onClick={closeDeleteModal}
@@ -1770,24 +1802,57 @@ export default function Finance() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-sm text-amber-800">
                   <Info size={18} className="flex-shrink-0 mt-0.5" />
                   <span>
-                    <strong>{describeTarget(deleteTarget, deleteType)}</strong> will be moved to the
-                    <strong> Archived Records</strong> page. You can restore it anytime.
+                    <strong>{describeTarget(deleteTarget, deleteType)}</strong> will be voided and moved to the
+                    <strong> Archived Records</strong> page. Finance records are never permanently deleted;
+                    your name and the time will be recorded.
                   </span>
                 </div>
 
+                {deleteType === 'fee' && (deleteTarget.paid_amount || 0) > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-sm text-red-700">
+                    <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      This invoice has <strong>{inr(deleteTarget.paid_amount)}</strong> already paid.
+                      Voiding it removes that amount from the collected totals.
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Reason for archiving <span className="text-xs text-gray-400">(optional)</span>
+                    Reason <span className="text-red-500">*</span>
                   </label>
-                  <textarea
-                    value={deleteReason}
-                    onChange={(e) => setDeleteReason(e.target.value)}
-                    rows={3}
-                    placeholder="e.g. Duplicate entry, wrong data, no longer needed..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  <select
+                    value={deleteReasonType}
+                    onChange={(e) => setDeleteReasonType(e.target.value)}
                     disabled={isDeleting}
-                  />
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  >
+                    <option value="">Select a reason</option>
+                    {ARCHIVE_REASONS.map((r) => (
+                      <option key={r} value={r}>{r === 'Other' ? 'Other – specify reason' : r}</option>
+                    ))}
+                  </select>
                 </div>
+
+                {deleteReasonType && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {deleteReasonType === 'Other' ? 'Specify reason' : 'Additional note'}{' '}
+                      {deleteReasonType === 'Other'
+                        ? <span className="text-red-500">*</span>
+                        : <span className="text-xs text-gray-400">(optional)</span>}
+                    </label>
+                    <textarea
+                      value={deleteReasonText}
+                      onChange={(e) => setDeleteReasonText(e.target.value)}
+                      rows={3}
+                      placeholder={deleteReasonType === 'Other' ? 'Type the reason...' : 'Any extra details...'}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      disabled={isDeleting}
+                    />
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-2">
                   <button
@@ -1799,17 +1864,17 @@ export default function Finance() {
                   </button>
                   <button
                     onClick={handleDeleteConfirm}
-                    disabled={isDeleting}
-                    className="px-5 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg disabled:opacity-70 flex items-center gap-2"
+                    disabled={
+                      isDeleting ||
+                      !deleteReasonType ||
+                      (deleteReasonType === 'Other' && !deleteReasonText.trim())
+                    }
+                    className="px-5 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg disabled:opacity-60 flex items-center gap-2"
                   >
                     {isDeleting ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" /> Archiving...
-                      </>
+                      <><Loader2 size={18} className="animate-spin" /> Archiving...</>
                     ) : (
-                      <>
-                        <Archive size={18} /> Archive Record
-                      </>
+                      <><Archive size={18} /> Archive / Void</>
                     )}
                   </button>
                 </div>

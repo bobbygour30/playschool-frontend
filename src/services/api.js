@@ -145,9 +145,14 @@ export const getFeesByStudent = (studentId, params = {}) =>
 export const createFee = (data) => api.post('/finance/fees', data);
 export const updateFee = (id, data) => api.put(`/finance/fees/${id}`, data);
 
-// Soft delete: archives the fee invoice.
-export const deleteFee = (id, reason = '') =>
-  api.delete(`/finance/fees/${id}`, { data: { reason } });
+// Archive / void a fee invoice. The payload is an object:
+//   { reason_type: 'Duplicate record' | 'Created by mistake' | 'Incorrect amount'
+//                | 'Cancelled invoice' | 'Other',
+//     reason: '<required only for Other, optional note otherwise>',
+//     archived_by_name?: '<optional>' }
+// Finance records are never permanently deleted — they are archived for audit.
+export const deleteFee = (id, payload = {}) =>
+  api.delete(`/finance/fees/${id}`, { data: payload });
 
 // Per-fee-record summary (used in the "Record Payment" modal).
 // NOTE: named differently from getFeeSummary() above (which hits
@@ -177,9 +182,9 @@ export const getExpense = (id) => api.get(`/finance/expenses/${id}`);
 export const createExpense = (data) => api.post('/finance/expenses', data);
 export const updateExpense = (id, data) => api.put(`/finance/expenses/${id}`, data);
 
-// Soft delete: archives the expense.
-export const deleteExpense = (id, reason = '') =>
-  api.delete(`/finance/expenses/${id}`, { data: { reason } });
+// Archive / void an expense. Same payload shape as deleteFee.
+export const deleteExpense = (id, payload = {}) =>
+  api.delete(`/finance/expenses/${id}`, { data: payload });
 
 // Salary Management
 export const getSalaries = () => api.get('/finance/salaries');
@@ -188,9 +193,9 @@ export const getSalariesByStaff = (staffId) => api.get(`/finance/salaries/staff/
 export const createSalary = (data) => api.post('/finance/salaries', data);
 export const updateSalary = (id, data) => api.put(`/finance/salaries/${id}`, data);
 
-// Soft delete: archives the salary record.
-export const deleteSalary = (id, reason = '') =>
-  api.delete(`/finance/salaries/${id}`, { data: { reason } });
+// Archive / void a salary record. Same payload shape as deleteFee.
+export const deleteSalary = (id, payload = {}) =>
+  api.delete(`/finance/salaries/${id}`, { data: payload });
 
 // Financial Reports & Statistics
 export const getFinancialOverview = () => api.get('/finance/dashboard/overview');

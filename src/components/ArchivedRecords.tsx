@@ -15,6 +15,10 @@ import {
   getArchivedStudentProfile,
 } from '../services/api';
 
+// Finance records can NEVER be permanently deleted — they are kept for audit.
+// Mirrors FINANCE_TYPES in routes/archives.js.
+const FINANCE_TYPES = ['Fee', 'Expense', 'Salary'];
+
 // Friendly display config per entity type
 const ENTITY_META = {
   Student: { label: 'Student', icon: Users, bg: 'from-purple-500 to-pink-600', chip: 'bg-purple-100 text-purple-700' },
@@ -186,6 +190,7 @@ export default function ArchivedRecords() {
     return (
       (a.label || '').toLowerCase().includes(t) ||
       (a.archive_reason || '').toLowerCase().includes(t) ||
+      (a.archived_by_name || '').toLowerCase().includes(t) ||
       (a.entity_type || '').toLowerCase().includes(t) ||
       (s.student_name || '').toLowerCase().includes(t) ||
       (s.invoice_number || '').toLowerCase().includes(t)
@@ -214,7 +219,7 @@ export default function ArchivedRecords() {
             </h1>
             <p className="text-gray-600 mt-2 flex items-center gap-2">
               <Archive size={18} className="text-slate-500" />
-              Archived students &amp; finance records. Restore or permanently delete with a reason.
+              Archived students &amp; finance records. Restore, or delete students permanently.
             </p>
           </div>
           <div className="flex gap-3">
@@ -226,13 +231,13 @@ export default function ArchivedRecords() {
               <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
               Refresh
             </button>
-            {summary?.total > 0 && (
+            {summary?.Student > 0 && (
               <button
                 onClick={() => setShowEmptyConfirm(true)}
                 className="px-5 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
               >
                 <Trash2 size={18} />
-                Empty Archive
+                Empty Student Archive
               </button>
             )}
           </div>
@@ -256,7 +261,7 @@ export default function ArchivedRecords() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
-                placeholder="Search by student, invoice, reason..."
+                placeholder="Search by student, invoice, reason, who archived..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -279,7 +284,7 @@ export default function ArchivedRecords() {
             <Archive className="mx-auto text-gray-300 mb-3" size={64} />
             <p className="text-lg text-gray-500">No archived records</p>
             <p className="text-sm text-gray-400 mt-1">
-              Deleted students, fees, expenses and salaries will appear here.
+              Archived students, fees, expenses and salaries will appear here.
             </p>
           </div>
         ) : (
@@ -289,6 +294,7 @@ export default function ArchivedRecords() {
               const Icon = meta.icon;
               const busy = busyId === entry._id;
               const isStudent = entry.entity_type === 'Student';
+              const isFinance = FINANCE_TYPES.includes(entry.entity_type);
 
               return (
                 <div key={entry._id} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-xl transition-all border border-gray-200/50 overflow-hidden">
@@ -309,9 +315,12 @@ export default function ArchivedRecords() {
                         <span className="flex items-center gap-1">
                           <Calendar size={11} /> Archived {fmtDateTime(entry.archived_at)}
                         </span>
-                        {entry.archive_reason && (
+                        <span className="flex items-center gap-1">
+                          <User size={11} /> By {entry.archived_by_name || 'Unknown'}
+                        </span>
+                        {(entry.archive_reason_type || entry.archive_reason) && (
                           <span className="flex items-center gap-1">
-                            <Info size={11} /> {entry.archive_reason}
+                            <Info size={11} /> {entry.archive_reason || entry.archive_reason_type}
                           </span>
                         )}
                       </div>
@@ -334,14 +343,23 @@ export default function ArchivedRecords() {
                       >
                         <RotateCcw size={16} /> Restore
                       </button>
-                      <button
-                        onClick={() => { setDeleteTarget(entry); setDeleteReason(''); }}
-                        disabled={busy}
-                        className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
-                      >
-                        {busy ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                        Delete Forever
-                      </button>
+                      {isFinance ? (
+                        <span
+                          className="px-3 py-2 bg-gray-100 text-gray-500 rounded-lg text-xs font-semibold flex items-center gap-1"
+                          title="Finance records are kept permanently for audit"
+                        >
+                          <Shield size={14} /> Protected
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => { setDeleteTarget(entry); setDeleteReason(''); }}
+                          disabled={busy}
+                          className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
+                        >
+                          {busy ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                          Delete Forever
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -363,6 +381,7 @@ export default function ArchivedRecords() {
                     </h2>
                     <p className="text-xs text-white/80 truncate">
                       Archived {fmtDateTime(profileTarget.archived_at)}
+                      {profileTarget.archived_by_name ? ` by ${profileTarget.archived_by_name}` : ''}
                       {profileTarget.archive_reason ? ` · ${profileTarget.archive_reason}` : ''}
                     </p>
                   </div>
@@ -582,7 +601,8 @@ export default function ArchivedRecords() {
             </p>
             {restoreTarget.entity_type === 'Student' && (
               <p className="text-xs text-gray-500 mt-2">
-                Any of this student's archived fee invoices will also be restored.
+                Only invoices that were archived <em>together with the student</em> will be restored.
+                Invoices you voided individually stay voided.
               </p>
             )}
             <div className="flex justify-end gap-3 pt-4">
@@ -646,11 +666,12 @@ export default function ArchivedRecords() {
 
         {/* Empty archive confirm */}
         {showEmptyConfirm && createPortal(
-          <Modal onClose={() => setShowEmptyConfirm(false)} title="Empty Entire Archive" icon={AlertCircle} gradient="from-red-600 to-rose-700">
+          <Modal onClose={() => setShowEmptyConfirm(false)} title="Empty Student Archive" icon={AlertCircle} gradient="from-red-600 to-rose-700">
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex items-start gap-2 text-sm text-red-700">
               <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
               <span>
-                This will <strong>permanently delete every archived record</strong>. This cannot be undone.
+                This will <strong>permanently delete all archived students</strong>. Archived finance records
+                (invoices, expenses, salaries) are protected and will be kept. This cannot be undone.
               </span>
             </div>
 
@@ -674,7 +695,7 @@ export default function ArchivedRecords() {
                 disabled={!emptyReason.trim()}
                 className="px-5 py-2 bg-gradient-to-r from-red-600 to-rose-700 text-white rounded-xl hover:shadow-lg disabled:opacity-60"
               >
-                Yes, empty everything
+                Yes, delete students
               </button>
             </div>
           </Modal>,
