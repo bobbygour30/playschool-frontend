@@ -9,11 +9,14 @@ import {
 } from 'lucide-react';
 import {
   getArchivedRecords,
+  getArchivedRecord,
   restoreArchivedRecord,
   permanentlyDeleteArchivedRecord,
   emptyArchive,
   getArchivedStudentProfile,
+  getCurrentUserName,
 } from '../services/api';
+import { RecordDetailsModal } from './RecordDetailsModal';
 
 // Finance records can NEVER be permanently deleted — they are kept for audit.
 // Mirrors FINANCE_TYPES in routes/archives.js.
@@ -48,14 +51,14 @@ const describeSnapshot = (entry) => {
     }
 
     case 'Expense':
-      return `${s.category || ''} · ${s.vendor_name || ''} · ${inr(s.amount)}`;
+      return `${s.expense_id ? s.expense_id + ' · ' : ''}${s.category || ''} · ${s.vendor_name || 'No vendor'} · ${inr(s.amount)}${s.date ? ' · ' + fmtDate(s.date) : ''}`;
 
     case 'Salary': {
       const m = s.month
         ? new Date(s.month).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' })
         : '';
-      const staff = s.staff_id?.name || '';
-      return `${staff ? staff + ' · ' : ''}${m} · Net ${inr(s.net_salary)}`;
+      const staff = s.staff_name || s.staff_id?.name || '';
+      return `${staff ? staff + ' · ' : ''}${m} · Net ${inr(s.net_salary)}${s.status ? ' · ' + s.status : ''}`;
     }
 
     default:
@@ -93,6 +96,8 @@ export default function ArchivedRecords() {
   const [profileData, setProfileData] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  const [detailsTarget, setDetailsTarget] = useState(null);   // { type, record, archive }
+
   useEffect(() => { loadArchives(); }, [typeFilter]);
 
   const loadArchives = async () => {
@@ -119,11 +124,24 @@ export default function ArchivedRecords() {
     setIsSyncing(false);
   };
 
+  const openRecordDetails = async (entry) => {
+    try {
+      const res = await getArchivedRecord(entry._id);
+      setDetailsTarget({
+        type: entry.entity_type.toLowerCase(),
+        record: res.data?.snapshot || entry.snapshot || {},
+        archive: res.data || entry,
+      });
+    } catch (error) {
+      alert(error?.response?.data?.message || 'Failed to load record details');
+    }
+  };
+
   const handleRestore = async () => {
     if (!restoreTarget) return;
     try {
       setBusyId(restoreTarget._id);
-      const res = await restoreArchivedRecord(restoreTarget._id);
+      const res = await restoreArchivedRecord(restoreTarget._id, { acted_by_name: getCurrentUserName() });
       alert(res.data?.message || 'Restored successfully');
       setRestoreTarget(null);
       await loadArchives();
@@ -193,7 +211,9 @@ export default function ArchivedRecords() {
       (a.archived_by_name || '').toLowerCase().includes(t) ||
       (a.entity_type || '').toLowerCase().includes(t) ||
       (s.student_name || '').toLowerCase().includes(t) ||
-      (s.invoice_number || '').toLowerCase().includes(t)
+      (s.invoice_number || '').toLowerCase().includes(t) ||
+      (s.expense_id || '').toLowerCase().includes(t) ||
+      (s.staff_name || '').toLowerCase().includes(t)
     );
   });
 
@@ -309,6 +329,16 @@ export default function ArchivedRecords() {
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${meta.chip}`}>
                           {meta.label}
                         </span>
+                        {entry.archive_source === 'staff' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700">
+                            Staff removed
+                          </span>
+                        )}
+                        {entry.archive_source === 'student' && entry.entity_type === 'Fee' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700">
+                            With student
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-500 mt-0.5 truncate">{describeSnapshot(entry)}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
@@ -334,6 +364,15 @@ export default function ArchivedRecords() {
                           className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
                         >
                           <Eye size={16} /> View Profile
+                        </button>
+                      )}
+                      {!isStudent && (
+                        <button
+                          onClick={() => openRecordDetails(entry)}
+                          disabled={busy}
+                          className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 text-sm font-semibold disabled:opacity-50"
+                        >
+                          <Eye size={16} /> Details
                         </button>
                       )}
                       <button
@@ -605,6 +644,11 @@ export default function ArchivedRecords() {
                 Invoices you voided individually stay voided.
               </p>
             )}
+            {restoreTarget.entity_type === 'Salary' && (
+              <p className="text-xs text-gray-500 mt-2">
+                The staff member must still exist. If they were removed, this salary stays here as a permanent audit record.
+              </p>
+            )}
             <div className="flex justify-end gap-3 pt-4">
               <button onClick={() => setRestoreTarget(null)} className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50">
                 Cancel
@@ -700,6 +744,16 @@ export default function ArchivedRecords() {
             </div>
           </Modal>,
           document.body
+        )}
+
+        {/* Record Details Modal (audit trail / archived snapshot) */}
+        {detailsTarget && (
+          <RecordDetailsModal
+            type={detailsTarget.type}
+            record={detailsTarget.record}
+            archive={detailsTarget.archive}
+            onClose={() => setDetailsTarget(null)}
+          />
         )}
       </div>
     </div>

@@ -8,7 +8,7 @@ import {
   AlertCircle, CheckCircle, Clock, Upload, Building,
   User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
   History, CalendarDays, ReceiptText, FileSpreadsheet, Info, Archive,
-  Loader2
+  Loader2, RotateCcw
 } from 'lucide-react';
 import {
   getFees, getExpenses, getSalaries, getStudents, getStaff,
@@ -18,11 +18,13 @@ import {
   getFeeRecordSummary, getFeeFullDetails,
   syncStudentFeesToFinance, generateRecurringFeesBulk,
   recordPayment, getStudentFeeInvoices, ensureFeeInvoice,
+  getArchivedRecords, getArchivedRecord, restoreArchivedRecord, getCurrentUserName,
 } from '../services/api';
+import { RecordDetailsModal, AuditStrip } from './RecordDetailsModal';
 
 // ==================== HELPERS ====================
 
-// Archive reason options — mirrors the server-side enum in routes/archives.js
+// Archive / void reasons per record type. Must match REASONS_BY_ENTITY in routes/archives.js
 const ARCHIVE_REASONS = [
   'Duplicate record',
   'Created by mistake',
@@ -30,17 +32,35 @@ const ARCHIVE_REASONS = [
   'Cancelled invoice',
   'Other',
 ];
-
-// Adapt the storage key to however your app stores the logged-in user.
-// (The backend prefers req.user if you have auth middleware.)
-const getCurrentUserName = () => {
-  try {
-    const u = JSON.parse(localStorage.getItem('user') || '{}');
-    return u.name || u.username || u.email || 'Admin';
-  } catch {
-    return 'Admin';
-  }
+const EXPENSE_ARCHIVE_REASONS = [
+  'Duplicate expense',
+  'Incorrect amount',
+  'Wrong category',
+  'Wrong date',
+  'Entered by mistake',
+  'Cancelled expense',
+  'Other',
+];
+const SALARY_ARCHIVE_REASONS = [
+  'Duplicate salary entry',
+  'Incorrect amount',
+  'Wrong month',
+  'Wrong staff member',
+  'Entered by mistake',
+  'Cancelled salary',
+  'Other',
+];
+const ARCHIVE_REASONS_BY_TYPE = {
+  fee: ARCHIVE_REASONS,
+  expense: EXPENSE_ARCHIVE_REASONS,
+  salary: SALARY_ARCHIVE_REASONS,
 };
+
+const EXPENSE_CATEGORIES = ['Maintenance', 'Utilities', 'Stationery', 'Events', 'Transport', 'Other'];
+const EXPENSE_PAYMENT_METHODS = ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'UPI', 'Online'];
+
+const fmtSalaryMonth = (m) =>
+  m ? new Date(m).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'N/A';
 
 // Local-time month key, avoids the UTC month-boundary bug of toISOString
 const monthKeyLocal = (offset = 0) => {
@@ -123,9 +143,9 @@ const invoicePaymentRows = (inv) => {
 const describeTarget = (item, type) => {
   if (!item) return '';
   if (type === 'fee') return `${item.invoice_number || 'Invoice'} — ${item.student_id?.name || ''}`.trim();
-  if (type === 'expense') return `${item.category || 'Expense'} — ${inr(item.amount)}`.trim();
+  if (type === 'expense') return `${item.expense_id ? item.expense_id + ' — ' : ''}${item.category || 'Expense'} — ${inr(item.amount)}`.trim();
   if (type === 'salary') {
-    const m = item.month ? new Date(item.month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '';
+    const m = item.month ? fmtSalaryMonth(item.month) : '';
     return `${item.staff_id?.name || 'Staff'} — ${m} — ${inr(item.net_salary)}`.trim();
   }
   return '';
@@ -160,6 +180,14 @@ export default function Finance() {
   const [studentInvoices, setStudentInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [newInvoiceMonth, setNewInvoiceMonth] = useState('');
+
+  // Active | Archived/Voided view for the Expenses and Salary tabs
+  const [recordView, setRecordView] = useState('active');
+  const [archivedExpenses, setArchivedExpenses] = useState([]);
+  const [archivedSalaries, setArchivedSalaries] = useState([]);
+  const [loadingArchived, setLoadingArchived] = useState(false);
+  const [detailsRecord, setDetailsRecord] = useState(null); // { type, record, archive }
+  const [restoringId, setRestoringId] = useState(null);
 
   // ==================== DELETE (ARCHIVE) MODAL STATE ====================
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -231,6 +259,9 @@ export default function Finance() {
     loadData();
   }, [selectedMonth]);
 
+  // Always start on the "Active" list when switching tabs
+  useEffect(() => { setRecordView('active'); }, [activeTab]);
+
   const extractArray = (res) => {
     if (Array.isArray(res)) return res;
     if (res && Array.isArray(res.data)) return res.data;
@@ -254,6 +285,7 @@ export default function Finance() {
       setSalaryPayments(extractArray(salaryRes));
       setStudents(extractArray(studentsRes));
       setStaff(extractArray(staffRes));
+      loadArchivedFinance();   // keeps the Archived / Voided lists in sync (not awaited)
     } catch (error) {
       console.error('Error loading finance data:', error);
       alert('Failed to load financial data');
@@ -264,6 +296,49 @@ export default function Finance() {
       setStaff(prev => Array.isArray(prev) ? prev : []);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadArchivedFinance = async () => {
+    try {
+      setLoadingArchived(true);
+      const [expRes, salRes] = await Promise.all([
+        getArchivedRecords({ entity_type: 'Expense' }),
+        getArchivedRecords({ entity_type: 'Salary' }),
+      ]);
+      setArchivedExpenses(extractArray(expRes));
+      setArchivedSalaries(extractArray(salRes));
+    } catch (error) {
+      console.error('Error loading archived finance records:', error);
+    } finally {
+      setLoadingArchived(false);
+    }
+  };
+
+  // Active record -> details (audit trail)
+  const openActiveDetails = (type, record) => setDetailsRecord({ type, record, archive: null });
+
+  // Archived record -> load the FULL snapshot, then show details
+  const openArchivedDetails = async (type, entry) => {
+    try {
+      const res = await getArchivedRecord(entry._id);
+      setDetailsRecord({ type, record: res.data?.snapshot || entry.snapshot || {}, archive: res.data || entry });
+    } catch (error) {
+      alert(error?.response?.data?.message || 'Failed to load record details');
+    }
+  };
+
+  const handleRestoreFromTab = async (entry) => {
+    if (!confirm(`Restore "${entry.label}" back into the active records?`)) return;
+    try {
+      setRestoringId(entry._id);
+      const res = await restoreArchivedRecord(entry._id, { acted_by_name: getCurrentUserName() });
+      alert(res.data?.message || 'Restored successfully');
+      await loadData();
+    } catch (error) {
+      alert(error?.response?.data?.message || 'Failed to restore record');
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -461,14 +536,6 @@ export default function Finance() {
     });
   };
 
-  const calculateNetSalary = () => {
-    const basic = parseFloat(formData.basic_salary) || 0;
-    const allowance = parseFloat(formData.allowance) || 0;
-    const deductions = parseFloat(formData.deductions) || 0;
-    const net = basic + allowance - deductions;
-    setFormData(prev => ({ ...prev, net_salary: net.toString() }));
-  };
-
   const calculateRecurringTotal = () => {
     const tuition = parseFloat(formData.recurring_tuition_fee) || 0;
     const activity = parseFloat(formData.recurring_activity_fee) || 0;
@@ -513,6 +580,7 @@ export default function Finance() {
         notes: paymentFormData.notes,
         advance_allocation: paymentFormData.advance_allocation || [],
         generate_future_invoices: paymentFormData.generate_future_invoices || false,
+        acted_by_name: getCurrentUserName(),
       };
 
       const response = await recordPayment(paymentData);
@@ -569,6 +637,7 @@ export default function Finance() {
             monthly_due_day: parseInt(formData.monthly_due_day) || 5,
           },
           is_recurring: true,
+          acted_by_name: getCurrentUserName(),
         };
 
         if (editingItem) {
@@ -580,15 +649,23 @@ export default function Finance() {
         }
       }
       else if (modalType === 'expense') {
+        const amt = parseFloat(formData.expense_amount);
+        if (!(amt > 0)) {
+          alert('Amount must be greater than zero');
+          return;
+        }
+
         const expenseData = {
           category: formData.expense_category,
           description: formData.expense_description,
-          amount: parseFloat(formData.expense_amount),
+          amount: amt,
           date: formData.expense_date,
           vendor_name: formData.vendor_name,
           bill_number: formData.bill_number,
           payment_mode: formData.payment_mode,
-          receipt: formData.receipt_doc,
+          notes: formData.notes,
+          receipt_url: formData.receipt_doc,      // was "receipt" (server reads receipt_url)
+          acted_by_name: getCurrentUserName(),
         };
 
         if (editingItem) {
@@ -610,7 +687,8 @@ export default function Finance() {
           status: formData.payment_status,
           payment_date: formData.payment_date || null,
           remarks: formData.remarks,
-          salary_slip: formData.salary_slip,
+          salary_slip_url: formData.salary_slip,   // was "salary_slip" (server reads salary_slip_url)
+          acted_by_name: getCurrentUserName(),
         };
 
         if (editingItem) {
@@ -663,6 +741,7 @@ export default function Finance() {
         reason_type: deleteReasonType,
         reason: deleteReasonText.trim(),
         archived_by_name: getCurrentUserName(),
+        acted_by_name: getCurrentUserName(),
       };
 
       if (deleteType === 'fee') await deleteFee(id, payload);
@@ -685,12 +764,41 @@ export default function Finance() {
     resetDeleteState();
   };
 
+  // ==================== FORM HELPERS ====================
+  const getBlankForm = () => ({
+    student_id: '', student_name: '',
+    admission_fee: '', tuition_fee: '', transport_fee: '', activity_fee: '',
+    total_amount: '', due_date: '', status: 'Pending',
+    payment_date: '', payment_method: 'Cash', transaction_id: '', notes: '',
+    expense_category: '', expense_description: '', expense_amount: '',
+    expense_date: todayLocal(), vendor_name: '', bill_number: '',
+    payment_mode: 'Cash', receipt_doc: null,
+    staff_id: '', staff_name: '', salary_month: selectedMonth,
+    basic_salary: '', allowance: '', deductions: '', net_salary: '',
+    payment_status: 'Pending', payment_date_salary: '', remarks: '', salary_slip: null,
+    recurring_tuition_fee: '', recurring_activity_fee: '', recurring_transport_fee: '',
+    recurring_start_month: '', recurring_end_month: '',
+    fee_plan: 'Monthly', monthly_due_day: '5',
+  });
+
+  // Net salary is derived inside the state updater, so it never lags one keystroke behind
+  const withNet = (d) => ({
+    ...d,
+    net_salary: String(
+      (parseFloat(d.basic_salary) || 0) + (parseFloat(d.allowance) || 0) - (parseFloat(d.deductions) || 0)
+    ),
+  });
+  const handleSalaryFieldChange = (field, value) =>
+    setFormData((prev) => withNet({ ...prev, [field]: value }));
+
   const handleEdit = (item, type) => {
     setEditingItem(item);
     setModalType(type);
+    const base = getBlankForm();
 
     if (type === 'fee') {
       setFormData({
+        ...base,
         student_id: item.student_id?._id || item.student_id || '',
         student_name: item.student_id?.name || '',
         admission_fee: item.admission_fee?.toString() || '',
@@ -704,25 +812,6 @@ export default function Finance() {
         payment_method: item.payment_method || 'Cash',
         transaction_id: item.transaction_id || '',
         notes: item.notes || '',
-        expense_category: '',
-        expense_description: '',
-        expense_amount: '',
-        expense_date: '',
-        vendor_name: '',
-        bill_number: '',
-        payment_mode: '',
-        staff_id: '',
-        staff_name: '',
-        salary_month: '',
-        basic_salary: '',
-        allowance: '',
-        deductions: '',
-        net_salary: '',
-        payment_status: '',
-        remarks: '',
-        receipt_doc: null,
-        salary_slip: null,
-        payment_date_salary: '',
         recurring_tuition_fee: item.recurring_fees?.tuition_fee?.toString() || '',
         recurring_activity_fee: item.recurring_fees?.activity_fee?.toString() || '',
         recurring_transport_fee: item.recurring_fees?.transport_fee?.toString() || '',
@@ -731,9 +820,9 @@ export default function Finance() {
         fee_plan: item.fee_plan || 'Monthly',
         monthly_due_day: item.recurring_fees?.monthly_due_day?.toString() || '5',
       });
-    }
-    else if (type === 'expense') {
+    } else if (type === 'expense') {
       setFormData({
+        ...base,
         expense_category: item.category || '',
         expense_description: item.description || '',
         expense_amount: item.amount?.toString() || '',
@@ -741,46 +830,18 @@ export default function Finance() {
         vendor_name: item.vendor_name || '',
         bill_number: item.bill_number || '',
         payment_mode: item.payment_mode || 'Cash',
-        receipt_doc: item.receipt || null,
-        student_id: '',
-        student_name: '',
-        admission_fee: '',
-        tuition_fee: '',
-        transport_fee: '',
-        activity_fee: '',
-        total_amount: '',
-        due_date: '',
-        status: '',
-        payment_date: '',
-        payment_method: '',
-        transaction_id: '',
-        notes: '',
-        staff_id: '',
-        staff_name: '',
-        salary_month: '',
-        basic_salary: '',
-        allowance: '',
-        deductions: '',
-        net_salary: '',
-        payment_status: '',
-        remarks: '',
-        salary_slip: null,
-        payment_date_salary: '',
-        recurring_tuition_fee: '',
-        recurring_activity_fee: '',
-        recurring_transport_fee: '',
-        recurring_start_month: '',
-        recurring_end_month: '',
-        fee_plan: '',
-        monthly_due_day: '5',
+        notes: item.notes || '',
+        receipt_doc: item.receipt_url || null,       // was item.receipt
       });
-    }
-    else if (type === 'salary') {
-      const staffMember = (Array.isArray(staff) ? staff : []).find(s => s._id === item.staff_id?._id || s._id === item.staff_id);
+    } else if (type === 'salary') {
+      const staffMember = (Array.isArray(staff) ? staff : []).find(
+        (s) => s._id === item.staff_id?._id || s._id === item.staff_id
+      );
       setFormData({
+        ...base,
         staff_id: item.staff_id?._id || item.staff_id || '',
-        staff_name: staffMember?.name || '',
-        salary_month: item.month || selectedMonth,
+        staff_name: staffMember?.name || item.staff_id?.name || '',
+        salary_month: item.month ? String(item.month).slice(0, 7) : selectedMonth,   // <input type="month"> needs YYYY-MM
         basic_salary: item.basic_salary?.toString() || '',
         allowance: item.allowance?.toString() || '',
         deductions: item.deductions?.toString() || '',
@@ -788,36 +849,7 @@ export default function Finance() {
         payment_status: item.status || 'Pending',
         payment_date: item.payment_date?.split('T')[0] || '',
         remarks: item.remarks || '',
-        salary_slip: item.salary_slip || null,
-        expense_category: '',
-        expense_description: '',
-        expense_amount: '',
-        expense_date: '',
-        vendor_name: '',
-        bill_number: '',
-        payment_mode: '',
-        student_id: '',
-        student_name: '',
-        admission_fee: '',
-        tuition_fee: '',
-        transport_fee: '',
-        activity_fee: '',
-        total_amount: '',
-        due_date: '',
-        status: '',
-        payment_date_fee: '',
-        payment_method: '',
-        transaction_id: '',
-        notes: '',
-        receipt_doc: null,
-        payment_date_salary: '',
-        recurring_tuition_fee: '',
-        recurring_activity_fee: '',
-        recurring_transport_fee: '',
-        recurring_start_month: '',
-        recurring_end_month: '',
-        fee_plan: '',
-        monthly_due_day: '5',
+        salary_slip: item.salary_slip_url || null,   // was item.salary_slip
       });
     }
 
@@ -825,47 +857,7 @@ export default function Finance() {
   };
 
   const resetForm = () => {
-    setFormData({
-      student_id: '',
-      student_name: '',
-      admission_fee: '',
-      tuition_fee: '',
-      transport_fee: '',
-      activity_fee: '',
-      total_amount: '',
-      due_date: '',
-      status: 'Pending',
-      payment_date: '',
-      payment_method: 'Cash',
-      transaction_id: '',
-      notes: '',
-      expense_category: '',
-      expense_description: '',
-      expense_amount: '',
-      expense_date: todayLocal(),
-      vendor_name: '',
-      bill_number: '',
-      payment_mode: 'Cash',
-      receipt_doc: null,
-      staff_id: '',
-      staff_name: '',
-      salary_month: selectedMonth,
-      basic_salary: '',
-      allowance: '',
-      deductions: '',
-      net_salary: '',
-      payment_status: 'Pending',
-      payment_date_salary: '',
-      remarks: '',
-      salary_slip: null,
-      recurring_tuition_fee: '',
-      recurring_activity_fee: '',
-      recurring_transport_fee: '',
-      recurring_start_month: '',
-      recurring_end_month: '',
-      fee_plan: 'Monthly',
-      monthly_due_day: '5',
-    });
+    setFormData(getBlankForm());
     setEditingItem(null);
     setShowModal(false);
   };
@@ -973,15 +965,29 @@ export default function Finance() {
     f.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // ==================== FILTERS (incl. archived) ====================
+  const q = searchTerm.toLowerCase();
+  const has = (v) => String(v || '').toLowerCase().includes(q);
+
   const filteredExpenses = safeExpenses.filter(e =>
-    e.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    has(e.expense_id) || has(e.category) || has(e.description) ||
+    has(e.vendor_name) || has(e.bill_number) || has(e.created_by_name)
   );
 
   const filteredSalary = safeSalaryPayments.filter(s =>
-    s.staff_id?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    has(s.staff_id?.name) || has(s.staff_id?.designation) || has(s.created_by_name)
   );
+
+  const filteredArchivedExpenses = archivedExpenses.filter(a => {
+    const s = a.snapshot || {};
+    return has(a.label) || has(s.expense_id) || has(s.category) || has(s.vendor_name) ||
+           has(a.archive_reason) || has(a.archived_by_name);
+  });
+
+  const filteredArchivedSalaries = archivedSalaries.filter(a => {
+    const s = a.snapshot || {};
+    return has(a.label) || has(s.staff_name) || has(a.archive_reason) || has(a.archived_by_name);
+  });
 
   const renderFeeSummary = () => {
     if (!feeSummary) return null;
@@ -1151,6 +1157,15 @@ export default function Finance() {
           ...(feeDetails.kit_fee > 0 ? [['Kit', inr(feeDetails.kit_fee)]] : []),
           ...(feeDetails.camera_fee > 0 ? [['Camera', inr(feeDetails.camera_fee)]] : []),
           ...(feeDetails.discount > 0 ? [['Discount', `-${inr(feeDetails.discount)}`]] : []),
+        ],
+      },
+      {
+        title: 'Audit Trail',
+        pairs: [
+          ['Created By', feeDetails.created_by_name || '—'],
+          ['Created Date / Time', fmtDateTime(feeDetails.created_at)],
+          ['Last Modified By', feeDetails.last_modified_by_name || '—'],
+          ['Last Modified Date / Time', fmtDateTime(feeDetails.last_modified_at || feeDetails.updated_at)],
         ],
       },
     ];
@@ -1445,7 +1460,7 @@ export default function Finance() {
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder={`Search by ${activeTab === 'fees' ? 'student name or invoice' : activeTab === 'expenses' ? 'category or vendor' : 'staff name'}...`}
+                placeholder={`Search by ${activeTab === 'fees' ? 'student name or invoice' : activeTab === 'expenses' ? 'expense ID, category, vendor or invoice no.' : 'staff name'}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
@@ -1493,6 +1508,42 @@ export default function Finance() {
             </div>
           </div>
         </div>
+
+        {/* Active | Archived/Voided toggle */}
+        {(activeTab === 'expenses' || activeTab === 'salary') && (
+          <div className="flex items-center gap-2 mb-6">
+            {[
+              {
+                key: 'active',
+                label: 'Active',
+                count: activeTab === 'expenses' ? safeExpenses.length : safeSalaryPayments.length,
+              },
+              {
+                key: 'archived',
+                label: 'Archived / Voided',
+                count: activeTab === 'expenses' ? archivedExpenses.length : archivedSalaries.length,
+              },
+            ].map((v) => (
+              <button
+                key={v.key}
+                onClick={() => setRecordView(v.key)}
+                className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
+                  recordView === v.key
+                    ? v.key === 'active'
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'bg-slate-700 text-white shadow-md'
+                    : 'bg-white/80 text-gray-600 hover:bg-white border border-gray-200'
+                }`}
+              >
+                {v.label}
+                <span className={`text-xs px-2 py-0.5 rounded-full ${recordView === v.key ? 'bg-white/20' : 'bg-gray-100'}`}>
+                  {v.count}
+                </span>
+              </button>
+            ))}
+            {loadingArchived && <Loader2 size={16} className="animate-spin text-gray-400" />}
+          </div>
+        )}
 
         {/* Fee Collection Table */}
         {activeTab === 'fees' && (
@@ -1614,6 +1665,248 @@ export default function Finance() {
           </div>
         )}
 
+        {/* Expenses: ACTIVE */}
+        {activeTab === 'expenses' && recordView === 'active' && (
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
+                  <tr>
+                    {['Expense ID', 'Date', 'Category', 'Description', 'Vendor / Payee', 'Receipt / Invoice No.', 'Amount', 'Payment Method', 'Created By', 'Actions'].map((h) => (
+                      <th key={h} className={`px-4 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredExpenses.length === 0 ? (
+                    <tr>
+                      <td colSpan="10" className="px-6 py-12 text-center text-gray-500">
+                        <TrendingDown className="mx-auto mb-3 text-gray-400" size={48} />
+                        <p className="text-lg">No active expense records</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredExpenses.map((expense) => (
+                      <tr key={expense._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
+                        <td className="px-4 py-4"><span className="text-xs font-mono font-semibold text-gray-700">{expense.expense_id || '—'}</span></td>
+                        <td className="px-4 py-4 text-sm text-gray-600 whitespace-nowrap">{fmtDate(expense.date)}</td>
+                        <td className="px-4 py-4">
+                          <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">{expense.category}</span>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-900 max-w-[220px] truncate" title={expense.description}>{expense.description}</td>
+                        <td className="px-4 py-4 text-sm text-gray-600">{expense.vendor_name || '—'}</td>
+                        <td className="px-4 py-4 text-sm font-mono text-gray-600">{expense.bill_number || '—'}</td>
+                        <td className="px-4 py-4"><span className="font-semibold text-red-600">{inr(expense.amount)}</span></td>
+                        <td className="px-4 py-4 text-sm text-gray-600">{expense.payment_mode}</td>
+                        <td className="px-4 py-4 text-sm text-gray-600">{expense.created_by_name || '—'}</td>
+                        <td className="px-4 py-4 text-right whitespace-nowrap">
+                          <button onClick={() => openActiveDetails('expense', expense)} className="text-purple-600 hover:text-purple-800 mr-2 transition-colors" title="View details">
+                            <Eye size={18} />
+                          </button>
+                          <button onClick={() => handleEdit(expense, 'expense')} className="text-blue-600 hover:text-blue-800 mr-2 transition-colors" title="Edit">
+                            <Edit size={18} />
+                          </button>
+                          <button onClick={() => handleDeleteClick(expense, 'expense')} className="text-red-600 hover:text-red-800 transition-colors" title="Archive / Void">
+                            <Archive size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Expenses: ARCHIVED / VOIDED */}
+        {activeTab === 'expenses' && recordView === 'archived' && (
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-slate-100 to-gray-100">
+                  <tr>
+                    {['Expense ID', 'Date', 'Category', 'Amount', 'Void Reason', 'Voided By', 'Voided On', 'Actions'].map((h) => (
+                      <th key={h} className={`px-4 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredArchivedExpenses.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
+                        <Archive className="mx-auto mb-3 text-gray-400" size={48} />
+                        <p className="text-lg">No archived / voided expenses</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredArchivedExpenses.map((entry) => {
+                      const s = entry.snapshot || {};
+                      return (
+                        <tr key={entry._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-4">
+                            <span className="text-xs font-mono font-semibold text-gray-700">{s.expense_id || '—'}</span>
+                            <span className="ml-2 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold">Voided</span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-600 whitespace-nowrap">{fmtDate(s.date)}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{s.category || '—'}</td>
+                          <td className="px-4 py-4 font-semibold text-gray-700">{inr(s.amount)}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600 max-w-[240px] truncate" title={entry.archive_reason}>{entry.archive_reason || entry.archive_reason_type || '—'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{entry.archived_by_name || '—'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600 whitespace-nowrap">{fmtDateTime(entry.archived_at)}</td>
+                          <td className="px-4 py-4 text-right whitespace-nowrap">
+                            <button onClick={() => openArchivedDetails('expense', entry)} className="text-purple-600 hover:text-purple-800 mr-3 transition-colors" title="View details">
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleRestoreFromTab(entry)}
+                              disabled={restoringId === entry._id}
+                              className="text-green-600 hover:text-green-800 transition-colors disabled:opacity-50"
+                              title="Restore"
+                            >
+                              {restoringId === entry._id ? <Loader2 size={18} className="animate-spin" /> : <RotateCcw size={18} />}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Salary: ACTIVE */}
+        {activeTab === 'salary' && recordView === 'active' && (
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
+                  <tr>
+                    {['Staff Member', 'Month', 'Basic Salary', 'Allowance', 'Deductions', 'Net Salary', 'Status', 'Created By', 'Actions'].map((h) => (
+                      <th key={h} className={`px-4 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredSalary.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" className="px-6 py-12 text-center text-gray-500">
+                        <Users className="mx-auto mb-3 text-gray-400" size={48} />
+                        <p className="text-lg">No active salary records</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSalary.map((salary) => {
+                      const statusStyle = getStatusColor(salary.status);
+                      return (
+                        <tr key={salary._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                                <Users className="text-white" size={16} />
+                              </div>
+                              <div>
+                                <div className="font-semibold text-gray-900">{salary.staff_id?.name}</div>
+                                <div className="text-sm text-gray-500">{salary.staff_id?.designation}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{fmtSalaryMonth(salary.month)}</td>
+                          <td className="px-4 py-4 text-sm text-gray-900">{inr(salary.basic_salary)}</td>
+                          <td className="px-4 py-4 text-sm text-green-600">+{inr(salary.allowance)}</td>
+                          <td className="px-4 py-4 text-sm text-red-600">-{inr(salary.deductions)}</td>
+                          <td className="px-4 py-4"><span className="font-bold text-gray-900">{inr(salary.net_salary)}</span></td>
+                          <td className="px-4 py-4">
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
+                              {statusStyle.icon}
+                              {salary.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{salary.created_by_name || '—'}</td>
+                          <td className="px-4 py-4 text-right whitespace-nowrap">
+                            <button onClick={() => openActiveDetails('salary', salary)} className="text-purple-600 hover:text-purple-800 mr-2 transition-colors" title="View details">
+                              <Eye size={18} />
+                            </button>
+                            <button onClick={() => handleEdit(salary, 'salary')} className="text-blue-600 hover:text-blue-800 mr-2 transition-colors" title="Edit">
+                              <Edit size={18} />
+                            </button>
+                            <button onClick={() => handleDeleteClick(salary, 'salary')} className="text-red-600 hover:text-red-800 transition-colors" title="Archive / Void">
+                              <Archive size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Salary: ARCHIVED / VOIDED */}
+        {activeTab === 'salary' && recordView === 'archived' && (
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-slate-100 to-gray-100">
+                  <tr>
+                    {['Staff Member', 'Month', 'Net Salary', 'Status', 'Void Reason', 'Voided By', 'Voided On', 'Actions'].map((h) => (
+                      <th key={h} className={`px-4 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredArchivedSalaries.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
+                        <Archive className="mx-auto mb-3 text-gray-400" size={48} />
+                        <p className="text-lg">No archived / voided salary records</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredArchivedSalaries.map((entry) => {
+                      const s = entry.snapshot || {};
+                      return (
+                        <tr key={entry._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-4">
+                            <div className="font-semibold text-gray-900">{s.staff_name || 'Staff'}</div>
+                            <div className="text-xs text-gray-500">{s.staff_designation || ''}</div>
+                            <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold">
+                              {entry.archive_source === 'staff' ? 'Staff removed' : 'Voided'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{fmtSalaryMonth(s.month)}</td>
+                          <td className="px-4 py-4 font-semibold text-gray-700">{inr(s.net_salary)}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{s.status || '—'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600 max-w-[240px] truncate" title={entry.archive_reason}>{entry.archive_reason || entry.archive_reason_type || '—'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{entry.archived_by_name || '—'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600 whitespace-nowrap">{fmtDateTime(entry.archived_at)}</td>
+                          <td className="px-4 py-4 text-right whitespace-nowrap">
+                            <button onClick={() => openArchivedDetails('salary', entry)} className="text-purple-600 hover:text-purple-800 mr-3 transition-colors" title="View details">
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleRestoreFromTab(entry)}
+                              disabled={restoringId === entry._id}
+                              className="text-green-600 hover:text-green-800 transition-colors disabled:opacity-50"
+                              title="Restore"
+                            >
+                              {restoringId === entry._id ? <Loader2 size={18} className="animate-spin" /> : <RotateCcw size={18} />}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* View Details Modal */}
         {showFeeDetails && createPortal(
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
@@ -1634,150 +1927,6 @@ export default function Finance() {
             </div>
           </div>,
           document.body
-        )}
-
-        {/* Expenses Table */}
-        {activeTab === 'expenses' && (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Vendor</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment Mode</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredExpenses.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
-                        <TrendingDown className="mx-auto mb-3 text-gray-400" size={48} />
-                        <p className="text-lg">No expense records found</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredExpenses.map((expense) => (
-                      <tr key={expense._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {expense.date ? new Date(expense.date).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                            {expense.category}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {expense.description}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {expense.vendor_name || '-'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="font-semibold text-red-600">₹{(expense.amount || 0).toLocaleString()}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {expense.payment_mode}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button onClick={() => handleEdit(expense, 'expense')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
-                            <Edit size={18} />
-                          </button>
-                          <button onClick={() => handleDeleteClick(expense, 'expense')} className="text-red-600 hover:text-red-800 transition-colors" title="Archive / Void">
-                            <Archive size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Salary Table */}
-        {activeTab === 'salary' && (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-teal-50 to-cyan-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Staff Member</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Month</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Basic Salary</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Allowance</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Deductions</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Net Salary</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredSalary.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
-                        <Users className="mx-auto mb-3 text-gray-400" size={48} />
-                        <p className="text-lg">No salary records found</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredSalary.map((salary) => {
-                      const statusStyle = getStatusColor(salary.status);
-                      return (
-                        <tr key={salary._id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-transparent transition-all duration-300">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
-                                <Users className="text-white" size={16} />
-                              </div>
-                              <div>
-                                <div className="font-semibold text-gray-900">{salary.staff_id?.name}</div>
-                                <div className="text-sm text-gray-500">{salary.staff_id?.designation}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {salary.month ? new Date(salary.month).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            ₹{(salary.basic_salary || 0).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-green-600">
-                            +₹{(salary.allowance || 0).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-red-600">
-                            -₹{(salary.deductions || 0).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="font-bold text-gray-900">₹{(salary.net_salary || 0).toLocaleString()}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
-                              {statusStyle.icon}
-                              {salary.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button onClick={() => handleEdit(salary, 'salary')} className="text-blue-600 hover:text-blue-800 mr-3 transition-colors">
-                              <Edit size={18} />
-                            </button>
-                            <button onClick={() => handleDeleteClick(salary, 'salary')} className="text-red-600 hover:text-red-800 transition-colors" title="Archive / Void">
-                              <Archive size={18} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         )}
 
         {/* ==================== ARCHIVE / VOID MODAL ==================== */}
@@ -1818,6 +1967,25 @@ export default function Finance() {
                   </div>
                 )}
 
+                {deleteType === 'salary' && deleteTarget.status === 'Completed' && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-sm text-red-700">
+                    <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      This salary is marked <strong>Completed</strong> ({inr(deleteTarget.net_salary)}).
+                      Voiding it removes that amount from the salary totals.
+                    </span>
+                  </div>
+                )}
+                {deleteType === 'expense' && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-sm text-red-700">
+                    <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      Voiding removes <strong>{inr(deleteTarget.amount)}</strong> from the expense totals.
+                      You can restore it later from the Archived / Voided list.
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Reason <span className="text-red-500">*</span>
@@ -1829,7 +1997,7 @@ export default function Finance() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
                     <option value="">Select a reason</option>
-                    {ARCHIVE_REASONS.map((r) => (
+                    {(ARCHIVE_REASONS_BY_TYPE[deleteType] || ARCHIVE_REASONS).map((r) => (
                       <option key={r} value={r}>{r === 'Other' ? 'Other – specify reason' : r}</option>
                     ))}
                   </select>
@@ -2490,120 +2658,132 @@ export default function Finance() {
                 )}
 
                 {modalType === 'expense' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Expense Category *</label>
-                      <select
-                        required
-                        value={formData.expense_category}
-                        onChange={(e) => setFormData({ ...formData, expense_category: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      >
-                        <option value="">Select Category</option>
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Utilities">Utilities</option>
-                        <option value="Stationery">Stationery</option>
-                        <option value="Events">Events</option>
-                        <option value="Transport">Transport</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Expense Date *</label>
-                      <input
-                        type="date"
-                        required
-                        value={formData.expense_date}
-                        onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
-                      <textarea
-                        required
-                        value={formData.expense_description}
-                        onChange={(e) => setFormData({ ...formData, expense_description: e.target.value })}
-                        rows={2}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                        placeholder="Describe the expense..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Amount *</label>
-                      <input
-                        type="number"
-                        required
-                        step="0.01"
-                        value={formData.expense_amount}
-                        onChange={(e) => setFormData({ ...formData, expense_amount: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Name</label>
-                      <input
-                        type="text"
-                        value={formData.vendor_name}
-                        onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Bill/Invoice Number</label>
-                      <input
-                        type="text"
-                        value={formData.bill_number}
-                        onChange={(e) => setFormData({ ...formData, bill_number: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Payment Mode</label>
-                      <select
-                        value={formData.payment_mode}
-                        onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      >
-                        <option value="Cash">Cash</option>
-                        <option value="Card">Card</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
-                        <option value="Cheque">Cheque</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Receipt/Bill Document</label>
-                      <div className="flex items-center gap-2">
+                  <>
+                    <AuditStrip record={editingItem} idLabel="Expense ID" idValue={editingItem?.expense_id} />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                        <select
+                          required
+                          value={formData.expense_category}
+                          onChange={(e) => setFormData({ ...formData, expense_category: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        >
+                          <option value="">Select Category</option>
+                          {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                          {/* keeps old records that used the "Salary" category editable */}
+                          {formData.expense_category === 'Salary' && <option value="Salary">Salary</option>}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Expense Date *</label>
                         <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => handleFileUpload(e, 'receipt_doc')}
-                          className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                          type="date"
+                          required
+                          value={formData.expense_date}
+                          onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
-                        {formData.receipt_doc && <FileText size={20} className="text-green-600" />}
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
+                        <textarea
+                          required
+                          value={formData.expense_description}
+                          onChange={(e) => setFormData({ ...formData, expense_description: e.target.value })}
+                          rows={2}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          placeholder="Describe the expense..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Amount (₹) *</label>
+                        <input
+                          type="number"
+                          required
+                          step="0.01"
+                          min="0.01"
+                          value={formData.expense_amount}
+                          onChange={(e) => setFormData({ ...formData, expense_amount: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method *</label>
+                        <select
+                          required
+                          value={formData.payment_mode}
+                          onChange={(e) => setFormData({ ...formData, payment_mode: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        >
+                          {EXPENSE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Vendor / Payee</label>
+                        <input
+                          type="text"
+                          value={formData.vendor_name}
+                          onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Receipt / Invoice No.</label>
+                        <input
+                          type="text"
+                          value={formData.bill_number}
+                          onChange={(e) => setFormData({ ...formData, bill_number: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                        <textarea
+                          value={formData.notes}
+                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                          rows={2}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          placeholder="Additional notes..."
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Attachment / Receipt</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => handleFileUpload(e, 'receipt_doc')}
+                            className="flex-1 text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                          />
+                          {formData.receipt_doc && <FileText size={20} className="text-green-600" />}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </>
                 )}
 
                 {modalType === 'salary' && (
                   <>
+                    <AuditStrip record={editingItem} />
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Select Staff Member *</label>
                       <select
                         required
+                        disabled={!!editingItem}
                         value={formData.staff_id}
                         onChange={(e) => {
                           const staffMember = safeStaff.find(s => s._id === e.target.value);
-                          setFormData({
-                            ...formData,
+                          setFormData((prev) => withNet({
+                            ...prev,
                             staff_id: e.target.value,
                             staff_name: staffMember?.name || '',
-                            basic_salary: staffMember?.salary?.toString() || ''
-                          });
-                          setTimeout(calculateNetSalary, 100);
+                            basic_salary: staffMember?.salary?.toString() || '',
+                          }));
                         }}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100"
                       >
                         <option value="">Select Staff</option>
                         {safeStaff.map((member) => (
@@ -2620,9 +2800,10 @@ export default function Finance() {
                         <input
                           type="month"
                           required
+                          disabled={!!editingItem}
                           value={formData.salary_month}
                           onChange={(e) => setFormData({ ...formData, salary_month: e.target.value })}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
                       <div>
@@ -2632,10 +2813,7 @@ export default function Finance() {
                           required
                           step="0.01"
                           value={formData.basic_salary}
-                          onChange={(e) => {
-                            setFormData({ ...formData, basic_salary: e.target.value });
-                            setTimeout(calculateNetSalary, 100);
-                          }}
+                          onChange={(e) => handleSalaryFieldChange('basic_salary', e.target.value)}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
@@ -2645,10 +2823,7 @@ export default function Finance() {
                           type="number"
                           step="0.01"
                           value={formData.allowance}
-                          onChange={(e) => {
-                            setFormData({ ...formData, allowance: e.target.value });
-                            setTimeout(calculateNetSalary, 100);
-                          }}
+                          onChange={(e) => handleSalaryFieldChange('allowance', e.target.value)}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
@@ -2658,10 +2833,7 @@ export default function Finance() {
                           type="number"
                           step="0.01"
                           value={formData.deductions}
-                          onChange={(e) => {
-                            setFormData({ ...formData, deductions: e.target.value });
-                            setTimeout(calculateNetSalary, 100);
-                          }}
+                          onChange={(e) => handleSalaryFieldChange('deductions', e.target.value)}
                           className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
@@ -2733,6 +2905,16 @@ export default function Finance() {
             </div>
           </div>,
           document.body
+        )}
+
+        {/* Record Details Modal (audit trail / archived snapshot) */}
+        {detailsRecord && (
+          <RecordDetailsModal
+            type={detailsRecord.type}
+            record={detailsRecord.record}
+            archive={detailsRecord.archive}
+            onClose={() => setDetailsRecord(null)}
+          />
         )}
       </div>
     </div>

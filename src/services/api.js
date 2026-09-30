@@ -10,6 +10,22 @@ const api = axios.create({
   },
 });
 
+// Name of the logged-in user (sent with create/update/archive calls so the audit trail is filled in).
+// The backend currently always records "Admin" for this app, so we hard-code that here.
+// If per-user attribution is ever needed, swap the return for the localStorage lookup below.
+export const getCurrentUserName = () => {
+  // Always send "Admin" per backend requirement.
+  return 'Admin';
+
+  // --- Previous behaviour (kept for reference) ---
+  // try {
+  //   const u = JSON.parse(localStorage.getItem('user') || '{}');
+  //   return u.name || u.username || u.email || 'Admin';
+  // } catch {
+  //   return 'Admin';
+  // }
+};
+
 // ==================== STUDENTS ====================
 export const getStudents = () => api.get('/students');
 export const getStudent = (id) => api.get(`/students/${id}`);
@@ -60,7 +76,12 @@ export const getUpcomingBirthdays = () => api.get('/staff/birthdays/upcoming');
 export const createStaff = (data) => api.post('/staff', data);
 export const updateStaff = (id, data) => api.put(`/staff/${id}`, data);
 export const updateStaffStatus = (id, status) => api.patch(`/staff/${id}/status`, { status });
-export const deleteStaff = (id) => api.delete(`/staff/${id}`);
+
+// Soft delete: archives the staff member's salary records too.
+// A `reason` is required by the server.
+export const deleteStaff = (id, payload = {}) =>
+  api.delete(`/staff/${id}`, { data: payload });
+
 export const uploadStaffDocument = (data) => api.post('/staff/upload-document', data);
 
 // ==================== ACADEMIC DOCUMENTS ====================
@@ -733,9 +754,10 @@ export const getArchivedRecords = (params = {}) =>
 export const getArchivedRecord = (id) =>
   api.get(`/archives/${id}`);
 
-// Restore puts the record back into its live collection
-export const restoreArchivedRecord = (id) =>
-  api.post(`/archives/${id}/restore`);
+// Restore puts the record back into its live collection.
+// Payload may include { restored_by_name } etc. to record who performed the action.
+export const restoreArchivedRecord = (id, payload = {}) =>
+  api.post(`/archives/${id}/restore`, payload);
 
 // Permanent delete REQUIRES a reason (sent in the request body)
 export const permanentlyDeleteArchivedRecord = (id, reason) =>
@@ -744,6 +766,7 @@ export const permanentlyDeleteArchivedRecord = (id, reason) =>
 // Empty the entire archive (admin only) — reason mandatory
 export const emptyArchive = (reason) =>
   api.delete('/archives/empty/all', { data: { reason } });
+
 export const getArchivedStudentProfile = (archiveId) =>
   api.get(`/archives/${archiveId}/student-profile`);
 
