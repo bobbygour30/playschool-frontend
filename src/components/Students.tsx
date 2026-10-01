@@ -732,15 +732,31 @@ export default function StudentDetails() {
       };
 
       if (editingStudent) {
-        await updateStudent(editingStudent._id, studentData);
-        alert('Student updated successfully!');
-      } else {
-        await createStudent(studentData);
-        if (formData.fee_paid && initialPaymentAmount > 0) {
-          alert('Student added successfully! Initial fee invoice and payment record created.');
-        } else {
-          alert('Student added successfully!');
+        const res = await updateStudent(editingStudent._id, studentData);
+        const ps = res?.data?.parentSync;
+        let msg = 'Student updated successfully!';
+        if (ps?.action === 'created') {
+          msg += '\n\nA parent account was created in Parent Registration (set the login password there).';
+        } else if (ps?.action === 'conflict' || ps?.action === 'skipped') {
+          msg += `\n\n⚠️ Parent account not synced: ${ps.reason}`;
         }
+        alert(msg);
+      } else {
+        const res = await createStudent(studentData);
+        const ps = res?.data?.parentSync;
+
+        let msg = (formData.fee_paid && initialPaymentAmount > 0)
+          ? 'Student added successfully! Initial fee invoice and payment record created.'
+          : 'Student added successfully!';
+
+        if (ps?.action === 'created') {
+          msg += '\n\n👪 Parent account auto-created in Parent Registration.\nOpen it there and click the key icon to set the login password.';
+        } else if (ps?.action === 'linked' || ps?.action === 'already-linked') {
+          msg += `\n\n👪 Linked to the existing parent account (${formData.parent_email}).`;
+        } else if (ps?.action === 'conflict' || ps?.action === 'skipped' || ps?.action === 'error') {
+          msg += `\n\n⚠️ Parent account was NOT created: ${ps.reason}`;
+        }
+        alert(msg);
       }
 
       await loadData();

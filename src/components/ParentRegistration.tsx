@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus, Search, Edit, Trash2, X, Users, Mail, Phone,
-  User, Eye, EyeOff, Filter,
+  User, Eye, EyeOff, Filter, Key,
   UserPlus, TrendingUp, AlertCircle, CheckCircle,
   Clock, Link, Unlink,
 } from 'lucide-react';
@@ -23,6 +23,21 @@ const CLASSES = [
 
 const CONTACT_PERSON_ROLES = ['Father', 'Mother', 'Guardian'];
 
+const emptyForm = {
+  father_name: '',
+  mother_name: '',
+  guardian_name: '',
+  mobile_number: '',
+  email: '',
+  address: '',
+  student_ids: [],
+  emergency_contact: '',
+  contact_person_role: 'Father',
+  password: '',
+  status: 'Active',
+  notes: '',
+};
+
 export default function ParentRegistration() {
   const [parents, setParents] = useState([]);
   const [students, setStudents] = useState([]);
@@ -34,6 +49,7 @@ export default function ParentRegistration() {
   const [showModal, setShowModal] = useState(false);
   const [editingParent, setEditingParent] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [focusPassword, setFocusPassword] = useState(false);
 
   // Link-students modal
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -55,19 +71,10 @@ export default function ParentRegistration() {
     suspended: 0,
   });
 
-  const [formData, setFormData] = useState({
-    father_name: '',
-    mother_name: '',
-    mobile_number: '',
-    email: '',
-    address: '',
-    student_ids: [],
-    emergency_contact: '',
-    contact_person_role: 'Father',
-    password: '',
-    status: 'Active',
-    notes: '',
-  });
+  const [formData, setFormData] = useState(emptyForm);
+
+  const parentDisplayName = (p) =>
+    p?.father_name || p?.mother_name || p?.guardian_name || p?.email || 'Parent';
 
   useEffect(() => {
     loadData();
@@ -183,10 +190,28 @@ export default function ParentRegistration() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!formData.father_name.trim() && !formData.mother_name.trim() && !formData.guardian_name.trim()) {
+      alert("Please enter at least one of Father's, Mother's or Guardian's name.");
+      return;
+    }
+    if (!editingParent && !formData.password) {
+      alert('Password is required for a new parent.');
+      return;
+    }
+    if (formData.password && formData.password.length < 6) {
+      alert('Password must be at least 6 characters.');
+      return;
+    }
+
     try {
       if (editingParent) {
-        await updateParent(editingParent._id, formData);
-        alert('Parent updated successfully!');
+        const res = await updateParent(editingParent._id, formData);
+        alert(
+          res?.data?.login_just_enabled
+            ? `Parent updated. Login is now enabled — they can sign in with ${formData.email} and the password you set.`
+            : 'Parent updated successfully!'
+        );
       } else {
         await createParent(formData);
         alert('Parent registered successfully!');
@@ -223,11 +248,13 @@ export default function ParentRegistration() {
     }
   };
 
-  const handleEdit = (parent) => {
+  const handleEdit = (parent, openPasswordField = false) => {
     setEditingParent(parent);
+    setFocusPassword(openPasswordField);
     setFormData({
       father_name: parent.father_name || '',
       mother_name: parent.mother_name || '',
+      guardian_name: parent.guardian_name || '',
       mobile_number: parent.mobile_number || '',
       email: parent.email || '',
       address: parent.address || '',
@@ -295,7 +322,7 @@ export default function ParentRegistration() {
       parentId: parent._id,
       studentId: student._id,
       studentName: student.name,
-      parentDisplayName: parent.father_name || parent.mother_name || parent.email,
+      parentDisplayName: parentDisplayName(parent),
     });
     setUnlinkReason('');
     setShowUnlinkModal(true);
@@ -327,20 +354,10 @@ export default function ParentRegistration() {
   };
 
   const resetForm = () => {
-    setFormData({
-      father_name: '',
-      mother_name: '',
-      mobile_number: '',
-      email: '',
-      address: '',
-      student_ids: [],
-      emergency_contact: '',
-      contact_person_role: 'Father',
-      password: '',
-      status: 'Active',
-      notes: '',
-    });
+    setFormData(emptyForm);
     setEditingParent(null);
+    setFocusPassword(false);
+    setShowPassword(false);
     setShowModal(false);
   };
 
@@ -353,6 +370,7 @@ export default function ParentRegistration() {
       filtered = filtered.filter((p) =>
         p?.father_name?.toLowerCase().includes(term) ||
         p?.mother_name?.toLowerCase().includes(term) ||
+        p?.guardian_name?.toLowerCase().includes(term) ||
         p?.email?.toLowerCase().includes(term) ||
         p?.mobile_number?.includes(searchTerm)
       );
@@ -496,6 +514,16 @@ export default function ParentRegistration() {
           </div>
         </div>
 
+        {parents.filter((p) => !p.login_enabled).length > 0 && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800">
+              <strong>{parents.filter((p) => !p.login_enabled).length}</strong> parent account(s) have no login yet
+              (auto-created from student admissions). Click the <Key size={12} className="inline" /> key icon to set a password.
+            </p>
+          </div>
+        )}
+
         {/* Parents Table */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
           <div className="overflow-x-auto">
@@ -506,6 +534,7 @@ export default function ParentRegistration() {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Students</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact Role</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Login</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase">Actions</th>
                 </tr>
@@ -513,7 +542,7 @@ export default function ParentRegistration() {
               <tbody className="divide-y divide-gray-200">
                 {filteredParents.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                       <Users className="mx-auto mb-3 text-gray-400" size={48} />
                       <p className="text-lg">No parents found</p>
                     </td>
@@ -530,8 +559,15 @@ export default function ParentRegistration() {
                               <User className="text-white" size={16} />
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-900">Father: {parent.father_name}</div>
-                              <div className="text-xs text-gray-500">Mother: {parent.mother_name}</div>
+                              <div className="font-semibold text-gray-900">{parentDisplayName(parent)}</div>
+                              {parent.father_name && <div className="text-xs text-gray-500">Father: {parent.father_name}</div>}
+                              {parent.mother_name && <div className="text-xs text-gray-500">Mother: {parent.mother_name}</div>}
+                              {parent.guardian_name && <div className="text-xs text-gray-500">Guardian: {parent.guardian_name}</div>}
+                              {parent.auto_created && (
+                                <span className="inline-block mt-1 px-2 py-0.5 bg-sky-100 text-sky-700 rounded-full text-[10px] font-semibold">
+                                  Auto-created from admission
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -574,6 +610,13 @@ export default function ParentRegistration() {
                           </span>
                         </td>
                         <td className="px-6 py-4">
+                          {parent.login_enabled ? (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">Enabled</span>
+                          ) : (
+                            <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">No password</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
                           <select
                             value={parent.status}
                             onChange={(e) => handleStatusChange(parent._id, e.target.value)}
@@ -586,17 +629,16 @@ export default function ParentRegistration() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <button
-                            onClick={() => handleEdit(parent)}
-                            className="text-blue-600 hover:text-blue-800 mr-2 transition-colors"
-                            title="Edit Parent"
+                            onClick={() => handleEdit(parent, true)}
+                            className={`mr-2 transition-colors ${parent.login_enabled ? 'text-gray-500 hover:text-gray-700' : 'text-amber-600 hover:text-amber-800'}`}
+                            title={parent.login_enabled ? 'Reset password' : 'Set login password'}
                           >
+                            <Key size={18} />
+                          </button>
+                          <button onClick={() => handleEdit(parent)} className="text-blue-600 hover:text-blue-800 mr-2 transition-colors" title="Edit Parent">
                             <Edit size={18} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(parent._id)}
-                            className="text-red-600 hover:text-red-800 transition-colors"
-                            title="Delete Parent"
-                          >
+                          <button onClick={() => handleDelete(parent._id)} className="text-red-600 hover:text-red-800 transition-colors" title="Delete Parent">
                             <Trash2 size={18} />
                           </button>
                         </td>
@@ -625,10 +667,9 @@ export default function ParentRegistration() {
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Father's Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Father's Name</label>
                     <input
                       type="text"
-                      required
                       value={formData.father_name}
                       onChange={(e) => setFormData({ ...formData, father_name: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -636,14 +677,25 @@ export default function ParentRegistration() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Mother's Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Mother's Name</label>
                     <input
                       type="text"
-                      required
                       value={formData.mother_name}
                       onChange={(e) => setFormData({ ...formData, mother_name: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Enter mother's name"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Guardian's Name <span className="text-xs text-gray-400">(if applicable — at least one name is required)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.guardian_name}
+                      onChange={(e) => setFormData({ ...formData, guardian_name: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter guardian's name"
                     />
                   </div>
                   <div>
@@ -707,15 +759,22 @@ export default function ParentRegistration() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Password {!editingParent && '*'}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {editingParent ? 'Login Password' : 'Password *'}
+                    </label>
                     <div className="relative">
                       <input
                         type={showPassword ? 'text' : 'password'}
                         required={!editingParent}
+                        autoFocus={focusPassword}
+                        minLength={6}
+                        autoComplete="new-password"
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
-                        placeholder="Login password"
+                        className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10 ${
+                          editingParent && !editingParent.login_enabled ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
+                        }`}
+                        placeholder={editingParent ? 'Enter new password' : 'Login password (min 6 characters)'}
                       />
                       <button
                         type="button"
@@ -725,6 +784,14 @@ export default function ParentRegistration() {
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
+                    {editingParent && !editingParent.login_enabled && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        No login yet. Set a password so the parent can sign in with <strong>{formData.email}</strong>.
+                      </p>
+                    )}
+                    {editingParent && editingParent.login_enabled && (
+                      <p className="text-xs text-gray-400 mt-1">Leave blank to keep the current password.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
@@ -860,7 +927,7 @@ export default function ParentRegistration() {
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
               <div className="sticky top-0 bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Link Students to {selectedParent.father_name}</h2>
+                  <h2 className="text-xl font-bold text-white">Link Students to {parentDisplayName(selectedParent)}</h2>
                   <p className="text-white/80 text-sm mt-1">
                     Showing students registered with {selectedParent.email} that aren't linked to any parent yet
                   </p>
