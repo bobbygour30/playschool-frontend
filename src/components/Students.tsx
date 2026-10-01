@@ -784,6 +784,14 @@ export default function StudentDetails() {
         } else if (ps?.action === 'conflict' || ps?.action === 'skipped' || ps?.action === 'error') {
           msg += `\n\n⚠️ Parent account was NOT created: ${ps.reason}`;
         }
+
+        const fs = res?.data?.feeSync;
+        if (fs?.action === 'created') {
+          msg += `\n\n💰 Fee invoice ${fs.invoice_number || ''} created in Finance.`;
+        } else if (['error', 'skipped-voided'].includes(fs?.action)) {
+          msg += `\n\n⚠️ Fee record was NOT created: ${fs.reason || 'unknown error'}. Run the fee sync script or check Finance.`;
+        }
+
         alert(msg);
       }
 
