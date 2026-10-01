@@ -149,6 +149,7 @@ export default function StudentDetails() {
   // Refs for scrolling to error fields
   const formRef = useRef(null);
   const fieldRefs = useRef({});
+  const submitLock = useRef(false);
 
   // Track document changes - which documents have been updated
   const [documentChanges, setDocumentChanges] = useState({
@@ -379,6 +380,21 @@ export default function StudentDetails() {
     return tuition + activity + transport;
   };
 
+  const normName = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // Same child = same name + same DOB + (same parent email OR same parent phone)
+  const findLocalDuplicate = () => {
+    const email = formData.parent_email.trim().toLowerCase();
+    return students.find(
+      (s) =>
+        s._id !== editingStudent?._id &&
+        normName(s.name) === normName(formData.name) &&
+        (s.date_of_birth || '').split('T')[0] === formData.date_of_birth &&
+        ((email && (s.parent_email || '').trim().toLowerCase() === email) ||
+          (formData.parent_phone && s.parent_phone === formData.parent_phone))
+    );
+  };
+
   // ==================== VALIDATION FUNCTION ====================
   const validateForm = () => {
     const errors = {};
@@ -580,6 +596,15 @@ export default function StudentDetails() {
       hasError = true;
     }
 
+    // Duplicate student check
+    if (formData.name.trim() && formData.date_of_birth) {
+      const dup = findLocalDuplicate();
+      if (dup) {
+        errors.name = `${dup.name} is already registered with this parent and date of birth (ID: ${dup._id.slice(-6)}). A student cannot be added twice.`;
+        hasError = true;
+      }
+    }
+
     setValidationErrors(errors);
     return { isValid: !hasError, errors };
   };
@@ -614,11 +639,14 @@ export default function StudentDetails() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (isSubmitting) return;
+    // ref is synchronous, unlike isSubmitting state, so a fast double-click can't slip through
+    if (isSubmitting || submitLock.current) return;
+    submitLock.current = true;
 
     const { isValid, errors } = validateForm();
 
     if (!isValid) {
+      submitLock.current = false;
       setShowValidationSummary(true);
       scrollToError(errors);
 
@@ -767,6 +795,7 @@ export default function StudentDetails() {
       alert(errorMessage);
     } finally {
       setIsSubmitting(false);
+      submitLock.current = false;
     }
   };
 
@@ -1014,6 +1043,7 @@ export default function StudentDetails() {
     setEditingStudent(null);
     setShowModal(false);
     setIsSubmitting(false);
+    submitLock.current = false;
   };
 
   useEffect(() => {
