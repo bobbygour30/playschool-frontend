@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus, Search, Edit, Trash2, X, DollarSign, Calendar,
@@ -8,7 +8,7 @@ import {
   AlertCircle, CheckCircle, Clock, Upload, Building,
   User, Phone, Mail, BookOpen, Award, Star, Home, RefreshCw,
   History, CalendarDays, ReceiptText, FileSpreadsheet, Info, Archive,
-  Loader2, RotateCcw
+  Loader2, RotateCcw, Settings
 } from 'lucide-react';
 import {
   getFees, getExpenses, getSalaries, getStudents, getStaff,
@@ -181,6 +181,10 @@ export default function Finance() {
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [newInvoiceMonth, setNewInvoiceMonth] = useState('');
 
+  // "More / Finance Settings" dropdown (admin-only tasks on the Fee Collection tab)
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef(null);
+
   // Active | Archived/Voided view for the Expenses and Salary tabs
   const [recordView, setRecordView] = useState('active');
   const [archivedExpenses, setArchivedExpenses] = useState([]);
@@ -261,6 +265,24 @@ export default function Finance() {
 
   // Always start on the "Active" list when switching tabs
   useEffect(() => { setRecordView('active'); }, [activeTab]);
+
+  // Close the More menu when switching tabs
+  useEffect(() => { setShowMoreMenu(false); }, [activeTab]);
+
+  // Close the More menu on outside click or Escape
+  useEffect(() => {
+    if (!showMoreMenu) return undefined;
+    const onClickOutside = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) setShowMoreMenu(false);
+    };
+    const onKeyDown = (e) => { if (e.key === 'Escape') setShowMoreMenu(false); };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showMoreMenu]);
 
   const extractArray = (res) => {
     if (Array.isArray(res)) return res;
@@ -1452,10 +1474,11 @@ export default function Finance() {
           </div>
         </div>
 
-        {/* Search and Add Button */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 shadow-lg border border-gray-200/50">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1 relative">
+        {/* Search and Action Bar
+            relative + z-20 keeps the More dropdown above the tables rendered below it */}
+        <div className="relative z-20 bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 shadow-lg border border-gray-200/50">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div className="flex-1 relative min-w-0">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
@@ -1465,45 +1488,100 @@ export default function Finance() {
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
               />
             </div>
-            <div className="flex gap-2 flex-wrap">
+
+            <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap">
+              {/* Primary action 1: Record Payment (Fee Collection only) */}
               {activeTab === 'fees' && (
-                <>
-                  <button
-                    onClick={() => setShowPaymentModal(true)}
-                    className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                  >
-                    <DollarSign size={20} />
-                    Record Payment
-                  </button>
-                  <button
-                    onClick={generateRecurringFees}
-                    disabled={generatingRecurring}
-                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <CalendarDays size={20} className={generatingRecurring ? 'animate-spin' : ''} />
-                    {generatingRecurring ? 'Generating...' : 'Generate Recurring Fees'}
-                  </button>
-                  <button
-                    onClick={syncAllStudentFees}
-                    disabled={isSyncing}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
-                    {isSyncing ? 'Syncing...' : 'Sync Student Fees'}
-                  </button>
-                </>
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  <DollarSign size={20} />
+                  Record Payment
+                </button>
               )}
+
+              {/* Primary action 2: Manage Fees / Add Expense / Add Salary Payment */}
               <button
                 onClick={() => {
                   setModalType(activeTab === 'fees' ? 'fee' : activeTab === 'expenses' ? 'expense' : 'salary');
                   setEditingItem(null);
                   setShowModal(true);
                 }}
-                className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap"
               >
-                <Plus size={20} />
-                Add {activeTab === 'fees' ? 'Fee Record' : activeTab === 'expenses' ? 'Expense' : 'Salary Payment'}
+                {activeTab === 'fees' ? <ReceiptText size={20} /> : <Plus size={20} />}
+                {activeTab === 'fees' ? 'Manage Fees' : activeTab === 'expenses' ? 'Add Expense' : 'Add Salary Payment'}
               </button>
+
+              {/* Secondary / administrative actions: More / Finance Settings */}
+              {activeTab === 'fees' && (
+                <div className="relative" ref={moreMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreMenu((v) => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={showMoreMenu}
+                    className={`px-4 py-3 border rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap font-medium ${
+                      showMoreMenu
+                        ? 'bg-gray-100 border-gray-400 text-gray-800'
+                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    title="Finance settings"
+                  >
+                    <Settings size={18} className={(isSyncing || generatingRecurring) ? 'animate-spin' : ''} />
+                    More
+                    <ChevronDown size={16} className={`transition-transform ${showMoreMenu ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showMoreMenu && (
+                    <div
+                      role="menu"
+                      className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-3rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-30 overflow-hidden"
+                    >
+                      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Finance Settings</p>
+                      </div>
+
+                      <button
+                        role="menuitem"
+                        type="button"
+                        disabled={generatingRecurring}
+                        onClick={() => { setShowMoreMenu(false); generateRecurringFees(); }}
+                        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-purple-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                          <CalendarDays size={18} className={`text-purple-600 ${generatingRecurring ? 'animate-spin' : ''}`} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">
+                            {generatingRecurring ? 'Generating...' : 'Generate Recurring Fees'}
+                          </p>
+                          <p className="text-xs text-gray-500">Create invoices for a month for all students with recurring fees</p>
+                        </div>
+                      </button>
+
+                      <button
+                        role="menuitem"
+                        type="button"
+                        disabled={isSyncing}
+                        onClick={() => { setShowMoreMenu(false); syncAllStudentFees(); }}
+                        className="w-full flex items-start gap-3 px-4 py-3 text-left border-t border-gray-100 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <RefreshCw size={18} className={`text-blue-600 ${isSyncing ? 'animate-spin' : ''}`} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">
+                            {isSyncing ? 'Syncing...' : 'Sync Student Fees'}
+                          </p>
+                          <p className="text-xs text-gray-500">Import fee records from student profiles into Finance</p>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1567,7 +1645,7 @@ export default function Finance() {
                       <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
                         <Receipt className="mx-auto mb-3 text-gray-400" size={48} />
                         <p className="text-lg">No fee records found</p>
-                        <p className="text-sm text-gray-400 mt-1">Click "Sync Student Fees" to import from student profiles</p>
+                        <p className="text-sm text-gray-400 mt-1">Open "More → Sync Student Fees" to import from student profiles</p>
                       </td>
                     </tr>
                   ) : (
