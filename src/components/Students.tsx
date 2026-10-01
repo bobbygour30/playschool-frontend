@@ -766,10 +766,6 @@ export default function StudentDetails() {
     try {
       setIsDeleting(true);
       await deleteStudent(deleteTarget._id, deleteReason.trim());
-      alert(
-        `"${deleteTarget.name}" has been moved to the Archive.\n\n` +
-        `You can restore it anytime from the Archived Records page.`
-      );
       setShowDeleteModal(false);
       setDeleteTarget(null);
       setDeleteReason('');

@@ -748,7 +748,6 @@ export default function Finance() {
       else if (deleteType === 'expense') await deleteExpense(id, payload);
       else if (deleteType === 'salary') await deleteSalary(id, payload);
 
-      alert('Record has been archived (voided).\n\nIt can be reviewed or restored from the Archived Records page.');
       resetDeleteState();
       await loadData();
     } catch (error) {
